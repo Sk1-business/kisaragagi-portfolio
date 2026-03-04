@@ -57,3 +57,12 @@ npm run lint
 # 本番ビルド
 npm run build
 ```
+
+## 環境変数
+
+`/api/health` などのAPIアクセス先は `VITE_API_BASE_URL` で設定します。
+
+- 開発時: `.env.development`（例: `http://localhost:8000`）
+- 本番時: デプロイ先の環境変数に `VITE_API_BASE_URL` を設定
+- 共有用テンプレート: `.env.example`
+

@@ -12,6 +12,8 @@ import {
 } from "@/features/auth/pages"
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
+import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
+import { UserSchedulePage } from "@/features/user/pages/UserSchedulePage"
 import { AdminLayout } from "./layouts/AdminLayout"
 import { UserLayout } from "./layouts/UserLayout"
 
@@ -86,6 +88,8 @@ function App() {
         <Route path={ROUTES.backofficeSignup} element={<BackofficeSignupPage />} />
         <Route element={<UserLayout />}>
           <Route path={ROUTES.userHome} element={<UserDashboardPage />} />
+          <Route path={ROUTES.userReservationNomination} element={<UserNominationPage />} />
+          <Route path={ROUTES.userReservationSchedule} element={<UserSchedulePage />} />
         </Route>
 
         <Route element={<AdminLayout />}>
