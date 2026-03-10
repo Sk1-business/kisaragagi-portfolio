@@ -13,6 +13,12 @@ import {
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
+import { UserMypagePage } from "@/features/user/pages/UserMypagePage"
+import { UserPaymentPage } from "@/features/user/pages/UserPaymentPage"
+import { UserProfilePage } from "@/features/user/pages/UserProfilePage"
+import { UserReservationConfirmPage } from "@/features/user/pages/UserReservationConfirmPage"
+import { UserReservationInputPage } from "@/features/user/pages/UserReservationInputPage"
+import { UserReservationDetailPage } from "@/features/user/pages/UserReservationDetailPage"
 import { UserSchedulePage } from "@/features/user/pages/UserSchedulePage"
 import { AdminLayout } from "./layouts/AdminLayout"
 import { UserLayout } from "./layouts/UserLayout"
@@ -90,6 +96,12 @@ function App() {
           <Route path={ROUTES.userHome} element={<UserDashboardPage />} />
           <Route path={ROUTES.userReservationNomination} element={<UserNominationPage />} />
           <Route path={ROUTES.userReservationSchedule} element={<UserSchedulePage />} />
+          <Route path={ROUTES.userReservationInput} element={<UserReservationInputPage />} />
+          <Route path={ROUTES.userReservationConfirm} element={<UserReservationConfirmPage />} />
+          <Route path={ROUTES.userMypage} element={<UserMypagePage />} />
+          <Route path={ROUTES.userMypageReservationDetail} element={<UserReservationDetailPage />} />
+          <Route path={ROUTES.userMypageProfile} element={<UserProfilePage />} />
+          <Route path={ROUTES.userMypagePayment} element={<UserPaymentPage />} />
         </Route>
 
         <Route element={<AdminLayout />}>

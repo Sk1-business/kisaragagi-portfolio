@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -53,14 +53,21 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
       ? "CUSTOMER"
       : (String(formData.get("role") ?? "ADMIN") as UserRole)
 
-    const isSuccess = await submit({ email, password, signupRole })
+    const lastName = String(formData.get("lastName") ?? "")
+    const firstName = String(formData.get("firstName") ?? "")
+    const phone = String(formData.get("phone") ?? "")
+    const name = lastName && firstName ? `${lastName} ${firstName}` : undefined
 
-    if (isSuccess) {
+    const result = await submit({ email, password, signupRole, name, phone: phone || undefined })
+
+    if (result.ok) {
       setLoginError("")
       return
     }
 
-    if (mode === "login") {
+    if (mode === "signup" && result.error) {
+      setLoginError(result.error)
+    } else if (mode === "login") {
       setLoginError("ログインに失敗しました。メールアドレスまたはパスワードを確認してください。")
     }
   }
@@ -87,13 +94,51 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               />
             </div>
 
+            {mode === "signup" && isCustomerPortal ? (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName">姓</Label>
+                    <Input
+                      id="lastName"
+                      name="lastName"
+                      placeholder="山田"
+                      required
+                      className="rounded-md"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName">名</Label>
+                    <Input
+                      id="firstName"
+                      name="firstName"
+                      placeholder="太郎"
+                      required
+                      className="rounded-md"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">電話番号</Label>
+                  <Input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    placeholder="090-0000-0000"
+                    required
+                    className="rounded-md"
+                  />
+                </div>
+              </>
+            ) : null}
+
             <div className="space-y-2">
               <Label htmlFor="password">パスワード</Label>
               <Input
                 id="password"
                 name="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
                 placeholder="********"
                 required
                 className="rounded-md"
@@ -122,7 +167,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               {text.submitLabel}
             </Button>
 
-            {mode === "login" && loginError ? (
+            {loginError ? (
               <p className="text-sm text-destructive">{loginError}</p>
             ) : null}
           </form>
@@ -140,6 +185,10 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
             </Link>
           </div>
 
+          {mode === "signup" && isCustomerPortal ? (
+            <HealthCheck />
+          ) : null}
+
           <div className="mt-6 rounded-md bg-muted px-3 py-3">
             <p className="text-sm font-semibold">開発用テストアカウント</p>
             <div className="mt-2 space-y-2">
@@ -155,5 +204,49 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
         </CardContent>
       </Card>
     </main>
+  )
+}
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ""
+
+function HealthCheck() {
+  const [status, setStatus] = useState<"loading" | "ok" | "error">("loading")
+  const [response, setResponse] = useState("")
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch(`${API_BASE}/api/health`, { signal: controller.signal })
+      .then(async (res) => {
+        const text = await res.text()
+        setResponse(`${res.status} — ${text}`)
+        setStatus("ok")
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return
+        setResponse(err instanceof Error ? err.message : "接続失敗")
+        setStatus("error")
+      })
+    return () => controller.abort()
+  }, [])
+
+  return (
+    <div className="mt-6 rounded-md border px-3 py-3">
+      <p className="text-sm font-semibold">API 接続確認</p>
+      <p className="mt-1 text-xs text-muted-foreground">{`GET ${API_BASE}/api/health`}</p>
+      <div className="mt-2 flex items-center gap-2">
+        <span
+          className={`inline-block size-2 rounded-full ${
+            status === "loading"
+              ? "bg-yellow-400"
+              : status === "ok"
+                ? "bg-emerald-500"
+                : "bg-red-500"
+          }`}
+        />
+        <span className="text-xs text-muted-foreground">
+          {status === "loading" ? "確認中…" : response}
+        </span>
+      </div>
+    </div>
   )
 }

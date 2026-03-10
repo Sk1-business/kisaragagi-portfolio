@@ -7,5 +7,11 @@ export const ROUTES = {
   userHome: "/user",
   userReservationNomination: "/user/reservation/nomination",
   userReservationSchedule: "/user/reservation/schedule",
+  userReservationInput: "/user/reservation/input",
+  userReservationConfirm: "/user/reservation/confirm",
+  userMypage: "/user/mypage",
+  userMypageReservationDetail: "/user/mypage/reservation",
+  userMypageProfile: "/user/mypage/profile",
+  userMypagePayment: "/user/mypage/payment",
   adminHome: "/admin",
 } as const

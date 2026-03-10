@@ -1,8 +1,9 @@
 import { ArrowRight, Award, Star, UserRound } from "lucide-react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
 import mockTrainers from "@/features/user/api/mockTrainers.json"
+import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 
 interface Trainer {
   id: string
@@ -16,20 +17,8 @@ interface Trainer {
 
 const trainers = mockTrainers as Trainer[]
 
-function buildPath(basePath: string, params: Record<string, string | undefined>) {
-  const searchParams = new URLSearchParams()
-  Object.entries(params).forEach(([key, value]) => {
-    if (value) {
-      searchParams.set(key, value)
-    }
-  })
-  const query = searchParams.toString()
-  return query ? `${basePath}?${query}` : basePath
-}
-
 export function UserNominationPage() {
-  const [searchParams] = useSearchParams()
-  const shopId = searchParams.get("shopId") ?? undefined
+  const shopId = useShopId()
 
   return (
     <section className="space-y-5">
@@ -47,8 +36,7 @@ export function UserNominationPage() {
             .map((trainer, index) => (
               <Link
                 key={trainer.id}
-                to={buildPath(ROUTES.userReservationSchedule, {
-                  shopId,
+                to={buildPathWithShopId(ROUTES.userReservationSchedule, shopId, {
                   mode: "nomination",
                   trainerId: trainer.id,
                 })}

@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react"
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, Star, UserRound } from "lucide-react"
-import { useSearchParams } from "react-router-dom"
+import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, Star, UserRound } from "lucide-react"
+import { Link, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
+import { ROUTES } from "@/constants/routes"
 import mockTrainers from "@/features/user/api/mockTrainers.json"
+import { useShopId } from "@/features/user/hooks/useShopId"
 
 interface Trainer {
   id: string
@@ -60,6 +62,7 @@ function createCalendarDays(monthBase: Date, availableDateSet: Set<string>) {
 }
 
 export function UserSchedulePage() {
+  const shopId = useShopId()
   const [searchParams] = useSearchParams()
   const mode = searchParams.get("mode") ?? "omakase"
   const trainerId = searchParams.get("trainerId") ?? ""
@@ -97,6 +100,23 @@ export function UserSchedulePage() {
 
     return baseSlots.slice(startIndex, startIndex + count)
   }, [selectedDate, selectedTrainer])
+
+  const confirmPath = (() => {
+    if (!selectedDate || !selectedTime) {
+      return ""
+    }
+    const params = new URLSearchParams()
+    if (shopId) {
+      params.set("shopId", shopId)
+    }
+    params.set("mode", mode)
+    params.set("date", selectedDate)
+    params.set("time", selectedTime)
+    if (selectedTrainer) {
+      params.set("trainerId", selectedTrainer.id)
+    }
+    return `${ROUTES.userReservationInput}?${params.toString()}`
+  })()
 
   function handleDateSelect(dateKey: string) {
     setSelectedDate(dateKey)
@@ -258,6 +278,15 @@ export function UserSchedulePage() {
           )}
         </div>
       </div>
+
+      {confirmPath ? (
+        <Button asChild size="lg" className="w-full rounded-xl text-base">
+          <Link to={confirmPath}>
+            予約情報入力へ進む
+            <ArrowRight className="ml-1 size-4" />
+          </Link>
+        </Button>
+      ) : null}
     </section>
   )
 }

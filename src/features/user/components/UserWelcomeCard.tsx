@@ -3,26 +3,16 @@ import { Link } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
 import type { UserDashboardSummary } from "@/features/user/types/userDashboard"
+import { buildPathWithShopId } from "@/features/user/hooks/useShopId"
 
 interface UserWelcomeCardProps {
   summary: UserDashboardSummary
   shopId?: string
 }
 
-function buildPath(basePath: string, params: Record<string, string | undefined>) {
-  const searchParams = new URLSearchParams()
-  Object.entries(params).forEach(([key, value]) => {
-    if (value) {
-      searchParams.set(key, value)
-    }
-  })
-  const query = searchParams.toString()
-  return query ? `${basePath}?${query}` : basePath
-}
-
 export function UserWelcomeCard({ summary, shopId }: UserWelcomeCardProps) {
-  const nominationPath = buildPath(ROUTES.userReservationNomination, { shopId })
-  const omakasePath = buildPath(ROUTES.userReservationSchedule, { shopId, mode: "omakase" })
+  const nominationPath = buildPathWithShopId(ROUTES.userReservationNomination, shopId)
+  const omakasePath = buildPathWithShopId(ROUTES.userReservationSchedule, shopId, { mode: "omakase" })
 
   return (
     <section className="space-y-6">
@@ -86,23 +76,23 @@ export function UserWelcomeCard({ summary, shopId }: UserWelcomeCardProps) {
         <div className="grid gap-4 p-6 sm:grid-cols-2">
           <Link
             to={nominationPath}
-            className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-900 to-slate-700 p-5 text-white shadow-sm transition hover:shadow-md"
+            className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
           >
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white/15">
-              <UserRound className="size-5" />
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-violet-50">
+              <UserRound className="size-5 text-violet-600" />
             </div>
             <div className="min-w-0">
-              <p className="font-semibold">指名で予約</p>
-              <p className="mt-0.5 text-xs text-white/70">お気に入りのトレーナーを選べます</p>
+              <p className="font-semibold text-foreground">指名で予約</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">お気に入りのトレーナーを選べます</p>
             </div>
-            <ArrowRight className="ml-auto size-4 opacity-50 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+            <ArrowRight className="ml-auto size-4 text-muted-foreground opacity-50 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
           </Link>
           <Link
             to={omakasePath}
-            className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"
+            className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
           >
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-slate-100">
-              <CalendarDays className="size-5 text-slate-600" />
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-cyan-50">
+              <CalendarDays className="size-5 text-cyan-600" />
             </div>
             <div className="min-w-0">
               <p className="font-semibold text-foreground">おまかせ</p>
