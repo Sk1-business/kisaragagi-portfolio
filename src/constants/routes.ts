@@ -13,5 +13,6 @@ export const ROUTES = {
   userMypageReservationDetail: "/user/mypage/reservation",
   userMypageProfile: "/user/mypage/profile",
   userMypagePayment: "/user/mypage/payment",
+  userMypagePaymentDetail: "/user/mypage/payment/detail",
   adminHome: "/admin",
 } as const

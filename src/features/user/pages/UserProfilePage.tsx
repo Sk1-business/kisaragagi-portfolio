@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
 import { CheckCircle2 } from "lucide-react"
 import { Link } from "react-router-dom"
 
@@ -6,14 +6,34 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
+import { fetchUserProfile, saveUserProfile } from "@/features/user/api/userProfileApi"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 
 export function UserProfilePage() {
   const shopId = useShopId()
   const [isSaved, setIsSaved] = useState(false)
+  const [fullName, setFullName] = useState("")
+  const [kana, setKana] = useState("")
+  const [email, setEmail] = useState("")
+  const [phone, setPhone] = useState("")
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    let isMounted = true
+    fetchUserProfile().then((profile) => {
+      if (!isMounted) return
+      setFullName(profile.fullName)
+      setKana(profile.kana)
+      setEmail(profile.email)
+      setPhone(profile.phone)
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    await saveUserProfile({ fullName, kana, email, phone })
     setIsSaved(true)
     setTimeout(() => setIsSaved(false), 2000)
   }
@@ -32,7 +52,8 @@ export function UserProfilePage() {
               <Input
                 id="profileName"
                 name="profileName"
-                defaultValue="山田 太郎"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
                 required
                 className="rounded-lg"
               />
@@ -42,7 +63,8 @@ export function UserProfilePage() {
               <Input
                 id="profileKana"
                 name="profileKana"
-                defaultValue="ヤマダ タロウ"
+                value={kana}
+                onChange={(event) => setKana(event.target.value)}
                 required
                 className="rounded-lg"
               />
@@ -53,7 +75,8 @@ export function UserProfilePage() {
                 id="profileEmail"
                 name="profileEmail"
                 type="email"
-                defaultValue="yamada@example.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
                 required
                 className="rounded-lg"
               />
@@ -64,7 +87,8 @@ export function UserProfilePage() {
                 id="profilePhone"
                 name="profilePhone"
                 type="tel"
-                defaultValue="090-1234-5678"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
                 required
                 className="rounded-lg"
               />

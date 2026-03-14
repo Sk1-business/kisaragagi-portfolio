@@ -1,6 +1,7 @@
 import { ArrowRight, Award, Star, UserRound } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 
+import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import mockTrainers from "@/features/user/api/mockTrainers.json"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
@@ -19,6 +20,15 @@ const trainers = mockTrainers as Trainer[]
 
 export function UserNominationPage() {
   const shopId = useShopId()
+  const navigate = useNavigate()
+
+  function handleBack() {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    navigate(buildPathWithShopId(ROUTES.userHome, shopId))
+  }
 
   return (
     <section className="space-y-5">
@@ -82,6 +92,9 @@ export function UserNominationPage() {
             ))}
         </div>
       </div>
+      <Button type="button" variant="outline" size="lg" className="w-full rounded-xl" onClick={handleBack}>
+        前の画面へ戻る
+      </Button>
     </section>
   )
 }

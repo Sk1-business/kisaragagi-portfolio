@@ -1,47 +1,63 @@
-import { type FormEvent, useState } from "react"
-import { CheckCircle2, CreditCard, Plus, Trash2 } from "lucide-react"
+import { type FormEvent, useEffect, useState } from "react"
+import { CheckCircle2, CreditCard, Pencil, Plus, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
+import {
+  addPaymentCard,
+  deletePaymentCard,
+  fetchPaymentCards,
+  type PaymentCard,
+} from "@/features/user/api/userPaymentApi"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
-
-interface CardInfo {
-  id: string
-  last4: string
-  expiry: string
-  brand: string
-}
-
-const INITIAL_CARDS: CardInfo[] = [
-  { id: "card-001", last4: "4242", expiry: "12/28", brand: "Visa" },
-]
 
 export function UserPaymentPage() {
   const shopId = useShopId()
-  const [cards, setCards] = useState<CardInfo[]>(INITIAL_CARDS)
+  const [cards, setCards] = useState<PaymentCard[]>([])
   const [isAdding, setIsAdding] = useState(false)
   const [saveMessage, setSaveMessage] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
 
-  function handleDelete(cardId: string) {
+  useEffect(() => {
+    let isMounted = true
+    fetchPaymentCards()
+      .then((result) => {
+        if (!isMounted) return
+        setCards(result)
+      })
+      .finally(() => {
+        if (!isMounted) return
+        setIsLoading(false)
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  async function handleDelete(cardId: string) {
+    const result = await deletePaymentCard(cardId)
+    if (!result.ok) return
     setCards((prev) => prev.filter((c) => c.id !== cardId))
   }
 
-  function handleAdd(event: FormEvent<HTMLFormElement>) {
+  async function handleAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
     const cardNumber = String(formData.get("newCardNumber") ?? "")
     const expiry = String(formData.get("newCardExpiry") ?? "")
-    const last4 = cardNumber.replace(/\s/g, "").slice(-4)
-    const newCard: CardInfo = {
-      id: `card-${Date.now()}`,
-      last4,
-      expiry,
+    const cvc = String(formData.get("newCardCvc") ?? "")
+    const holderName = String(formData.get("newCardHolderName") ?? "")
+    const addResult = await addPaymentCard({
       brand: "Visa",
-    }
-    setCards((prev) => [...prev, newCard])
+      cardNumber,
+      expiry,
+      cvc,
+      holderName,
+    })
+    setCards((prev) => [...prev, addResult.card])
     setIsAdding(false)
     setSaveMessage("カードを追加しました")
     setTimeout(() => setSaveMessage(""), 2000)
@@ -65,7 +81,11 @@ export function UserPaymentPage() {
             </div>
           ) : null}
 
-          {cards.length > 0 ? (
+          {isLoading ? (
+            <div className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">カード情報を読み込み中です...</p>
+            </div>
+          ) : cards.length > 0 ? (
             cards.map((card) => (
               <div
                 key={card.id}
@@ -76,10 +96,19 @@ export function UserPaymentPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">
-                    {`${card.brand} •••• ${card.last4}`}
+                    {`${card.brand} •••• ${card.cardNumber.replace(/\s/g, "").slice(-4)}`}
                   </p>
                   <p className="text-xs text-muted-foreground">{`有効期限: ${card.expiry}`}</p>
                 </div>
+                <Button asChild type="button" variant="ghost" size="icon-sm" className="rounded-full">
+                  <Link
+                    to={buildPathWithShopId(ROUTES.userMypagePaymentDetail, shopId, {
+                      cardId: card.id,
+                    })}
+                  >
+                    <Pencil className="size-4" />
+                  </Link>
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -108,6 +137,16 @@ export function UserPaymentPage() {
                     id="newCardNumber"
                     name="newCardNumber"
                     placeholder="0000 0000 0000 0000"
+                    required
+                    className="rounded-lg"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="newCardHolderName">カード名義</Label>
+                  <Input
+                    id="newCardHolderName"
+                    name="newCardHolderName"
+                    placeholder="TARO YAMADA"
                     required
                     className="rounded-lg"
                   />

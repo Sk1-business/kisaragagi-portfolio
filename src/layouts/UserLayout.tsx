@@ -1,5 +1,5 @@
 import { ArrowLeft, Dumbbell, LogOut, UserRound } from "lucide-react"
-import { Link, Outlet, useLocation, useSearchParams } from "react-router-dom"
+import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
@@ -7,9 +7,18 @@ import { buildPathWithShopId, resolveShopName } from "@/features/user/hooks/useS
 
 export function UserLayout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const shopId = searchParams.get("shopId") ?? undefined
   const isTopLevel = location.pathname === ROUTES.userHome
+
+  function handleBack() {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    navigate(buildPathWithShopId(ROUTES.userHome, shopId))
+  }
 
   return (
     <main className="min-h-dvh bg-gradient-to-b from-slate-50 via-white to-slate-50">
@@ -17,10 +26,8 @@ export function UserLayout() {
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             {!isTopLevel ? (
-              <Button asChild variant="ghost" size="icon-sm" className="rounded-full">
-                <Link to={buildPathWithShopId(ROUTES.userHome, shopId)}>
-                  <ArrowLeft className="size-4" />
-                </Link>
+              <Button variant="ghost" size="icon-sm" className="rounded-full" onClick={handleBack}>
+                <ArrowLeft className="size-4" />
               </Button>
             ) : null}
             <Link to={buildPathWithShopId(ROUTES.userHome, shopId)} className="flex items-center gap-2">
