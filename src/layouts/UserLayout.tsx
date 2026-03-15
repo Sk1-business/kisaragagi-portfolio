@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-r
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
+import { logoutCustomer } from "@/features/auth/api/customerAuthApi"
 import { buildPathWithShopId, resolveShopName } from "@/features/user/hooks/useShopId"
 
 export function UserLayout() {
@@ -11,6 +12,11 @@ export function UserLayout() {
   const [searchParams] = useSearchParams()
   const shopId = searchParams.get("shopId") ?? undefined
   const isTopLevel = location.pathname === ROUTES.userHome
+
+  async function handleLogout() {
+    await logoutCustomer()
+    navigate(ROUTES.landing)
+  }
 
   function handleBack() {
     if (window.history.length > 1) {
@@ -49,11 +55,15 @@ export function UserLayout() {
                 マイページ
               </Link>
             </Button>
-            <Button asChild variant="ghost" size="sm" className="text-xs text-muted-foreground">
-              <Link to={ROUTES.landing}>
-                <LogOut className="mr-1 size-3.5" />
-                ログアウト
-              </Link>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={handleLogout}
+            >
+              <LogOut className="mr-1 size-3.5" />
+              ログアウト
             </Button>
           </div>
         </div>

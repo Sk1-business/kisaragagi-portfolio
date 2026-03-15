@@ -10,6 +10,7 @@ import {
   CustomerLoginPage,
   CustomerSignupPage,
 } from "@/features/auth/pages"
+import { LineCallbackPage } from "@/features/auth/pages/LineCallbackPage"
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
@@ -91,6 +92,7 @@ function App() {
 
         <Route path={ROUTES.customerLogin} element={<CustomerLoginPage />} />
         <Route path={ROUTES.customerSignup} element={<CustomerSignupPage />} />
+        <Route path={ROUTES.lineCallback} element={<LineCallbackPage />} />
         <Route path={ROUTES.backofficeLogin} element={<BackofficeLoginPage />} />
         <Route path={ROUTES.backofficeSignup} element={<BackofficeSignupPage />} />
         <Route element={<UserLayout />}>

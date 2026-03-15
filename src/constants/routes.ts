@@ -2,6 +2,7 @@ export const ROUTES = {
   landing: "/",
   customerLogin: "/customer/login",
   customerSignup: "/customer/signup",
+  lineCallback: "/auth/line/callback",
   backofficeLogin: "/backoffice/login",
   backofficeSignup: "/backoffice/signup",
   userHome: "/user",
