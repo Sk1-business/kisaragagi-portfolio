@@ -16,6 +16,7 @@ import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
 import { UserMypagePage } from "@/features/user/pages/UserMypagePage"
 import { UserPaymentPage } from "@/features/user/pages/UserPaymentPage"
+import { UserPaymentDetailPage } from "@/features/user/pages/UserPaymentDetailPage"
 import { UserProfilePage } from "@/features/user/pages/UserProfilePage"
 import { UserReservationConfirmPage } from "@/features/user/pages/UserReservationConfirmPage"
 import { UserReservationInputPage } from "@/features/user/pages/UserReservationInputPage"
@@ -104,6 +105,7 @@ function App() {
           <Route path={ROUTES.userMypageReservationDetail} element={<UserReservationDetailPage />} />
           <Route path={ROUTES.userMypageProfile} element={<UserProfilePage />} />
           <Route path={ROUTES.userMypagePayment} element={<UserPaymentPage />} />
+          <Route path={ROUTES.userMypagePaymentDetail} element={<UserPaymentDetailPage />} />
         </Route>
 
         <Route element={<AdminLayout />}>

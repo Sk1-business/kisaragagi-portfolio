@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   ArrowRight,
   CalendarDays,
@@ -12,19 +12,8 @@ import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
-import mockReservations from "@/features/user/api/mockReservations.json"
+import { fetchUserReservations, type UserReservation } from "@/features/user/api/userReservationApi"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
-
-interface Reservation {
-  id: string
-  date: string
-  time: string
-  mode: string
-  trainerName: string | null
-  status: string
-}
-
-const reservations = mockReservations as Reservation[]
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"]
 
 function formatDateLabel(date: string) {
@@ -42,9 +31,29 @@ const TABS: { key: TabType; label: string }[] = [
 export function UserMypagePage() {
   const shopId = useShopId()
   const [activeTab, setActiveTab] = useState<TabType>("upcoming")
+  const [reservations, setReservations] = useState<UserReservation[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  const filteredReservations = reservations.filter(
-    (reservation) => reservation.status === activeTab,
+  useEffect(() => {
+    let isMounted = true
+    fetchUserReservations()
+      .then((data) => {
+        if (!isMounted) return
+        setReservations(data)
+      })
+      .finally(() => {
+        if (!isMounted) return
+        setIsLoading(false)
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const filteredReservations = reservations.filter((reservation) =>
+    activeTab === "upcoming"
+      ? reservation.status === "upcoming"
+      : reservation.status === "past" || reservation.status === "cancelled",
   )
 
   return (
@@ -77,7 +86,11 @@ export function UserMypagePage() {
         </div>
 
         <div className="space-y-3 p-5">
-          {filteredReservations.length > 0 ? (
+          {isLoading ? (
+            <div className="py-10 text-center">
+              <p className="text-sm text-muted-foreground">予約情報を読み込み中です...</p>
+            </div>
+          ) : filteredReservations.length > 0 ? (
             filteredReservations.map((reservation) => (
               <Link
                 key={reservation.id}
@@ -105,6 +118,9 @@ export function UserMypagePage() {
                       ? `指名: ${reservation.trainerName}`
                       : "おまかせ"}
                   </p>
+                  {reservation.status === "cancelled" ? (
+                    <p className="mt-0.5 text-xs font-semibold text-red-600">キャンセル済み</p>
+                  ) : null}
                 </div>
                 <ArrowRight className="ml-auto size-4 text-muted-foreground opacity-50 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
               </Link>

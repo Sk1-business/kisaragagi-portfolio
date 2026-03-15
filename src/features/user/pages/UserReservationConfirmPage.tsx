@@ -15,6 +15,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
+import { updateUserReservation } from "@/features/user/api/userReservationApi"
 import type { ReservationInputData } from "@/features/user/pages/UserReservationInputPage"
 import { buildPathWithShopId, resolveShopName, useShopId } from "@/features/user/hooks/useShopId"
 
@@ -51,6 +52,8 @@ export function UserReservationConfirmPage() {
   const navigate = useNavigate()
   const data = location.state as ReservationInputData | null
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [submitError, setSubmitError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   if (!data) {
     return (
@@ -64,17 +67,31 @@ export function UserReservationConfirmPage() {
   }
 
   if (isSubmitted) {
+    const isReservationUpdate = Boolean(data.reservationId)
+    const successMessage = isReservationUpdate
+      ? "予約変更が完了しました。更新内容はマイページで確認できます。"
+      : "ご予約内容は登録メールアドレスへ送信されます。"
     return (
       <section className="flex flex-col items-center py-16 text-center">
         <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-emerald-100">
           <CheckCircle2 className="size-8 text-emerald-600" />
         </div>
-        <h2 className="text-xl font-bold text-foreground">予約が完了しました</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          ご予約内容は登録メールアドレスへ送信されます。
-        </p>
+        <h2 className="text-xl font-bold text-foreground">
+          {isReservationUpdate ? "予約変更が完了しました" : "予約が完了しました"}
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">{successMessage}</p>
         <Button asChild size="lg" className="mt-6 rounded-xl">
-          <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ</Link>
+          <Link
+            to={
+              isReservationUpdate
+                ? buildPathWithShopId(ROUTES.userMypageReservationDetail, shopId, {
+                    reservationId: data.reservationId ?? "",
+                  })
+                : buildPathWithShopId(ROUTES.userMypage, shopId)
+            }
+          >
+            {isReservationUpdate ? "予約詳細へ" : "マイページへ"}
+          </Link>
         </Button>
       </section>
     )
@@ -83,6 +100,35 @@ export function UserReservationConfirmPage() {
   const shopName = resolveShopName(shopId)
   const paymentLabel = data.paymentMethod === "credit" ? "クレジットカード" : "PayPay"
   const PaymentIcon = data.paymentMethod === "credit" ? CreditCard : Phone
+  const isReservationUpdate = Boolean(data.reservationId)
+
+  async function handleSubmit() {
+    if (!isReservationUpdate || !data.reservationId) {
+      setIsSubmitted(true)
+      return
+    }
+
+    setSubmitError("")
+    setIsSubmitting(true)
+    const result = await updateUserReservation({
+      reservationId: data.reservationId,
+      date: data.date,
+      time: data.time,
+      mode: data.mode,
+      trainerId: data.mode === "nomination" ? data.trainerId || null : null,
+      trainerName: data.mode === "nomination" ? data.trainerName || null : null,
+      note: data.note,
+    })
+
+    if (!result.ok) {
+      setSubmitError(result.error)
+      setIsSubmitting(false)
+      return
+    }
+
+    setIsSubmitting(false)
+    setIsSubmitted(true)
+  }
 
   return (
     <section className="space-y-5">
@@ -185,11 +231,17 @@ export function UserReservationConfirmPage() {
             type="button"
             size="lg"
             className="flex-1 rounded-xl text-base"
-            onClick={() => setIsSubmitted(true)}
+            onClick={() => {
+              void handleSubmit()
+            }}
+            disabled={isSubmitting}
           >
-            予約する
+            {isSubmitting ? "処理中..." : isReservationUpdate ? "予約変更を確定する" : "予約する"}
           </Button>
         </div>
+        {submitError ? (
+          <p className="px-6 pb-5 text-sm text-destructive">{submitError}</p>
+        ) : null}
       </div>
     </section>
   )

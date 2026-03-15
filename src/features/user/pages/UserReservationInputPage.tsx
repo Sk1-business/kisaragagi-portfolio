@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
 import {
   CalendarDays,
   Clock,
@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import mockTrainers from "@/features/user/api/mockTrainers.json"
-import { useShopId } from "@/features/user/hooks/useShopId"
+import { fetchUserProfile } from "@/features/user/api/userProfileApi"
+import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 
 interface Trainer {
   id: string
@@ -25,6 +26,7 @@ interface Trainer {
 }
 
 export interface ReservationInputData {
+  reservationId?: string
   mode: string
   date: string
   time: string
@@ -61,28 +63,48 @@ export function UserReservationInputPage() {
   const [searchParams] = useSearchParams()
   const mode = searchParams.get("mode") ?? "omakase"
   const trainerId = searchParams.get("trainerId") ?? ""
+  const reservationId = searchParams.get("reservationId") ?? ""
   const date = searchParams.get("date") ?? ""
   const time = searchParams.get("time") ?? ""
   const selectedTrainer =
     mode === "nomination" ? trainers.find((trainer) => trainer.id === trainerId) : undefined
 
   const [paymentMethod, setPaymentMethod] = useState<string>("credit")
+  const [fullName, setFullName] = useState("")
+  const [kana, setKana] = useState("")
+  const [email, setEmail] = useState("")
+  const [phone, setPhone] = useState("")
+
+  useEffect(() => {
+    let isMounted = true
+    fetchUserProfile().then((profile) => {
+      if (!isMounted) return
+      setFullName(profile.fullName)
+      setKana(profile.kana)
+      setEmail(profile.email)
+      setPhone(profile.phone)
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const fd = new FormData(event.currentTarget)
 
     const inputData: ReservationInputData = {
+      reservationId: reservationId || undefined,
       mode,
       date,
       time,
       trainerId: selectedTrainer?.id ?? "",
       trainerName: selectedTrainer?.name ?? "",
       trainerRating: selectedTrainer?.rating ?? 0,
-      fullName: String(fd.get("fullName") ?? ""),
-      kana: String(fd.get("kana") ?? ""),
-      email: String(fd.get("email") ?? ""),
-      phone: String(fd.get("phone") ?? ""),
+      fullName,
+      kana,
+      email,
+      phone,
       note: String(fd.get("note") ?? ""),
       paymentMethod,
       cardNumber: String(fd.get("cardNumber") ?? ""),
@@ -98,6 +120,14 @@ export function UserReservationInputPage() {
     navigate(`${ROUTES.userReservationConfirm}?${confirmParams.toString()}`, {
       state: inputData,
     })
+  }
+
+  function handleBack() {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    navigate(buildPathWithShopId(ROUTES.userHome, shopId))
   }
 
   return (
@@ -163,11 +193,27 @@ export function UserReservationInputPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="fullName">お名前</Label>
-                <Input id="fullName" name="fullName" placeholder="山田 太郎" required className="rounded-lg" />
+                <Input
+                  id="fullName"
+                  name="fullName"
+                  placeholder="山田 太郎"
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  required
+                  className="rounded-lg"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="kana">フリガナ</Label>
-                <Input id="kana" name="kana" placeholder="ヤマダ タロウ" required className="rounded-lg" />
+                <Input
+                  id="kana"
+                  name="kana"
+                  placeholder="ヤマダ タロウ"
+                  value={kana}
+                  onChange={(event) => setKana(event.target.value)}
+                  required
+                  className="rounded-lg"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="email">メールアドレス</Label>
@@ -176,6 +222,8 @@ export function UserReservationInputPage() {
                   name="email"
                   type="email"
                   placeholder="you@example.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                   required
                   className="rounded-lg"
                 />
@@ -187,6 +235,8 @@ export function UserReservationInputPage() {
                   name="phone"
                   type="tel"
                   placeholder="090-0000-0000"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
                   required
                   className="rounded-lg"
                 />
@@ -274,8 +324,11 @@ export function UserReservationInputPage() {
             ) : null}
           </div>
 
-          <div className="px-6 py-5">
-            <Button type="submit" size="lg" className="w-full rounded-xl text-base">
+          <div className="flex gap-3 px-6 py-5">
+            <Button type="button" variant="outline" size="lg" className="rounded-xl" onClick={handleBack}>
+              前の画面へ戻る
+            </Button>
+            <Button type="submit" size="lg" className="flex-1 rounded-xl text-base">
               確認画面へ進む
             </Button>
           </div>

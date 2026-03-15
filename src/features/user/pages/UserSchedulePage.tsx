@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react"
 import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, Star, UserRound } from "lucide-react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import mockTrainers from "@/features/user/api/mockTrainers.json"
-import { useShopId } from "@/features/user/hooks/useShopId"
+import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 
 interface Trainer {
   id: string
@@ -63,9 +63,11 @@ function createCalendarDays(monthBase: Date, availableDateSet: Set<string>) {
 
 export function UserSchedulePage() {
   const shopId = useShopId()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const mode = searchParams.get("mode") ?? "omakase"
   const trainerId = searchParams.get("trainerId") ?? ""
+  const reservationId = searchParams.get("reservationId") ?? ""
   const selectedTrainer =
     mode === "nomination" ? trainers.find((trainer) => trainer.id === trainerId) : undefined
 
@@ -115,6 +117,9 @@ export function UserSchedulePage() {
     if (selectedTrainer) {
       params.set("trainerId", selectedTrainer.id)
     }
+    if (reservationId) {
+      params.set("reservationId", reservationId)
+    }
     return `${ROUTES.userReservationInput}?${params.toString()}`
   })()
 
@@ -124,6 +129,14 @@ export function UserSchedulePage() {
     setDisplayMonth(
       new Date(parseDateKey(dateKey).getFullYear(), parseDateKey(dateKey).getMonth(), 1),
     )
+  }
+
+  function handleBack() {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    navigate(buildPathWithShopId(ROUTES.userHome, shopId))
   }
 
   return (
@@ -287,6 +300,9 @@ export function UserSchedulePage() {
           </Link>
         </Button>
       ) : null}
+      <Button type="button" variant="outline" size="lg" className="w-full rounded-xl" onClick={handleBack}>
+        前の画面へ戻る
+      </Button>
     </section>
   )
 }
