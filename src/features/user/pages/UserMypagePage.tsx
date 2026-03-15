@@ -33,13 +33,19 @@ export function UserMypagePage() {
   const [activeTab, setActiveTab] = useState<TabType>("upcoming")
   const [reservations, setReservations] = useState<UserReservation[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
   useEffect(() => {
     let isMounted = true
     fetchUserReservations()
       .then((data) => {
         if (!isMounted) return
+        setLoadError("")
         setReservations(data)
+      })
+      .catch(() => {
+        if (!isMounted) return
+        setLoadError("予約情報の取得に失敗しました。")
       })
       .finally(() => {
         if (!isMounted) return
@@ -89,6 +95,10 @@ export function UserMypagePage() {
           {isLoading ? (
             <div className="py-10 text-center">
               <p className="text-sm text-muted-foreground">予約情報を読み込み中です...</p>
+            </div>
+          ) : loadError ? (
+            <div className="py-10 text-center">
+              <p className="text-sm text-destructive">{loadError}</p>
             </div>
           ) : filteredReservations.length > 0 ? (
             filteredReservations.map((reservation) => (

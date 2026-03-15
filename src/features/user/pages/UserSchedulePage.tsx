@@ -1,10 +1,14 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, Star, UserRound } from "lucide-react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import mockTrainers from "@/features/user/api/mockTrainers.json"
+import {
+  fetchUserReservationById,
+  fetchUserReservations,
+} from "@/features/user/api/userReservationApi"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 
 interface Trainer {
@@ -41,7 +45,19 @@ function shiftMonth(base: Date, diff: number) {
   return new Date(base.getFullYear(), base.getMonth() + diff, 1)
 }
 
-function createCalendarDays(monthBase: Date, availableDateSet: Set<string>) {
+function buildReservationTimeSlots() {
+  const slots: string[] = []
+  for (let hour = 10; hour <= 22; hour += 1) {
+    const hourLabel = String(hour).padStart(2, "0")
+    slots.push(`${hourLabel}:00`)
+    if (hour < 22) {
+      slots.push(`${hourLabel}:30`)
+    }
+  }
+  return slots
+}
+
+function createCalendarDays(monthBase: Date, earliestBookableDate: Date) {
   const firstDay = new Date(monthBase.getFullYear(), monthBase.getMonth(), 1)
   const monthStartWeekday = firstDay.getDay()
   const gridStart = new Date(firstDay)
@@ -50,13 +66,14 @@ function createCalendarDays(monthBase: Date, availableDateSet: Set<string>) {
   return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(gridStart)
     date.setDate(gridStart.getDate() + index)
-    const dateKey = toDateKey(date)
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const dateKey = toDateKey(dayStart)
     return {
       dateKey,
       day: date.getDate(),
       weekday: date.getDay(),
       isCurrentMonth: date.getMonth() === monthBase.getMonth(),
-      hasAvailability: availableDateSet.has(dateKey),
+      hasAvailability: dayStart.getTime() >= earliestBookableDate.getTime(),
     }
   })
 }
@@ -71,37 +88,83 @@ export function UserSchedulePage() {
   const selectedTrainer =
     mode === "nomination" ? trainers.find((trainer) => trainer.id === trainerId) : undefined
 
-  const availableDates = useMemo(() => {
-    const source = selectedTrainer ? [selectedTrainer] : trainers
-    return Array.from(new Set(source.flatMap((trainer) => trainer.availableDates))).sort((a, b) =>
-      a.localeCompare(b),
-    )
-  }, [selectedTrainer])
-
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [selectedTime, setSelectedTime] = useState<string>("")
   const [displayMonth, setDisplayMonth] = useState<Date>(new Date())
+  const [currentReservationDate, setCurrentReservationDate] = useState("")
+  const [currentReservationTime, setCurrentReservationTime] = useState("")
+  const [blockedTimeSet, setBlockedTimeSet] = useState<Set<string>>(new Set())
+  const availableTimeSlots = useMemo(
+    () => (selectedDate ? buildReservationTimeSlots() : []),
+    [selectedDate],
+  )
 
-  const availableDateSet = useMemo(() => new Set(availableDates), [availableDates])
+  const earliestBookableDate = useMemo(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  }, [])
   const calendarDays = useMemo(
-    () => createCalendarDays(displayMonth, availableDateSet),
-    [displayMonth, availableDateSet],
+    () => createCalendarDays(displayMonth, earliestBookableDate),
+    [displayMonth, earliestBookableDate],
   )
   const monthLabel = `${displayMonth.getFullYear()}年${displayMonth.getMonth() + 1}月`
 
-  const availableTimeSlots = useMemo(() => {
-    if (!selectedDate) {
-      return []
+  useEffect(() => {
+    let mounted = true
+    if (!reservationId) {
+      setCurrentReservationDate("")
+      setCurrentReservationTime("")
+      return () => {
+        mounted = false
+      }
     }
 
-    const baseSlots = ["10:00", "11:30", "13:00", "14:30", "16:00", "18:30", "20:00"]
-    const seedSource = `${selectedDate}-${selectedTrainer?.id ?? "omakase"}`
-    const seed = seedSource.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0)
-    const count = 3 + (seed % 3)
-    const startIndex = seed % (baseSlots.length - count)
+    void fetchUserReservationById(reservationId).then((reservation) => {
+      if (!mounted || !reservation) return
+      setCurrentReservationDate(reservation.date)
+      setCurrentReservationTime(reservation.time)
+      setSelectedDate(reservation.date)
+      setSelectedTime("")
+      setDisplayMonth(new Date(`${reservation.date}T00:00:00`))
+    })
 
-    return baseSlots.slice(startIndex, startIndex + count)
-  }, [selectedDate, selectedTrainer])
+    return () => {
+      mounted = false
+    }
+  }, [reservationId])
+
+  useEffect(() => {
+    let mounted = true
+    if (mode !== "nomination" || !trainerId || !selectedDate) {
+      setBlockedTimeSet(new Set())
+      return () => {
+        mounted = false
+      }
+    }
+
+    void fetchUserReservations()
+      .then((reservations) => {
+        if (!mounted) return
+        const blockedTimes = reservations
+          .filter((reservation) => {
+            if (reservation.status !== "upcoming") return false
+            if (reservation.date !== selectedDate) return false
+            if (reservation.trainerId !== trainerId) return false
+            if (reservationId && reservation.id === reservationId) return false
+            return true
+          })
+          .map((reservation) => reservation.time)
+        setBlockedTimeSet(new Set(blockedTimes))
+      })
+      .catch(() => {
+        if (!mounted) return
+        setBlockedTimeSet(new Set())
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [mode, reservationId, selectedDate, trainerId])
 
   const confirmPath = (() => {
     if (!selectedDate || !selectedTime) {
@@ -211,6 +274,7 @@ export function UserSchedulePage() {
           <div className="grid grid-cols-7 gap-1">
             {calendarDays.map((day) => {
               const isSelected = selectedDate === day.dateKey
+              const isCurrentReservationDate = reservationId && currentReservationDate === day.dateKey
               const isSunday = day.weekday === 0
               const isSaturday = day.weekday === 6
 
@@ -223,6 +287,8 @@ export function UserSchedulePage() {
                   className={`relative flex h-11 flex-col items-center justify-center rounded-xl text-sm transition ${
                     isSelected
                       ? "bg-slate-900 font-bold text-white shadow-sm"
+                      : isCurrentReservationDate
+                        ? "bg-emerald-100 font-semibold text-emerald-700 ring-1 ring-emerald-300"
                       : day.hasAvailability
                         ? `bg-white font-medium hover:bg-slate-100 ${
                             isSunday
@@ -244,7 +310,7 @@ export function UserSchedulePage() {
           </div>
 
           <p className="mt-3 text-center text-[11px] text-muted-foreground">
-            緑のドットが予約可能な日付です
+            翌日以降の日付を選択できます
           </p>
         </div>
       </div>
@@ -260,17 +326,24 @@ export function UserSchedulePage() {
         </div>
         <div className="p-5">
           {availableTimeSlots.length > 0 ? (
-            <div className="grid gap-2 sm:grid-cols-3 md:grid-cols-4">
+            <div className="grid grid-cols-5 gap-2">
               {availableTimeSlots.map((time) => {
                 const isTimeSelected = selectedTime === time
+                const isCurrentReservationTime = reservationId && currentReservationTime === time
+                const isBlocked = blockedTimeSet.has(time) && !isCurrentReservationTime
                 return (
                   <button
                     key={time}
                     type="button"
                     onClick={() => setSelectedTime(time)}
+                    disabled={isBlocked}
                     className={`rounded-xl border px-4 py-3 text-center text-sm font-medium transition ${
                       isTimeSelected
                         ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                        : isCurrentReservationTime
+                          ? "bg-emerald-100 font-semibold text-emerald-700 ring-1 ring-emerald-300"
+                        : isBlocked
+                          ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                         : "border-slate-200 bg-white text-foreground hover:border-slate-300 hover:bg-slate-50"
                     }`}
                   >

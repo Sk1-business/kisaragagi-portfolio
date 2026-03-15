@@ -1,3 +1,5 @@
+import { ApiClientError, apiRequest } from "@/lib/apiClient"
+
 export interface UserProfile {
   fullName: string
   kana: string
@@ -5,13 +7,19 @@ export interface UserProfile {
   phone: string
 }
 
-const PROFILE_STORAGE_KEY = "user:profile:v1"
+interface CustomerProfileResponse {
+  name: string
+  email: string | null
+  phone: string | null
+}
+
+const PROFILE_STORAGE_KEY = "user:profile:v2"
 
 const DEFAULT_PROFILE: UserProfile = {
-  fullName: "山田 太郎",
-  kana: "ヤマダ タロウ",
-  email: "yamada@example.com",
-  phone: "090-1234-5678",
+  fullName: "",
+  kana: "",
+  email: "",
+  phone: "",
 }
 
 function safeReadStorage<T>(key: string): T | null {
@@ -30,20 +38,44 @@ function safeWriteStorage(key: string, value: unknown) {
   try {
     window.localStorage.setItem(key, JSON.stringify(value))
   } catch {
-    // Ignore storage write failures in development fallback mode.
+    // Ignore storage write failures in fallback mode.
   }
 }
 
 export async function fetchUserProfile(): Promise<UserProfile> {
-  const stored = safeReadStorage<UserProfile>(PROFILE_STORAGE_KEY)
-  if (stored) {
-    return Promise.resolve(stored)
+  const stored = safeReadStorage<UserProfile>(PROFILE_STORAGE_KEY) ?? DEFAULT_PROFILE
+  try {
+    const data = await apiRequest<CustomerProfileResponse>("/api/auth/me")
+    const merged: UserProfile = {
+      fullName: data.name ?? stored.fullName,
+      kana: stored.kana,
+      email: data.email ?? stored.email,
+      phone: data.phone ?? stored.phone,
+    }
+    safeWriteStorage(PROFILE_STORAGE_KEY, merged)
+    return merged
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) {
+      return stored
+    }
+    throw error
   }
-  safeWriteStorage(PROFILE_STORAGE_KEY, DEFAULT_PROFILE)
-  return Promise.resolve(DEFAULT_PROFILE)
 }
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
+  try {
+    await apiRequest<CustomerProfileResponse>("/api/auth/me", {
+      method: "PUT",
+      body: {
+        name: profile.fullName,
+        phone: profile.phone,
+      },
+    })
+  } catch (error) {
+    if (!(error instanceof ApiClientError && error.status === 401)) {
+      throw error
+    }
+    // Auth flow is out of scope for this phase; keep profile editable in frontend.
+  }
   safeWriteStorage(PROFILE_STORAGE_KEY, profile)
-  return Promise.resolve()
 }

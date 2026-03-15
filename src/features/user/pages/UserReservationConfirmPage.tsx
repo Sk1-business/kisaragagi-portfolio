@@ -15,7 +15,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
-import { updateUserReservation } from "@/features/user/api/userReservationApi"
+import { createUserReservation, updateUserReservation } from "@/features/user/api/userReservationApi"
 import type { ReservationInputData } from "@/features/user/pages/UserReservationInputPage"
 import { buildPathWithShopId, resolveShopName, useShopId } from "@/features/user/hooks/useShopId"
 
@@ -52,6 +52,7 @@ export function UserReservationConfirmPage() {
   const navigate = useNavigate()
   const data = location.state as ReservationInputData | null
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [submittedReservationId, setSubmittedReservationId] = useState<string>("")
   const [submitError, setSubmitError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -85,7 +86,7 @@ export function UserReservationConfirmPage() {
             to={
               isReservationUpdate
                 ? buildPathWithShopId(ROUTES.userMypageReservationDetail, shopId, {
-                    reservationId: data.reservationId ?? "",
+                    reservationId: submittedReservationId || data.reservationId || "",
                   })
                 : buildPathWithShopId(ROUTES.userMypage, shopId)
             }
@@ -103,7 +104,29 @@ export function UserReservationConfirmPage() {
   const isReservationUpdate = Boolean(data.reservationId)
 
   async function handleSubmit() {
+    if (!data) return
+
     if (!isReservationUpdate || !data.reservationId) {
+      setSubmitError("")
+      setIsSubmitting(true)
+      const result = await createUserReservation({
+        date: data.date,
+        time: data.time,
+        mode: data.mode,
+        trainerId: data.mode === "nomination" ? data.trainerId || null : null,
+        trainerName: data.mode === "nomination" ? data.trainerName || null : null,
+        note: data.note,
+        fullName: data.fullName,
+        email: data.email,
+        phone: data.phone,
+      })
+      if (!result.ok) {
+        setSubmitError(result.error)
+        setIsSubmitting(false)
+        return
+      }
+      setSubmittedReservationId(result.reservation.id)
+      setIsSubmitting(false)
       setIsSubmitted(true)
       return
     }
@@ -118,6 +141,9 @@ export function UserReservationConfirmPage() {
       trainerId: data.mode === "nomination" ? data.trainerId || null : null,
       trainerName: data.mode === "nomination" ? data.trainerName || null : null,
       note: data.note,
+      fullName: data.fullName,
+      email: data.email,
+      phone: data.phone,
     })
 
     if (!result.ok) {
@@ -127,6 +153,7 @@ export function UserReservationConfirmPage() {
     }
 
     setIsSubmitting(false)
+    setSubmittedReservationId(result.reservation.id)
     setIsSubmitted(true)
   }
 

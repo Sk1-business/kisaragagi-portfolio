@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import mockTrainers from "@/features/user/api/mockTrainers.json"
+import { fetchPaymentCards, type PaymentCard } from "@/features/user/api/userPaymentApi"
 import { fetchUserProfile } from "@/features/user/api/userProfileApi"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 
@@ -52,6 +53,12 @@ function formatDateLabel(date: string) {
   return `${parsed.getFullYear()}年${parsed.getMonth() + 1}月${parsed.getDate()}日 (${WEEKDAY_LABELS[parsed.getDay()]})`
 }
 
+function maskCardNumber(cardNumber: string) {
+  const digits = cardNumber.replace(/\s/g, "")
+  if (digits.length < 4) return "••••"
+  return `•••• •••• •••• ${digits.slice(-4)}`
+}
+
 const PAYMENT_METHODS = [
   { id: "credit", label: "クレジットカード", icon: CreditCard },
   { id: "paypay", label: "PayPay", icon: Phone },
@@ -74,6 +81,10 @@ export function UserReservationInputPage() {
   const [kana, setKana] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
+  const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([])
+  const [selectedCardId, setSelectedCardId] = useState("")
+  const [isLoadingCards, setIsLoadingCards] = useState(true)
+  const [useCustomCardInput, setUseCustomCardInput] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -89,9 +100,34 @@ export function UserReservationInputPage() {
     }
   }, [])
 
+  useEffect(() => {
+    let isMounted = true
+    fetchPaymentCards()
+      .then((cards) => {
+        if (!isMounted) return
+        setPaymentCards(cards)
+        if (cards.length > 0) {
+          setSelectedCardId(cards[0].id)
+          setUseCustomCardInput(false)
+        } else {
+          setSelectedCardId("")
+          setUseCustomCardInput(true)
+        }
+      })
+      .finally(() => {
+        if (!isMounted) return
+        setIsLoadingCards(false)
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const fd = new FormData(event.currentTarget)
+    const selectedCard = paymentCards.find((card) => card.id === selectedCardId)
+    const useSavedCard = paymentMethod === "credit" && !useCustomCardInput && !!selectedCard
 
     const inputData: ReservationInputData = {
       reservationId: reservationId || undefined,
@@ -107,9 +143,24 @@ export function UserReservationInputPage() {
       phone,
       note: String(fd.get("note") ?? ""),
       paymentMethod,
-      cardNumber: String(fd.get("cardNumber") ?? ""),
-      cardExpiry: String(fd.get("cardExpiry") ?? ""),
-      cardCvc: String(fd.get("cardCvc") ?? ""),
+      cardNumber:
+        paymentMethod === "credit"
+          ? useSavedCard
+            ? selectedCard.cardNumber
+            : String(fd.get("cardNumber") ?? "")
+          : "",
+      cardExpiry:
+        paymentMethod === "credit"
+          ? useSavedCard
+            ? selectedCard.expiry
+            : String(fd.get("cardExpiry") ?? "")
+          : "",
+      cardCvc:
+        paymentMethod === "credit"
+          ? useSavedCard
+            ? selectedCard.cvc
+            : String(fd.get("cardCvc") ?? "")
+          : "",
     }
 
     const confirmParams = new URLSearchParams()
@@ -289,37 +340,92 @@ export function UserReservationInputPage() {
             </div>
 
             {paymentMethod === "credit" ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="cardNumber">カード番号</Label>
-                  <Input
-                    id="cardNumber"
-                    name="cardNumber"
-                    placeholder="0000 0000 0000 0000"
-                    required
-                    className="rounded-lg"
-                  />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                    登録済みカード
+                  </p>
+                  {isLoadingCards ? (
+                    <p className="text-sm text-muted-foreground">カード情報を読み込み中です...</p>
+                  ) : paymentCards.length > 0 ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {paymentCards.map((card) => {
+                        const isSelected = selectedCardId === card.id && !useCustomCardInput
+                        return (
+                          <button
+                            key={card.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCardId(card.id)
+                              setUseCustomCardInput(false)
+                            }}
+                            className={`rounded-xl border px-4 py-3 text-left text-sm transition ${
+                              isSelected
+                                ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                                : "border-slate-200 bg-white text-foreground hover:bg-slate-50"
+                            }`}
+                          >
+                            <p className="font-semibold">{`${card.brand} ${maskCardNumber(card.cardNumber)}`}</p>
+                            <p className={`text-xs ${isSelected ? "text-slate-200" : "text-muted-foreground"}`}>
+                              {`有効期限: ${card.expiry}`}
+                            </p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      登録済みカードがありません。下記フォームから入力してください。
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="cardExpiry">有効期限</Label>
-                  <Input
-                    id="cardExpiry"
-                    name="cardExpiry"
-                    placeholder="MM/YY"
-                    required
-                    className="rounded-lg"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="cardCvc">セキュリティコード</Label>
-                  <Input
-                    id="cardCvc"
-                    name="cardCvc"
-                    placeholder="123"
-                    required
-                    className="rounded-lg"
-                  />
-                </div>
+
+                <Button
+                  type="button"
+                  variant={useCustomCardInput ? "default" : "outline"}
+                  className="rounded-xl"
+                  onClick={() => {
+                    setSelectedCardId("")
+                    setUseCustomCardInput(true)
+                  }}
+                >
+                  上記以外
+                </Button>
+
+                {useCustomCardInput ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label htmlFor="cardNumber">カード番号</Label>
+                      <Input
+                        id="cardNumber"
+                        name="cardNumber"
+                        placeholder="0000 0000 0000 0000"
+                        required={paymentMethod === "credit" && useCustomCardInput}
+                        className="rounded-lg"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cardExpiry">有効期限</Label>
+                      <Input
+                        id="cardExpiry"
+                        name="cardExpiry"
+                        placeholder="MM/YY"
+                        required={paymentMethod === "credit" && useCustomCardInput}
+                        className="rounded-lg"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cardCvc">セキュリティコード</Label>
+                      <Input
+                        id="cardCvc"
+                        name="cardCvc"
+                        placeholder="123"
+                        required={paymentMethod === "credit" && useCustomCardInput}
+                        className="rounded-lg"
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

@@ -13,6 +13,60 @@ import {
 } from "@/features/user/api/userPaymentApi"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 
+const MAJOR_BRANDS = ["Visa", "Mastercard", "JCB", "American Express", "Diners Club"] as const
+
+function formatCardNumber(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 19)
+  return digits.replace(/(\d{4})(?=\d)/g, "$1 ")
+}
+
+function formatExpiry(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 4)
+  if (digits.length <= 2) return digits
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`
+}
+
+function validateExpiry(value: string) {
+  if (!/^\d{2}\/\d{2}$/.test(value)) {
+    return "有効期限は MM/YY 形式で入力してください。"
+  }
+
+  const month = Number(value.slice(0, 2))
+  const year2digits = Number(value.slice(3, 5))
+  if (month < 1 || month > 12) {
+    return "月は 01 から 12 の範囲で入力してください。"
+  }
+
+  const now = new Date()
+  const currentYear2digits = now.getFullYear() % 100
+  const currentMonth = now.getMonth() + 1
+
+  if (year2digits < currentYear2digits) {
+    return "有効期限が過去になっています。"
+  }
+  if (year2digits === currentYear2digits && month < currentMonth) {
+    return "有効期限が過去になっています。"
+  }
+
+  if (year2digits > currentYear2digits + 20) {
+    return "年は有効な範囲で入力してください。"
+  }
+
+  return ""
+}
+
+function splitHolderName(holderName: string) {
+  const trimmed = holderName.trim()
+  if (!trimmed) {
+    return { firstName: "", lastName: "" }
+  }
+  const parts = trimmed.split(/\s+/)
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts.slice(1).join(" "),
+  }
+}
+
 export function UserPaymentDetailPage() {
   const shopId = useShopId()
   const [searchParams] = useSearchParams()
@@ -21,6 +75,13 @@ export function UserPaymentDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [saveMessage, setSaveMessage] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
+  const [brand, setBrand] = useState<string>("Visa")
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [cardNumber, setCardNumber] = useState("")
+  const [expiry, setExpiry] = useState("")
+  const [cvc, setCvc] = useState("")
+  const [expiryError, setExpiryError] = useState("")
 
   useEffect(() => {
     let isMounted = true
@@ -28,6 +89,14 @@ export function UserPaymentDetailPage() {
       .then((result) => {
         if (!isMounted) return
         setCard(result)
+        if (!result) return
+        const splitName = splitHolderName(result.holderName)
+        setBrand(result.brand || "Visa")
+        setFirstName(splitName.firstName)
+        setLastName(splitName.lastName)
+        setCardNumber(formatCardNumber(result.cardNumber))
+        setExpiry(formatExpiry(result.expiry))
+        setCvc(result.cvc)
       })
       .finally(() => {
         if (!isMounted) return
@@ -41,14 +110,20 @@ export function UserPaymentDetailPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!card) return
-    const formData = new FormData(event.currentTarget)
+    const holderName = `${firstName.trim()} ${lastName.trim()}`.trim()
+    const nextExpiryError = validateExpiry(expiry)
+    if (nextExpiryError) {
+      setExpiryError(nextExpiryError)
+      return
+    }
+
     const updatedCard: PaymentCard = {
       id: card.id,
-      brand: String(formData.get("brand") ?? "Visa"),
-      cardNumber: String(formData.get("cardNumber") ?? ""),
-      expiry: String(formData.get("expiry") ?? ""),
-      cvc: String(formData.get("cvc") ?? ""),
-      holderName: String(formData.get("holderName") ?? ""),
+      brand,
+      cardNumber,
+      expiry,
+      cvc,
+      holderName,
     }
     const result = await updatePaymentCard(updatedCard)
     if (!result.ok) {
@@ -57,6 +132,7 @@ export function UserPaymentDetailPage() {
     }
     setCard(result.card)
     setErrorMessage("")
+    setExpiryError("")
     setSaveMessage("カード情報を更新しました")
     setTimeout(() => setSaveMessage(""), 2000)
   }
@@ -115,24 +191,53 @@ export function UserPaymentDetailPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="brand">ブランド</Label>
-              <Input id="brand" name="brand" defaultValue={card.brand} required className="rounded-lg" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="holderName">カード名義</Label>
-              <Input
-                id="holderName"
-                name="holderName"
-                defaultValue={card.holderName}
+              <select
+                id="brand"
+                name="brand"
+                value={brand}
+                onChange={(event) => setBrand(event.target.value)}
                 required
-                className="rounded-lg"
-              />
+                className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none transition focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                {MAJOR_BRANDS.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>カード名義</Label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  id="holderFirstName"
+                  name="holderFirstName"
+                  value={firstName}
+                  onChange={(event) => setFirstName(event.target.value.toUpperCase())}
+                  placeholder="TARO"
+                  required
+                  className="rounded-lg"
+                />
+                <Input
+                  id="holderLastName"
+                  name="holderLastName"
+                  value={lastName}
+                  onChange={(event) => setLastName(event.target.value.toUpperCase())}
+                  placeholder="YAMADA"
+                  required
+                  className="rounded-lg"
+                />
+              </div>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="cardNumber">カード番号</Label>
               <Input
                 id="cardNumber"
                 name="cardNumber"
-                defaultValue={card.cardNumber}
+                value={cardNumber}
+                onChange={(event) => setCardNumber(formatCardNumber(event.target.value))}
+                inputMode="numeric"
+                autoComplete="cc-number"
                 placeholder="0000 0000 0000 0000"
                 required
                 className="rounded-lg"
@@ -143,18 +248,33 @@ export function UserPaymentDetailPage() {
               <Input
                 id="expiry"
                 name="expiry"
-                defaultValue={card.expiry}
+                value={expiry}
+                onChange={(event) => {
+                  const formatted = formatExpiry(event.target.value)
+                  setExpiry(formatted)
+                  if (formatted.length < 5) {
+                    setExpiryError("")
+                    return
+                  }
+                  setExpiryError(validateExpiry(formatted))
+                }}
+                inputMode="numeric"
+                autoComplete="cc-exp"
                 placeholder="MM/YY"
                 required
                 className="rounded-lg"
               />
+              {expiryError ? <p className="text-xs text-destructive">{expiryError}</p> : null}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cvc">セキュリティコード</Label>
               <Input
                 id="cvc"
                 name="cvc"
-                defaultValue={card.cvc}
+                value={cvc}
+                onChange={(event) => setCvc(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                inputMode="numeric"
+                autoComplete="cc-csc"
                 placeholder="123"
                 required
                 className="rounded-lg"
