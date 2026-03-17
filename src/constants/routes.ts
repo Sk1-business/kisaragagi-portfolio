@@ -6,4 +6,8 @@ export const ROUTES = {
   backofficeSignup: "/backoffice/signup",
   userHome: "/user",
   adminHome: "/admin",
+  adminCalendar: "/admin/calendar",
+  adminShiftCalendar: "/admin/shifts",
+  adminCancelled: "/admin/cancelled",
+  adminReservationDetail: "/admin/reservations/:id",
 } as const
