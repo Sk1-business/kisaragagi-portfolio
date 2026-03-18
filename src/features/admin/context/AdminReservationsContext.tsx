@@ -17,6 +17,7 @@ type AdminReservationsContextValue = {
   loading: boolean
   updateReservationStatus: (id: string, status: "CONFIRMED" | "CANCELLED") => void
   updateReservationMemo: (id: string, memo: string | undefined) => void
+  updateReservationAssignee: (id: string, assigneeId: string) => void
   getReservationById: (id: string) => Reservation | undefined
   cancelledReservations: Reservation[]
 }
@@ -72,6 +73,14 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
     })
   }, [])
 
+  const updateReservationAssignee = useCallback((id: string, assigneeId: string) => {
+    setReservations((prev) => {
+      const next = prev.map((r) => (r.id === id ? { ...r, assigneeId } : r))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      return next
+    })
+  }, [])
+
   const getReservationById = useCallback(
     (id: string) => reservations.find((r) => r.id === id),
     [reservations],
@@ -94,6 +103,7 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
       loading,
       updateReservationStatus,
       updateReservationMemo,
+      updateReservationAssignee,
       getReservationById,
       cancelledReservations,
     }),
@@ -102,6 +112,7 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
       loading,
       updateReservationStatus,
       updateReservationMemo,
+      updateReservationAssignee,
       getReservationById,
       cancelledReservations,
     ],

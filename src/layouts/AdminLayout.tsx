@@ -3,10 +3,12 @@ import { Link, NavLink, Outlet } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import { AdminReservationsProvider } from "@/features/admin/context/AdminReservationsContext"
+import { AdminStaffProvider } from "@/features/admin/context/AdminStaffContext"
 
 export function AdminLayout() {
   return (
     <AdminReservationsProvider>
+    <AdminStaffProvider>
     <main className="mx-auto min-h-dvh w-full max-w-6xl px-4 py-6 sm:px-6">
       <header className="mb-6 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -28,6 +30,9 @@ export function AdminLayout() {
           <Button asChild variant="ghost" size="sm" className="rounded-md">
             <NavLink to={ROUTES.adminCancelled}>キャンセル一覧</NavLink>
           </Button>
+          <Button asChild variant="ghost" size="sm" className="rounded-md">
+            <NavLink to={ROUTES.adminStaff}>スタッフ管理</NavLink>
+          </Button>
           <Button asChild variant="outline" size="sm" className="ml-2 rounded-md">
             <Link to={ROUTES.landing}>トップへ</Link>
           </Button>
@@ -35,6 +40,7 @@ export function AdminLayout() {
       </header>
       <Outlet />
     </main>
+    </AdminStaffProvider>
     </AdminReservationsProvider>
   )
 }

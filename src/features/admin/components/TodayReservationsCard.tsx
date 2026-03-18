@@ -11,9 +11,15 @@ import { getAssigneeColor } from "@/features/admin/hooks/useStaff"
 interface TodayReservationsCardProps {
   reservations: Reservation[]
   staffList: Staff[]
+  /** ヘッダー右端に表示（例: 更新日時） */
+  updatedAtLabel?: string
 }
 
-export function TodayReservationsCard({ reservations, staffList }: TodayReservationsCardProps) {
+export function TodayReservationsCard({
+  reservations,
+  staffList,
+  updatedAtLabel,
+}: TodayReservationsCardProps) {
   const today = new Date()
   const todayLabel = formatDateJa(today)
 
@@ -23,14 +29,23 @@ export function TodayReservationsCard({ reservations, staffList }: TodayReservat
 
   return (
     <Card className="rounded-lg border-border shadow-xs">
-      <CardHeader>
-        <CardTitle className="text-lg">本日の予約一覧</CardTitle>
-        <CardDescription>{todayLabel}</CardDescription>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-x-4 gap-y-1 space-y-0 pb-4">
+        <div className="min-w-0 space-y-1.5">
+          <CardTitle className="text-lg leading-tight">本日の予約一覧</CardTitle>
+          <CardDescription>{todayLabel}</CardDescription>
+        </div>
+        {updatedAtLabel ? (
+          <p className="shrink-0 text-right text-sm leading-tight text-muted-foreground/75">
+            更新日時
+            <br />
+            <span className="whitespace-nowrap tabular-nums">{updatedAtLabel}</span>
+          </p>
+        ) : null}
       </CardHeader>
       <CardContent>
         {sorted.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            本日の確定予約はありません。
+            本日のうち、これからの確定予約はありません。
           </p>
         ) : (
           <ul className="flex flex-col gap-2">

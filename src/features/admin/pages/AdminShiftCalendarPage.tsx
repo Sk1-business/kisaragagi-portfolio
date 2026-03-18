@@ -28,7 +28,14 @@ export function AdminShiftCalendarPage() {
   const [selectedAssigneeId, setSelectedAssigneeId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (staffList.length > 0 && selectedAssigneeId === null) {
+    if (staffList.length === 0) {
+      setSelectedAssigneeId(null)
+      return
+    }
+    if (
+      selectedAssigneeId === null ||
+      !staffList.some((s) => s.id === selectedAssigneeId)
+    ) {
       setSelectedAssigneeId(staffList[0].id)
     }
   }, [staffList, selectedAssigneeId])

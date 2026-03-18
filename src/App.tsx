@@ -15,6 +15,7 @@ import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage"
 import { AdminReservationDetailPage } from "@/features/admin/pages/AdminReservationDetailPage"
 import { AdminCancelledListPage } from "@/features/admin/pages/AdminCancelledListPage"
 import { AdminShiftCalendarPage } from "@/features/admin/pages/AdminShiftCalendarPage"
+import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { AdminLayout } from "./layouts/AdminLayout"
 import { UserLayout } from "./layouts/UserLayout"
@@ -97,6 +98,7 @@ function App() {
           <Route path={ROUTES.adminCalendar} element={<AdminCalendarPage />} />
           <Route path={ROUTES.adminShiftCalendar} element={<AdminShiftCalendarPage />} />
           <Route path={ROUTES.adminCancelled} element={<AdminCancelledListPage />} />
+          <Route path={ROUTES.adminStaff} element={<AdminStaffPage />} />
           <Route
             path={ROUTES.adminReservationDetail}
             element={<AdminReservationDetailPage />}

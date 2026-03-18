@@ -45,6 +45,11 @@ cd Struct_front
 npm install
 ```
 
+## 管理者画面（モック）
+
+- 予約: `localStorage` `saas_admin_reservations_v2`
+- スタッフ: `saas_admin_staff_v1`（`/admin/staff`）。同名（前後空白除き）の登録・編集は不可。未終了の確定予約がある担当は削除不可。
+
 ## 開発・ビルド
 
 ```bash
