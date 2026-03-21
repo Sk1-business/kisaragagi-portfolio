@@ -1,4 +1,5 @@
 import { ApiClientError, apiRequest } from "@/lib/apiClient"
+import { buildSalonApiPath, resolveShopSlug } from "@/lib/shopSlug"
 
 export type ReservationStatus = "upcoming" | "past" | "cancelled"
 
@@ -14,6 +15,16 @@ export interface UserReservation {
   confirmationToken?: string
   menuId?: string
   menuName?: string
+  /** 予約時に保存した希望決済手段（credit / paypay 等） */
+  paymentMethod?: string | null
+  /** reservations.payment_status（概略） */
+  paymentStatus?: string | null
+  /** payments テーブルがある場合の金額（円） */
+  paymentAmountYen?: number | null
+  paymentCurrency?: string | null
+  /** payments.status */
+  paymentRecordStatus?: string | null
+  paymentPaidAt?: string | null
 }
 
 export interface CancellationPolicy {
@@ -40,13 +51,21 @@ export interface ReservationChangeEvaluation {
   reason?: string
 }
 
+export interface CustomerBookingRules {
+  allowSameDay: boolean
+  bookingDeadlineMinutes: number
+  cancellationDeadlineHours: number
+  maxAdvanceDays: number
+}
+
 const RESERVATION_STORAGE_KEY = "user:reservations:v2"
 const CANCELLATION_POLICY_STORAGE_KEY = "user:cancellation-policy:v2"
 const RESERVATION_CHANGE_POLICY_STORAGE_KEY = "user:reservation-change-policy:v2"
+const CUSTOMER_BOOKING_RULES_STORAGE_KEY = "user:booking-rules:v1"
 
 interface StoredReservationMeta {
   id: string
-  confirmationToken: string
+  confirmationToken?: string
   mode: string
   trainerId: string | null
   trainerName: string | null
@@ -57,6 +76,19 @@ interface StoredReservationMeta {
 interface MenuResponse {
   menu_id: string
   name: string
+  duration_minutes: number
+  price: number
+  description: string | null
+  image_url: string | null
+}
+
+export interface ReservationMenuOption {
+  id: string
+  name: string
+  durationMinutes: number
+  price: number
+  description: string
+  imageUrl: string
 }
 
 interface ReservationOutResponse {
@@ -79,11 +111,56 @@ interface ReservationDetailResponse {
   notes: string | null
   status: string
   can_cancel: boolean
+  trainer_id?: string | null
+  trainer_name?: string | null
+  /** API は snake_case。念のため camelCase も許容 */
+  booking_type?: string | null
+  bookingType?: string | null
+  payment_method?: string | null
+  paymentMethod?: string | null
+  payment_status?: string | null
+  paymentStatus?: string | null
+  payment_amount_yen?: number | null
+  paymentAmountYen?: number | null
+  payment_currency?: string | null
+  payment_record_status?: string | null
+  payment_paid_at?: string | null
 }
 
 interface AvailabilityResponse {
   date: string
-  slots: { start_at: string }[]
+  slots: { start_at: string; selectable: boolean }[]
+}
+
+interface AvailabilityDatesResponse {
+  dates: string[]
+}
+
+export interface AvailabilityTimeSlot {
+  time: string
+  selectable: boolean
+}
+
+interface ReservationPoliciesResponse {
+  cancellation: {
+    title: string
+    summary: string
+    detail_lines: string[]
+    cutoff_hours: number | null
+  }
+  change: {
+    title: string
+    summary: string
+    detail_lines: string[]
+    cutoff_hours: number | null
+  }
+}
+
+interface CustomerBookingRulesResponse {
+  allow_same_day: boolean
+  booking_deadline_minutes: number
+  cancellation_deadline_hours: number
+  max_advance_days: number
 }
 
 const DEFAULT_CANCELLATION_POLICY: CancellationPolicy = {
@@ -106,6 +183,13 @@ const DEFAULT_RESERVATION_CHANGE_POLICY: ReservationChangePolicy = {
     "正式な変更ルールは今後反映予定です",
   ],
   cutoffHours: 24,
+}
+
+const DEFAULT_CUSTOMER_BOOKING_RULES: CustomerBookingRules = {
+  allowSameDay: false,
+  bookingDeadlineMinutes: 120,
+  cancellationDeadlineHours: 24,
+  maxAdvanceDays: 60,
 }
 
 function safeReadStorage<T>(key: string): T | null {
@@ -154,36 +238,76 @@ function toStatus(status: string): ReservationStatus {
   return "past"
 }
 
+function normalizeApiBookingType(detail: ReservationDetailResponse): "SHIMEI" | "OMAKASE" | undefined {
+  const raw = detail.booking_type ?? detail.bookingType
+  if (raw == null || raw === "") return undefined
+  const u = String(raw).trim().toUpperCase()
+  if (u === "SHIMEI") return "SHIMEI"
+  if (u === "OMAKASE") return "OMAKASE"
+  return undefined
+}
+
+function modeFromBookingTypeCode(code: "SHIMEI" | "OMAKASE"): "nomination" | "omakase" {
+  return code === "SHIMEI" ? "nomination" : "omakase"
+}
+
+/** 予約詳細・マイページで決済手段ラベル表示用 */
+export function formatReservationPaymentMethod(method: string | null | undefined): string {
+  if (!method?.trim()) return "—"
+  const m = method.trim().toLowerCase()
+  if (m === "credit") return "クレジットカード"
+  if (m === "paypay") return "PayPay"
+  return method
+}
+
+/** 決済ステータス（予約側・決済レコード両方）の表示用 */
+export function formatPaymentStatusLabel(status: string | null | undefined): string {
+  if (!status?.trim()) return "—"
+  const s = status.trim().toLowerCase()
+  const map: Record<string, string> = {
+    pending: "未決済",
+    paid: "支払済み",
+    succeeded: "支払済み",
+    failed: "決済失敗",
+    refunded: "返金済み",
+  }
+  return map[s] ?? status
+}
+
 function toReservation(
   detail: ReservationDetailResponse,
-  meta: StoredReservationMeta,
+  meta?: StoredReservationMeta,
   fallbackMenuName?: string,
 ): UserReservation {
   const { date, time } = toDateAndTime(detail.start_at)
+  const bookingCode = normalizeApiBookingType(detail)
+  const modeFromApi = bookingCode ? modeFromBookingTypeCode(bookingCode) : undefined
   return {
     id: detail.reservation_id,
     date,
     time,
-    mode: meta.mode,
-    trainerId: meta.trainerId,
-    trainerName: meta.trainerName,
+    mode: modeFromApi ?? meta?.mode ?? "omakase",
+    trainerId: detail.trainer_id ?? meta?.trainerId ?? null,
+    trainerName: detail.trainer_name ?? meta?.trainerName ?? null,
     status: toStatus(detail.status),
-    note: detail.notes ?? meta.note,
-    confirmationToken: meta.confirmationToken,
-    menuId: meta.menuId,
-    menuName: fallbackMenuName,
+    note: detail.notes ?? meta?.note ?? "",
+    confirmationToken: meta?.confirmationToken,
+    menuId: meta?.menuId,
+    menuName: detail.menu_name || fallbackMenuName,
+    paymentMethod: detail.payment_method ?? detail.paymentMethod ?? null,
+    paymentStatus: detail.payment_status ?? detail.paymentStatus ?? null,
+    paymentAmountYen:
+      detail.payment_amount_yen ?? detail.paymentAmountYen ?? null,
+    paymentCurrency: detail.payment_currency ?? null,
+    paymentRecordStatus: detail.payment_record_status ?? null,
+    paymentPaidAt: detail.payment_paid_at ?? null,
   }
 }
 
 function loadReservationMeta() {
   const stored = safeReadStorage<StoredReservationMeta[]>(RESERVATION_STORAGE_KEY)
   if (stored && Array.isArray(stored)) {
-    return stored.filter(
-      (item) =>
-        typeof item?.id === "string" &&
-        typeof item?.confirmationToken === "string" &&
-        item.confirmationToken.length > 0,
-    )
+    return stored.filter((item) => typeof item?.id === "string" && item.id.length > 0)
   }
   safeWriteStorage(RESERVATION_STORAGE_KEY, [])
   return []
@@ -201,8 +325,12 @@ function toReservationStartIso(date: string, time: string) {
   return `${date}T${time}:00+09:00`
 }
 
-async function resolveDefaultMenu() {
-  const menus = await apiRequest<MenuResponse[]>("/api/menus")
+async function resolveDefaultMenu(shopSlug?: string) {
+  const resolvedShopSlug = resolveShopSlug(shopSlug)
+  if (!resolvedShopSlug) {
+    throw new Error("店舗情報が見つかりませんでした。")
+  }
+  const menus = await apiRequest<MenuResponse[]>(buildSalonApiPath(resolvedShopSlug, "/menus"))
   const firstMenu = menus[0]
   if (!firstMenu) {
     throw new Error("予約可能なメニューが見つかりませんでした。")
@@ -210,52 +338,126 @@ async function resolveDefaultMenu() {
   return firstMenu
 }
 
-export async function fetchUserReservations(): Promise<UserReservation[]> {
-  const allMeta = loadReservationMeta()
-  if (allMeta.length === 0) return []
-
-  const reservations = await Promise.all(
-    allMeta.map(async (meta) => {
-      try {
-        const detail = await apiRequest<ReservationDetailResponse>(
-          `/api/reservations/${meta.confirmationToken}`,
-        )
-        return toReservation(detail, meta)
-      } catch {
-        return null
-      }
-    }),
+export async function fetchReservationMenus(
+  shopSlug?: string,
+  trainerId?: string,
+): Promise<ReservationMenuOption[]> {
+  const resolvedShopSlug = resolveShopSlug(shopSlug)
+  if (!resolvedShopSlug) return []
+  const trainerQuery = trainerId ? `?trainer_id=${encodeURIComponent(trainerId)}` : ""
+  const menus = await apiRequest<MenuResponse[]>(
+    `${buildSalonApiPath(resolvedShopSlug, "/menus")}${trainerQuery}`,
   )
+  return menus.map((menu) => ({
+    id: menu.menu_id,
+    name: menu.name,
+    durationMinutes: menu.duration_minutes,
+    price: menu.price,
+    description: menu.description ?? "",
+    imageUrl: menu.image_url ?? "",
+  }))
+}
 
-  return reservations
-    .filter((reservation): reservation is UserReservation => reservation !== null)
-    .sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`))
+export async function fetchUserReservations(shopSlug?: string): Promise<UserReservation[]> {
+  const resolvedShopSlug = resolveShopSlug(shopSlug)
+  try {
+    const allMeta = loadReservationMeta()
+    const details = await apiRequest<ReservationDetailResponse[]>("/api/my/reservations")
+    return details
+      .map((detail) =>
+        toReservation(detail, allMeta.find((meta) => meta.id === detail.reservation_id)),
+      )
+      .sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`))
+  } catch {
+    const allMeta = loadReservationMeta().filter((meta) => !!meta.confirmationToken)
+    if (allMeta.length === 0) return []
+    if (!resolvedShopSlug) return []
+    const reservations = await Promise.all(
+      allMeta.map(async (meta) => {
+        try {
+          const detail = await apiRequest<ReservationDetailResponse>(
+            buildSalonApiPath(resolvedShopSlug, `/reservations/${meta.confirmationToken}`),
+          )
+          return toReservation(detail, meta)
+        } catch {
+          return null
+        }
+      }),
+    )
+    return reservations
+      .filter((reservation): reservation is UserReservation => reservation !== null)
+      .sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`))
+  }
 }
 
 export async function fetchUserReservationById(
   reservationId: string,
+  shopSlug?: string,
 ): Promise<UserReservation | null> {
-  const meta = loadReservationMeta().find((item) => item.id === reservationId)
-  if (!meta) return null
-
+  const resolvedShopSlug = resolveShopSlug(shopSlug)
   try {
-    const detail = await apiRequest<ReservationDetailResponse>(
-      `/api/reservations/${meta.confirmationToken}`,
-    )
+    const detail = await apiRequest<ReservationDetailResponse>(`/api/my/reservations/${reservationId}`)
+    const meta = loadReservationMeta().find((item) => item.id === reservationId)
     return toReservation(detail, meta)
   } catch {
-    return null
+    const meta = loadReservationMeta().find((item) => item.id === reservationId && !!item.confirmationToken)
+    if (!meta?.confirmationToken) return null
+    if (!resolvedShopSlug) return null
+    try {
+      const detail = await apiRequest<ReservationDetailResponse>(
+        buildSalonApiPath(resolvedShopSlug, `/reservations/${meta.confirmationToken}`),
+      )
+      return toReservation(detail, meta)
+    } catch {
+      return null
+    }
   }
 }
 
 export async function fetchCancellationPolicy(): Promise<CancellationPolicy> {
-  // Future: replace this storage-based fallback with real API fetch.
-  const stored = safeReadStorage<CancellationPolicy>(CANCELLATION_POLICY_STORAGE_KEY)
-  if (stored) {
-    return Promise.resolve(stored)
+  const policies = await fetchReservationPolicies()
+  return policies.cancellation
+}
+
+export async function fetchReservationChangePolicy(): Promise<ReservationChangePolicy> {
+  const policies = await fetchReservationPolicies()
+  return policies.change
+}
+
+export async function fetchReservationPolicies(): Promise<{
+  cancellation: CancellationPolicy
+  change: ReservationChangePolicy
+}> {
+  try {
+    const response = await apiRequest<ReservationPoliciesResponse>("/api/my/reservation-policies")
+    const cancellation: CancellationPolicy = {
+      title: response.cancellation.title,
+      summary: response.cancellation.summary,
+      detailLines: response.cancellation.detail_lines,
+      cutoffHours: response.cancellation.cutoff_hours,
+    }
+    const change: ReservationChangePolicy = {
+      title: response.change.title,
+      summary: response.change.summary,
+      detailLines: response.change.detail_lines,
+      cutoffHours: response.change.cutoff_hours,
+    }
+    safeWriteStorage(CANCELLATION_POLICY_STORAGE_KEY, cancellation)
+    safeWriteStorage(RESERVATION_CHANGE_POLICY_STORAGE_KEY, change)
+    return { cancellation, change }
+  } catch {
+    const storedCancellation = safeReadStorage<CancellationPolicy>(CANCELLATION_POLICY_STORAGE_KEY)
+    const stored = safeReadStorage<ReservationChangePolicy>(RESERVATION_CHANGE_POLICY_STORAGE_KEY)
+    if (storedCancellation && stored) {
+      return Promise.resolve({ cancellation: storedCancellation, change: stored })
+    }
+    safeWriteStorage(CANCELLATION_POLICY_STORAGE_KEY, DEFAULT_CANCELLATION_POLICY)
+    safeWriteStorage(RESERVATION_CHANGE_POLICY_STORAGE_KEY, DEFAULT_RESERVATION_CHANGE_POLICY)
+    return Promise.resolve({
+      cancellation: DEFAULT_CANCELLATION_POLICY,
+      change: DEFAULT_RESERVATION_CHANGE_POLICY,
+    })
   }
-  safeWriteStorage(CANCELLATION_POLICY_STORAGE_KEY, DEFAULT_CANCELLATION_POLICY)
-  return Promise.resolve(DEFAULT_CANCELLATION_POLICY)
 }
 
 export function evaluateReservationCancellation(
@@ -283,14 +485,29 @@ export function evaluateReservationCancellation(
   return { canCancel: true }
 }
 
-export async function fetchReservationChangePolicy(): Promise<ReservationChangePolicy> {
-  // Future: replace this storage-based fallback with real API fetch.
-  const stored = safeReadStorage<ReservationChangePolicy>(RESERVATION_CHANGE_POLICY_STORAGE_KEY)
-  if (stored) {
-    return Promise.resolve(stored)
+export async function fetchCustomerBookingRules(shopSlug?: string): Promise<CustomerBookingRules> {
+  const resolvedShopSlug = resolveShopSlug(shopSlug)
+  try {
+    const path = resolvedShopSlug
+      ? buildSalonApiPath(resolvedShopSlug, "/booking-rules")
+      : "/api/my/booking-rules"
+    const response = await apiRequest<CustomerBookingRulesResponse>(path)
+    const rules: CustomerBookingRules = {
+      allowSameDay: response.allow_same_day,
+      bookingDeadlineMinutes: response.booking_deadline_minutes,
+      cancellationDeadlineHours: response.cancellation_deadline_hours,
+      maxAdvanceDays: response.max_advance_days,
+    }
+    safeWriteStorage(CUSTOMER_BOOKING_RULES_STORAGE_KEY, rules)
+    return rules
+  } catch {
+    const stored = safeReadStorage<CustomerBookingRules>(CUSTOMER_BOOKING_RULES_STORAGE_KEY)
+    if (stored) {
+      return Promise.resolve(stored)
+    }
+    safeWriteStorage(CUSTOMER_BOOKING_RULES_STORAGE_KEY, DEFAULT_CUSTOMER_BOOKING_RULES)
+    return Promise.resolve(DEFAULT_CUSTOMER_BOOKING_RULES)
   }
-  safeWriteStorage(RESERVATION_CHANGE_POLICY_STORAGE_KEY, DEFAULT_RESERVATION_CHANGE_POLICY)
-  return Promise.resolve(DEFAULT_RESERVATION_CHANGE_POLICY)
 }
 
 export function evaluateReservationUpdate(
@@ -321,20 +538,12 @@ export function evaluateReservationUpdate(
 export async function cancelUserReservation(
   reservationId: string,
 ): Promise<{ ok: true; reservation: UserReservation } | { ok: false; error: string }> {
-  const allMeta = loadReservationMeta()
-  const targetMeta = allMeta.find((reservation) => reservation.id === reservationId)
-  if (!targetMeta) {
-    return Promise.resolve({ ok: false, error: "予約が見つかりませんでした。" })
-  }
-
   try {
-    const detail = await apiRequest<ReservationDetailResponse>(
-      `/api/reservations/${targetMeta.confirmationToken}/cancel`,
-      {
-        method: "POST",
-        body: {},
-      },
-    )
+    const detail = await apiRequest<ReservationDetailResponse>(`/api/my/reservations/${reservationId}/cancel`, {
+      method: "POST",
+      body: {},
+    })
+    const targetMeta = loadReservationMeta().find((reservation) => reservation.id === reservationId)
     const updated = toReservation(detail, targetMeta)
     return { ok: true, reservation: updated }
   } catch (error) {
@@ -363,9 +572,6 @@ export async function updateUserReservation(
 ): Promise<{ ok: true; reservation: UserReservation } | { ok: false; error: string }> {
   const allMeta = loadReservationMeta()
   const targetMeta = allMeta.find((reservation) => reservation.id === payload.reservationId)
-  if (!targetMeta) {
-    return Promise.resolve({ ok: false, error: "変更対象の予約が見つかりませんでした。" })
-  }
 
   const targetReservation = await fetchUserReservationById(payload.reservationId)
   if (!targetReservation || targetReservation.status !== "upcoming") {
@@ -381,33 +587,39 @@ export async function updateUserReservation(
     })
   }
 
-  // Backend has no direct customer reservation update endpoint.
-  // We cancel the existing reservation and create a new one as replacement.
-  const cancelResult = await cancelUserReservation(payload.reservationId)
-  if (!cancelResult.ok) {
-    return Promise.resolve({ ok: false, error: cancelResult.error })
+  try {
+    const detail = await apiRequest<ReservationDetailResponse>(`/api/my/reservations/${payload.reservationId}`, {
+      method: "PUT",
+      body: {
+        start_at: toReservationStartIso(payload.date, payload.time),
+        customer_name: payload.fullName || undefined,
+        customer_email: payload.email || undefined,
+        customer_phone: payload.phone || undefined,
+        notes: payload.note || undefined,
+      },
+    })
+
+    const nextMeta: StoredReservationMeta = {
+      id: payload.reservationId,
+      confirmationToken: targetMeta?.confirmationToken,
+      mode: payload.mode,
+      trainerId: payload.trainerId,
+      trainerName: payload.trainerName,
+      note: payload.note,
+      menuId: targetMeta?.menuId,
+    }
+    saveReservationMeta([
+      nextMeta,
+      ...allMeta.filter((item) => item.id !== payload.reservationId),
+    ])
+
+    return { ok: true, reservation: toReservation(detail, nextMeta) }
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      return { ok: false, error: error.message }
+    }
+    return { ok: false, error: "予約変更に失敗しました。" }
   }
-
-  const createResult = await createUserReservation({
-    date: payload.date,
-    time: payload.time,
-    mode: payload.mode,
-    trainerId: payload.trainerId,
-    trainerName: payload.trainerName,
-    note: payload.note,
-    fullName: payload.fullName,
-    email: payload.email,
-    phone: payload.phone,
-    preferredMenuId: targetMeta.menuId,
-  })
-  if (!createResult.ok) {
-    return Promise.resolve({ ok: false, error: createResult.error })
-  }
-
-  const nextMeta = loadReservationMeta().filter((item) => item.id !== payload.reservationId)
-  saveReservationMeta(nextMeta)
-
-  return Promise.resolve({ ok: true, reservation: createResult.reservation })
 }
 
 interface CreateReservationPayload {
@@ -421,17 +633,33 @@ interface CreateReservationPayload {
   email?: string
   phone?: string
   preferredMenuId?: string
+  shopSlug?: string
+  /** credit / paypay 等（バックエンドの payment_method に保存） */
+  paymentMethod?: string
 }
 
 export async function createUserReservation(
   payload: CreateReservationPayload,
 ): Promise<{ ok: true; reservation: UserReservation } | { ok: false; error: string }> {
+  const resolvedShopSlug = resolveShopSlug(payload.shopSlug)
+  if (!resolvedShopSlug) {
+    return { ok: false, error: "店舗情報が見つかりません。" }
+  }
+  if (payload.mode === "nomination" && !payload.trainerId?.trim()) {
+    return { ok: false, error: "指名予約ではトレーナーを選択してください。" }
+  }
   try {
-    const menu = payload.preferredMenuId
-      ? { menu_id: payload.preferredMenuId, name: "" }
-      : await resolveDefaultMenu()
+    let menuIdForCreate = payload.preferredMenuId
+    if (!menuIdForCreate && payload.mode === "nomination" && payload.trainerId) {
+      const trainerMenus = await fetchReservationMenus(resolvedShopSlug, payload.trainerId)
+      menuIdForCreate = trainerMenus[0]?.id
+    }
+    const menu = menuIdForCreate
+      ? { menu_id: menuIdForCreate, name: "" }
+      : await resolveDefaultMenu(resolvedShopSlug)
 
-    const data = await apiRequest<ReservationOutResponse>("/api/reservations", {
+    const bookingType = payload.mode === "nomination" ? "SHIMEI" : "OMAKASE"
+    const data = await apiRequest<ReservationOutResponse>(buildSalonApiPath(resolvedShopSlug, "/reservations"), {
       method: "POST",
       body: {
         menu_id: menu.menu_id,
@@ -440,18 +668,18 @@ export async function createUserReservation(
         customer_email: payload.email || undefined,
         customer_phone: payload.phone || undefined,
         notes: payload.note || undefined,
+        booking_type: bookingType,
+        trainer_id:
+          payload.mode === "nomination" && payload.trainerId ? payload.trainerId : undefined,
+        payment_method: payload.paymentMethod?.trim() || undefined,
       },
     })
-
-    if (!data.confirmation_token) {
-      return { ok: false, error: "予約確認トークンを取得できませんでした。" }
-    }
 
     const meta = loadReservationMeta()
     const nextMeta: StoredReservationMeta[] = [
       {
         id: data.reservation_id,
-        confirmationToken: data.confirmation_token,
+        confirmationToken: data.confirmation_token ?? undefined,
         mode: payload.mode,
         trainerId: payload.trainerId,
         trainerName: payload.trainerName,
@@ -461,10 +689,17 @@ export async function createUserReservation(
       ...meta.filter((item) => item.id !== data.reservation_id),
     ]
     saveReservationMeta(nextMeta)
-
-    const detail = await apiRequest<ReservationDetailResponse>(
-      `/api/reservations/${data.confirmation_token}`,
-    )
+    let detail: ReservationDetailResponse
+    try {
+      detail = await apiRequest<ReservationDetailResponse>(`/api/my/reservations/${data.reservation_id}`)
+    } catch {
+      if (!data.confirmation_token) {
+        return { ok: false, error: "予約詳細の取得に失敗しました。" }
+      }
+      detail = await apiRequest<ReservationDetailResponse>(
+        buildSalonApiPath(resolvedShopSlug, `/reservations/${data.confirmation_token}`),
+      )
+    }
     return {
       ok: true,
       reservation: toReservation(detail, nextMeta[0], data.menu_name ?? undefined),
@@ -477,11 +712,49 @@ export async function createUserReservation(
   }
 }
 
-export async function fetchAvailableTimeSlots(date: string): Promise<string[]> {
+export async function fetchAvailableTimeSlots(
+  date: string,
+  shopSlug?: string,
+  trainerId?: string,
+  excludeReservationId?: string,
+): Promise<AvailabilityTimeSlot[]> {
   if (!date) return []
-  const menu = await resolveDefaultMenu()
+  const resolvedShopSlug = resolveShopSlug(shopSlug)
+  if (!resolvedShopSlug) return []
+  const menu = await resolveDefaultMenu(resolvedShopSlug)
+  const trainerQuery = trainerId ? `&trainer_id=${encodeURIComponent(trainerId)}` : ""
+  const excludeId = excludeReservationId?.trim()
+  const excludeQuery = excludeId ? `&exclude_reservation_id=${encodeURIComponent(excludeId)}` : ""
   const data = await apiRequest<AvailabilityResponse>(
-    `/api/availability?menu_id=${encodeURIComponent(menu.menu_id)}&date=${encodeURIComponent(date)}`,
+    `${buildSalonApiPath(
+      resolvedShopSlug,
+      "/availability",
+    )}?menu_id=${encodeURIComponent(menu.menu_id)}&date=${encodeURIComponent(date)}${trainerQuery}${excludeQuery}`,
   )
-  return data.slots.map((slot) => slot.start_at.slice(11, 16))
+  return data.slots.map((slot) => ({
+    time: slot.start_at.slice(11, 16),
+    selectable: slot.selectable,
+  }))
+}
+
+export async function fetchShiftAvailableDates(
+  fromDate: string,
+  toDate: string,
+  shopSlug?: string,
+  trainerId?: string,
+): Promise<string[]> {
+  if (!fromDate || !toDate) return []
+  const resolvedShopSlug = resolveShopSlug(shopSlug)
+  if (!resolvedShopSlug) return []
+  const menu = await resolveDefaultMenu(resolvedShopSlug)
+  const trainerQuery = trainerId ? `&trainer_id=${encodeURIComponent(trainerId)}` : ""
+  const data = await apiRequest<AvailabilityDatesResponse>(
+    `${buildSalonApiPath(
+      resolvedShopSlug,
+      "/availability-dates",
+    )}?menu_id=${encodeURIComponent(menu.menu_id)}&from_date=${encodeURIComponent(
+      fromDate,
+    )}&to_date=${encodeURIComponent(toDate)}${trainerQuery}`,
+  )
+  return Array.isArray(data.dates) ? data.dates : []
 }

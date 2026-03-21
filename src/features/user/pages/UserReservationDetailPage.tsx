@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
-import { AlertTriangle, CalendarDays, Clock, MessageSquare, Store, UserRound } from "lucide-react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import {
+  AlertTriangle,
+  CalendarDays,
+  Clock,
+  CreditCard,
+  MessageSquare,
+  Store,
+  UserRound,
+} from "lucide-react"
+import { Link, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
@@ -8,31 +16,30 @@ import {
   cancelUserReservation,
   evaluateReservationCancellation,
   evaluateReservationUpdate,
-  fetchCancellationPolicy,
-  fetchReservationChangePolicy,
-  fetchUserReservationById,
+  fetchReservationPolicies,
+  formatPaymentStatusLabel,
+  formatReservationPaymentMethod,
   type CancellationPolicy,
   type ReservationChangePolicy,
-  type UserReservation,
 } from "@/features/user/api/userReservationApi"
-import { buildPathWithShopId, resolveShopName, useShopId } from "@/features/user/hooks/useShopId"
-const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"]
-
-function formatDateLabel(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
-  return `${parsed.getFullYear()}年${parsed.getMonth() + 1}月${parsed.getDate()}日 (${WEEKDAY_LABELS[parsed.getDay()]})`
-}
+import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
+import { UserSectionCard } from "@/features/user/components/UserSectionCard"
+import { usePersistentReservationId } from "@/features/user/hooks/usePersistentReservationId"
+import { useSalonName } from "@/features/user/hooks/useSalonName"
+import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
+import { useUserReservation } from "@/features/user/hooks/useUserReservation"
+import { formatDateLongWithWeekday } from "@/lib/dateFormat"
 
 export function UserReservationDetailPage() {
   const shopId = useShopId()
+  const shopName = useSalonName(shopId)
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const reservationId = searchParams.get("reservationId") ?? ""
-  const [reservation, setReservation] = useState<UserReservation | null>(null)
+  const reservationId = usePersistentReservationId()
+  const { reservation, isLoading: isReservationLoading } = useUserReservation(reservationId, shopId)
   const [cancellationPolicy, setCancellationPolicy] = useState<CancellationPolicy | null>(null)
   const [reservationChangePolicy, setReservationChangePolicy] =
     useState<ReservationChangePolicy | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isPolicyLoading, setIsPolicyLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [showPolicyAlertDialog, setShowPolicyAlertDialog] = useState(false)
@@ -42,19 +49,14 @@ export function UserReservationDetailPage() {
 
   useEffect(() => {
     let isMounted = true
-    setIsLoading(true)
+    setIsPolicyLoading(true)
     setLoadError("")
 
-    Promise.all([
-      fetchUserReservationById(reservationId),
-      fetchCancellationPolicy(),
-      fetchReservationChangePolicy(),
-    ])
-      .then(([reservationData, cancellationPolicyData, reservationChangePolicyData]) => {
+    void fetchReservationPolicies()
+      .then(({ cancellation, change }) => {
         if (!isMounted) return
-        setReservation(reservationData)
-        setCancellationPolicy(cancellationPolicyData)
-        setReservationChangePolicy(reservationChangePolicyData)
+        setCancellationPolicy(cancellation)
+        setReservationChangePolicy(change)
       })
       .catch(() => {
         if (!isMounted) return
@@ -62,13 +64,13 @@ export function UserReservationDetailPage() {
       })
       .finally(() => {
         if (!isMounted) return
-        setIsLoading(false)
+        setIsPolicyLoading(false)
       })
 
     return () => {
       isMounted = false
     }
-  }, [reservationId])
+  }, [])
 
   const cancellationEvaluation = useMemo(() => {
     if (!reservation || !cancellationPolicy) return { canCancel: false, reason: "" }
@@ -82,7 +84,7 @@ export function UserReservationDetailPage() {
     return { canUpdate: result.canUpdate, reason: result.reason ?? "" }
   }, [reservation, reservationChangePolicy])
 
-  if (isLoading) {
+  if (isReservationLoading || isPolicyLoading) {
     return (
       <section className="py-16 text-center">
         <p className="text-sm text-muted-foreground">予約情報を読み込み中です...</p>
@@ -114,12 +116,7 @@ export function UserReservationDetailPage() {
 
   const isCancelled = reservation.status === "cancelled"
   const isUpcoming = reservation.status === "upcoming"
-  const shopName = resolveShopName(shopId)
-  const editPath = buildPathWithShopId(ROUTES.userReservationSchedule, shopId, {
-    mode: reservation.mode,
-    reservationId: reservation.id,
-    trainerId: reservation.mode === "nomination" ? (reservation.trainerId ?? "") : "",
-  })
+  const editPath = buildPathWithShopId(ROUTES.userReservationChangeMode, shopId)
 
   function showPolicyAlert(message: string) {
     setPolicyAlertMessage(message)
@@ -128,11 +125,7 @@ export function UserReservationDetailPage() {
 
   return (
     <section className="space-y-5">
-      <div className="rounded-2xl bg-white shadow-lg">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 text-white">
-          <h2 className="font-bold">予約詳細</h2>
-          <p className="mt-0.5 text-xs text-slate-300">予約の詳細情報を確認できます。</p>
-        </div>
+      <UserSectionCard title="予約詳細" subtitle="予約の詳細情報を確認できます。">
 
         {isCancelled ? (
           <div className="mx-5 mt-5 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
@@ -156,7 +149,7 @@ export function UserReservationDetailPage() {
               <div>
                 <p className="text-[11px] text-muted-foreground">日付</p>
                 <p className="text-sm font-semibold text-foreground">
-                  {formatDateLabel(reservation.date)}
+                  {formatDateLongWithWeekday(reservation.date)}
                 </p>
               </div>
             </div>
@@ -193,6 +186,59 @@ export function UserReservationDetailPage() {
             </div>
           ) : null}
 
+          {reservation.paymentMethod ||
+          reservation.paymentStatus ||
+          reservation.paymentAmountYen != null ||
+          reservation.paymentRecordStatus ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                <CreditCard className="size-4" />
+                決済情報
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-[11px] text-muted-foreground">決済方法</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {formatReservationPaymentMethod(reservation.paymentMethod)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">予約の決済状況</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {formatPaymentStatusLabel(reservation.paymentStatus)}
+                  </p>
+                </div>
+                {reservation.paymentAmountYen != null ? (
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">決済金額</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      ¥{reservation.paymentAmountYen.toLocaleString()}
+                      {reservation.paymentCurrency && reservation.paymentCurrency !== "jpy"
+                        ? ` (${reservation.paymentCurrency})`
+                        : ""}
+                    </p>
+                  </div>
+                ) : null}
+                {reservation.paymentRecordStatus ? (
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">決済レコード状態</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {formatPaymentStatusLabel(reservation.paymentRecordStatus)}
+                    </p>
+                  </div>
+                ) : null}
+                {reservation.paymentPaidAt ? (
+                  <div className="sm:col-span-2">
+                    <p className="text-[11px] text-muted-foreground">支払完了日時</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {new Date(reservation.paymentPaidAt).toLocaleString("ja-JP")}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div>
               <p className="text-[11px] text-muted-foreground">ステータス</p>
@@ -217,10 +263,14 @@ export function UserReservationDetailPage() {
                 className="w-full rounded-xl"
                 onClick={() => {
                   if (!updateEvaluation.canUpdate) {
-                    showPolicyAlert("24時間前を過ぎているため予約変更できません。")
+                    showPolicyAlert(
+                      updateEvaluation.reason ?? "予約変更ポリシーにより予約変更できません。",
+                    )
                     return
                   }
-                  navigate(editPath)
+                  navigate(editPath, {
+                    state: { reservationId: reservation.id, isUpdatingExistingReservation: true },
+                  })
                 }}
               >
                 予約を変更する
@@ -232,7 +282,9 @@ export function UserReservationDetailPage() {
                 className="w-full rounded-xl"
                 onClick={() => {
                   if (!cancellationEvaluation.canCancel) {
-                    showPolicyAlert("24時間前を過ぎているためキャンセルできません。")
+                    showPolicyAlert(
+                      cancellationEvaluation.reason ?? "キャンセルポリシーによりキャンセルできません。",
+                    )
                     return
                   }
                   setShowCancelDialog(true)
@@ -243,83 +295,48 @@ export function UserReservationDetailPage() {
             </div>
           </div>
         ) : null}
-      </div>
+      </UserSectionCard>
 
-      {showCancelDialog ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setShowCancelDialog(false)}
-            onKeyDown={() => {}}
-            role="presentation"
-          />
-          <div className="relative mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <div className="mb-1 flex size-10 items-center justify-center rounded-full bg-red-100">
-              <AlertTriangle className="size-5 text-red-600" />
-            </div>
-            <h3 className="mt-3 text-base font-bold text-foreground">予約をキャンセルしますか？</h3>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              この操作は取り消せません。本当にキャンセルしてもよろしいですか？
-            </p>
-            {cancelError ? <p className="mt-3 text-xs text-destructive">{cancelError}</p> : null}
-            <div className="mt-5 flex gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1 rounded-xl"
-                disabled={isCancelling}
-                onClick={() => setShowCancelDialog(false)}
-              >
-                戻る
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                className="flex-1 rounded-xl"
-                disabled={isCancelling || !cancellationEvaluation.canCancel}
-                onClick={async () => {
-                  setCancelError("")
-                  setIsCancelling(true)
-                  const result = await cancelUserReservation(reservation.id)
-                  if (!result.ok) {
-                    setCancelError(result.error)
-                    setIsCancelling(false)
-                    return
-                  }
-                  setReservation(result.reservation)
-                  setShowCancelDialog(false)
-                  setIsCancelling(false)
-                }}
-              >
-                {isCancelling ? "処理中..." : "キャンセルする"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <UserConfirmDialog
+        open={showCancelDialog}
+        title="予約をキャンセルしますか？"
+        description={
+          <>
+            この操作は取り消せません。
+            <br />
+            本当にキャンセルしてもよろしいですか？
+          </>
+        }
+        onCancel={() => setShowCancelDialog(false)}
+        onConfirm={async () => {
+          setCancelError("")
+          setIsCancelling(true)
+          const result = await cancelUserReservation(reservation.id)
+          if (!result.ok) {
+            setCancelError(result.error)
+            setIsCancelling(false)
+            return
+          }
+          navigate(buildPathWithShopId(ROUTES.userMypage, shopId), { replace: true })
+        }}
+        confirmLabel="キャンセルする"
+        isConfirming={isCancelling}
+        confirmDisabled={isCancelling || !cancellationEvaluation.canCancel}
+        cancelDisabled={isCancelling}
+        errorMessage={cancelError}
+        variant="destructive"
+      />
 
-      {showPolicyAlertDialog ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setShowPolicyAlertDialog(false)}
-            onKeyDown={() => {}}
-            role="presentation"
-          />
-          <div className="relative mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <p className="text-sm text-foreground">{policyAlertMessage}</p>
-            <div className="mt-5">
-              <Button
-                type="button"
-                className="w-full rounded-xl"
-                onClick={() => setShowPolicyAlertDialog(false)}
-              >
-                閉じる
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <UserConfirmDialog
+        open={showPolicyAlertDialog}
+        title="ご案内"
+        description={policyAlertMessage}
+        onCancel={() => setShowPolicyAlertDialog(false)}
+        onConfirm={() => setShowPolicyAlertDialog(false)}
+        confirmLabel="閉じる"
+        showCancelButton={false}
+        variant="default"
+      />
 
       <div className="rounded-2xl bg-white shadow-lg">
         <div className="border-b border-slate-100 px-6 py-4">

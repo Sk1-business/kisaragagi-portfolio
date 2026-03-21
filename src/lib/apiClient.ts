@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ""
+import { API_BASE } from "@/lib/apiBase"
+import { notifyUnauthorizedCustomerApi } from "@/lib/customerSession"
 
 interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
@@ -50,6 +51,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   })
 
   if (!response.ok) {
+    if (response.status === 401) {
+      notifyUnauthorizedCustomerApi(path)
+    }
     const message = await parseErrorMessage(response)
     throw new ApiClientError(message, response.status)
   }

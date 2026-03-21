@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react"
 import { CheckCircle2, CreditCard } from "lucide-react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,49 +11,9 @@ import {
   updatePaymentCard,
   type PaymentCard,
 } from "@/features/user/api/userPaymentApi"
+import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
-
-const MAJOR_BRANDS = ["Visa", "Mastercard", "JCB", "American Express", "Diners Club"] as const
-
-function formatCardNumber(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 19)
-  return digits.replace(/(\d{4})(?=\d)/g, "$1 ")
-}
-
-function formatExpiry(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 4)
-  if (digits.length <= 2) return digits
-  return `${digits.slice(0, 2)}/${digits.slice(2)}`
-}
-
-function validateExpiry(value: string) {
-  if (!/^\d{2}\/\d{2}$/.test(value)) {
-    return "有効期限は MM/YY 形式で入力してください。"
-  }
-
-  const month = Number(value.slice(0, 2))
-  const year2digits = Number(value.slice(3, 5))
-  if (month < 1 || month > 12) {
-    return "月は 01 から 12 の範囲で入力してください。"
-  }
-
-  const now = new Date()
-  const currentYear2digits = now.getFullYear() % 100
-  const currentMonth = now.getMonth() + 1
-
-  if (year2digits < currentYear2digits) {
-    return "有効期限が過去になっています。"
-  }
-  if (year2digits === currentYear2digits && month < currentMonth) {
-    return "有効期限が過去になっています。"
-  }
-
-  if (year2digits > currentYear2digits + 20) {
-    return "年は有効な範囲で入力してください。"
-  }
-
-  return ""
-}
+import { formatCardNumber, formatExpiry, MAJOR_BRANDS, validateExpiry } from "@/lib/paymentCard"
 
 function splitHolderName(holderName: string) {
   const trimmed = holderName.trim()
@@ -69,8 +29,9 @@ function splitHolderName(holderName: string) {
 
 export function UserPaymentDetailPage() {
   const shopId = useShopId()
-  const [searchParams] = useSearchParams()
-  const cardId = searchParams.get("cardId") ?? ""
+  const location = useLocation()
+  const cardIdFromState = (location.state as { cardId?: string } | null)?.cardId ?? ""
+  const cardId = cardIdFromState
   const [card, setCard] = useState<PaymentCard | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [saveMessage, setSaveMessage] = useState("")
@@ -81,7 +42,9 @@ export function UserPaymentDetailPage() {
   const [cardNumber, setCardNumber] = useState("")
   const [expiry, setExpiry] = useState("")
   const [cvc, setCvc] = useState("")
+  const [cardNumberError, setCardNumberError] = useState("")
   const [expiryError, setExpiryError] = useState("")
+  const [cvcError, setCvcError] = useState("")
 
   useEffect(() => {
     let isMounted = true
@@ -110,10 +73,19 @@ export function UserPaymentDetailPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!card) return
+    const cardDigits = cardNumber.replace(/\s/g, "")
+    if (cardDigits.length !== 16) {
+      setCardNumberError("カード番号は16桁で入力してください。")
+      return
+    }
     const holderName = `${firstName.trim()} ${lastName.trim()}`.trim()
     const nextExpiryError = validateExpiry(expiry)
     if (nextExpiryError) {
       setExpiryError(nextExpiryError)
+      return
+    }
+    if (cvc.length < 3 || cvc.length > 4) {
+      setCvcError("セキュリティコードは3〜4桁で入力してください。")
       return
     }
 
@@ -132,7 +104,9 @@ export function UserPaymentDetailPage() {
     }
     setCard(result.card)
     setErrorMessage("")
+    setCardNumberError("")
     setExpiryError("")
+    setCvcError("")
     setSaveMessage("カード情報を更新しました")
     setTimeout(() => setSaveMessage(""), 2000)
   }
@@ -158,11 +132,7 @@ export function UserPaymentDetailPage() {
 
   return (
     <section className="space-y-5">
-      <div className="rounded-2xl bg-white shadow-lg">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 text-white">
-          <h2 className="font-bold">カード詳細・編集</h2>
-          <p className="mt-0.5 text-xs text-slate-300">登録済みカードの情報を確認・更新できます。</p>
-        </div>
+      <UserSectionCard title="カード詳細・編集" subtitle="登録済みカードの情報を確認・更新できます。">
 
         <form onSubmit={handleSubmit} className="space-y-4 p-5">
           {saveMessage ? (
@@ -235,13 +205,17 @@ export function UserPaymentDetailPage() {
                 id="cardNumber"
                 name="cardNumber"
                 value={cardNumber}
-                onChange={(event) => setCardNumber(formatCardNumber(event.target.value))}
+                onChange={(event) => {
+                  setCardNumber(formatCardNumber(event.target.value))
+                  setCardNumberError("")
+                }}
                 inputMode="numeric"
                 autoComplete="cc-number"
                 placeholder="0000 0000 0000 0000"
                 required
                 className="rounded-lg"
               />
+              {cardNumberError ? <p className="text-xs text-destructive">{cardNumberError}</p> : null}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="expiry">有効期限</Label>
@@ -272,13 +246,17 @@ export function UserPaymentDetailPage() {
                 id="cvc"
                 name="cvc"
                 value={cvc}
-                onChange={(event) => setCvc(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                onChange={(event) => {
+                  setCvc(event.target.value.replace(/\D/g, "").slice(0, 4))
+                  setCvcError("")
+                }}
                 inputMode="numeric"
                 autoComplete="cc-csc"
                 placeholder="123"
                 required
                 className="rounded-lg"
               />
+              {cvcError ? <p className="text-xs text-destructive">{cvcError}</p> : null}
             </div>
           </div>
 
@@ -286,7 +264,7 @@ export function UserPaymentDetailPage() {
             更新する
           </Button>
         </form>
-      </div>
+      </UserSectionCard>
 
       <Button asChild variant="outline" size="lg" className="w-full rounded-xl">
         <Link to={buildPathWithShopId(ROUTES.userMypagePayment, shopId)}>決済情報管理へ戻る</Link>

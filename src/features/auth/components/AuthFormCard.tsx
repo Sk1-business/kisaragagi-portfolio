@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { ArrowRight, CheckCircle2, Dumbbell, Eye, EyeOff } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,9 +8,17 @@ import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import { getLineLoginUrl } from "@/features/auth/api/customerAuthApi"
 import mockUsers from "@/features/auth/api/mockUsers.json"
-import { AUTH_AUDIENCE_TEXT, AUTH_TEXT } from "@/features/auth/constants"
+import { AUTH_AUDIENCE_ALLOWED_ROLES, AUTH_AUDIENCE_TEXT, AUTH_TEXT } from "@/features/auth/constants"
 import { useAuthNavigation, type RegisteredInfo } from "@/features/auth/hooks/useAuthNavigation"
 import type { AuthFormCardProps, MockUser } from "@/features/auth/types/auth"
+import { API_BASE } from "@/lib/apiBase"
+import { persistShopSlug, resolveShopSlug } from "@/lib/shopSlug"
+import {
+  isCompletePhoneSegments,
+  joinPhoneSegments,
+  updatePhoneSegment,
+  type PhoneSegments,
+} from "@/lib/phone"
 import type { AuthAudience, UserRole } from "@/types"
 
 const SWITCH_PATH: Record<AuthAudience, { login: string; signup: string }> = {
@@ -29,28 +37,43 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "STAFF", label: "スタッフ (STAFF)" },
 ]
 
-const VISIBLE_ROLES: Record<AuthAudience, UserRole[]> = {
-  CUSTOMER_PORTAL: ["CUSTOMER"],
-  BACKOFFICE_PORTAL: ["ADMIN", "STAFF"],
-}
-
 export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
+  const [searchParams] = useSearchParams()
   const text = AUTH_TEXT[mode]
   const audienceText = AUTH_AUDIENCE_TEXT[audience]
   const { submit } = useAuthNavigation(audience, mode)
   const isCustomerPortal = audience === "CUSTOMER_PORTAL"
+  const [shopSlugInput, setShopSlugInput] = useState(
+    () => resolveShopSlug(searchParams.get("shopId") ?? undefined) ?? "",
+  )
   const [loginError, setLoginError] = useState("")
   const [registeredInfo, setRegisteredInfo] = useState<RegisteredInfo | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [phoneSegments, setPhoneSegments] = useState<PhoneSegments>(["", "", ""])
+  const isDev = import.meta.env.DEV
   const developmentUsers = (mockUsers as MockUser[]).filter((user) =>
-    VISIBLE_ROLES[audience].includes(user.role),
+    AUTH_AUDIENCE_ALLOWED_ROLES[audience].includes(user.role),
   )
+
+  const sessionReason = searchParams.get("reason")
+  const customerSessionNotice =
+    isCustomerPortal && mode === "login" && sessionReason === "idle_timeout"
+      ? "一定時間操作がなかったためログアウトしました。再度ログインしてください。"
+      : isCustomerPortal && mode === "login" && sessionReason === "session_expired"
+        ? "セッションの有効期限が切れたか、再ログインが必要です。"
+        : isCustomerPortal && mode === "login" && sessionReason === "require_login"
+          ? "ログインしてください。"
+          : null
+
+  function withShopId(path: string) {
+    return path
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const formData = new FormData(event.currentTarget)
-    const email = String(formData.get("email") ?? "")
+    const email = String(formData.get("email") ?? "").trim().toLowerCase()
     const password = String(formData.get("password") ?? "")
     const signupRole = isCustomerPortal
       ? "CUSTOMER"
@@ -58,10 +81,30 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
 
     const lastName = String(formData.get("lastName") ?? "")
     const firstName = String(formData.get("firstName") ?? "")
-    const phone = String(formData.get("phone") ?? "")
+    const phone = joinPhoneSegments(phoneSegments)
     const name = lastName && firstName ? `${lastName} ${firstName}` : undefined
+    const shopSlug = shopSlugInput.trim() || undefined
 
-    const result = await submit({ email, password, signupRole, name, phone: phone || undefined })
+    if (mode === "signup" && isCustomerPortal && !isCompletePhoneSegments(phoneSegments)) {
+      setLoginError("電話番号は数字のみで3-4-4桁を入力してください。")
+      return
+    }
+    if (isCustomerPortal && !shopSlug) {
+      setLoginError("店舗情報を入力してください。")
+      return
+    }
+    if (shopSlug) {
+      persistShopSlug(shopSlug)
+    }
+
+    const result = await submit({
+      email,
+      password,
+      signupRole,
+      name,
+      phone: phone || undefined,
+      shopSlug,
+    })
 
     if (result.ok) {
       setLoginError("")
@@ -83,7 +126,10 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   }
 
   return (
-    <main className="flex min-h-dvh" style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>
+    <main
+      className="flex min-h-dvh bg-white"
+      style={{ fontFamily: "'SF Pro Text', 'SF Pro Display', 'Noto Sans JP', sans-serif" }}
+    >
       {/* --- Left branding panel --- */}
       <div className="relative hidden w-[45%] overflow-hidden bg-black lg:flex lg:flex-col lg:justify-between">
         <div
@@ -99,7 +145,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
             <div className="flex size-10 items-center justify-center rounded-lg border border-white/20">
               <Dumbbell className="size-5 text-white" />
             </div>
-            <span className="text-sm font-medium tracking-widest text-white/60">RESERVATION</span>
+            <span className="text-sm font-medium tracking-widest text-white/60">予約ポータル</span>
           </div>
         </div>
 
@@ -109,12 +155,10 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
           </p>
           <h1
             className="mt-4 text-5xl font-bold leading-[1.1] tracking-tight text-white"
-            style={{ fontFamily: "'Playfair Display', serif" }}
           >
-            Effortless
+            快適な予約体験を
             <br />
-            <span className="text-white/50">is</span>{" "}
-            <span className="italic">Stylish</span>
+            <span className="text-white/50">あなたに</span>
           </h1>
           <div className="mt-8 h-px w-16 bg-white/20" />
           <p className="mt-6 max-w-xs text-sm leading-relaxed text-white/40">
@@ -130,10 +174,10 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
       <div className="flex flex-1 flex-col">
         {/* Mobile header */}
         <div className="flex items-center gap-3 border-b border-neutral-100 px-6 py-4 lg:hidden">
-          <div className="flex size-8 items-center justify-center rounded-md bg-black">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-black">
             <Dumbbell className="size-4 text-white" />
           </div>
-          <span className="text-xs font-medium tracking-widest text-neutral-400">RESERVATION</span>
+          <span className="text-xs font-medium tracking-widest text-neutral-400">予約ポータル</span>
         </div>
 
         <div className="flex flex-1 items-center justify-center px-6 py-10 sm:px-10">
@@ -148,16 +192,25 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               <p className="mt-1 text-sm text-neutral-500">{text.description}</p>
             </div>
 
+            {customerSessionNotice ? (
+              <div
+                role="status"
+                className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950"
+              >
+                {customerSessionNotice}
+              </div>
+            ) : null}
+
             {isCustomerPortal ? (
               <>
-                <LineLoginButton onError={setLoginError} />
+                <LineLoginButton shopSlug={shopSlugInput.trim() || undefined} onError={setLoginError} />
                 <div className="relative my-6">
                   <div className="absolute inset-0 flex items-center">
                     <span className="w-full border-t border-neutral-200" />
                   </div>
                   <div className="relative flex justify-center">
                     <span className="bg-white px-3 text-[11px] font-medium uppercase tracking-widest text-neutral-400">
-                      or
+                      または
                     </span>
                   </div>
                 </div>
@@ -165,6 +218,23 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
             ) : null}
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {isCustomerPortal ? (
+                <FieldGroup label="店舗情報">
+                  <Input
+                    id="shopSlug"
+                    name="shopSlug"
+                    autoComplete="off"
+                    placeholder="店舗情報を入力"
+                    value={shopSlugInput}
+                    onChange={(event) => {
+                      setShopSlugInput(event.target.value)
+                      setLoginError("")
+                    }}
+                    required
+                    className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                  />
+                </FieldGroup>
+              ) : null}
               <FieldGroup label="メールアドレス">
                 <Input
                   id="email"
@@ -200,14 +270,49 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                     </FieldGroup>
                   </div>
                   <FieldGroup label="電話番号">
-                    <Input
-                      id="phone"
-                      name="phone"
-                      type="tel"
-                      placeholder="090-0000-0000"
-                      required
-                      className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
-                    />
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="phone1"
+                        type="tel"
+                        inputMode="numeric"
+                        value={phoneSegments[0]}
+                        onChange={(event) => {
+                          setPhoneSegments((prev) => updatePhoneSegment(prev, 0, event.target.value))
+                          setLoginError("")
+                        }}
+                        placeholder="090"
+                        required
+                        className="h-11 min-w-0 flex-1 rounded-lg border-neutral-200 bg-neutral-50 text-center text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      />
+                      <span className="text-neutral-400">-</span>
+                      <Input
+                        id="phone2"
+                        type="tel"
+                        inputMode="numeric"
+                        value={phoneSegments[1]}
+                        onChange={(event) => {
+                          setPhoneSegments((prev) => updatePhoneSegment(prev, 1, event.target.value))
+                          setLoginError("")
+                        }}
+                        placeholder="1234"
+                        required
+                        className="h-11 min-w-0 flex-1 rounded-lg border-neutral-200 bg-neutral-50 text-center text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      />
+                      <span className="text-neutral-400">-</span>
+                      <Input
+                        id="phone3"
+                        type="tel"
+                        inputMode="numeric"
+                        value={phoneSegments[2]}
+                        onChange={(event) => {
+                          setPhoneSegments((prev) => updatePhoneSegment(prev, 2, event.target.value))
+                          setLoginError("")
+                        }}
+                        placeholder="5678"
+                        required
+                        className="h-11 min-w-0 flex-1 rounded-lg border-neutral-200 bg-neutral-50 text-center text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      />
+                    </div>
                   </FieldGroup>
                 </>
               ) : null}
@@ -271,7 +376,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               <div className="text-sm text-neutral-500">
                 <span>{text.switchLabel}</span>
                 <Link
-                  to={SWITCH_PATH[audience][mode]}
+                  to={withShopId(SWITCH_PATH[audience][mode])}
                   className="ml-1 font-semibold text-black underline decoration-neutral-300 underline-offset-4 transition-colors hover:decoration-black"
                 >
                   {text.switchLinkText}
@@ -280,28 +385,30 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
             </div>
 
             <Link
-              to={ROUTES.landing}
+              to={withShopId(ROUTES.landing)}
               className="mt-3 inline-block text-xs text-neutral-400 underline decoration-neutral-200 underline-offset-4 transition-colors hover:text-neutral-600 hover:decoration-neutral-400"
             >
               トップへ戻る
             </Link>
 
-            {mode === "signup" && isCustomerPortal ? <HealthCheck /> : null}
+            {isDev && mode === "signup" && isCustomerPortal ? <HealthCheck /> : null}
 
-            <details className="mt-8 rounded-lg border border-dashed border-neutral-200 text-xs">
-              <summary className="cursor-pointer px-4 py-2.5 font-medium text-neutral-500 transition-colors hover:text-neutral-700">
-                開発用テストアカウント
-              </summary>
-              <div className="space-y-2 border-t border-dashed border-neutral-200 px-4 py-3">
-                {developmentUsers.map((user) => (
-                  <div key={user.id} className="font-mono text-neutral-400">
-                    <p>{`role: ${user.role}`}</p>
-                    <p>{`email: ${user.email}`}</p>
-                    <p>{`pass:  ${user.password_hash}`}</p>
-                  </div>
-                ))}
-              </div>
-            </details>
+            {isDev ? (
+              <details className="mt-8 rounded-lg border border-dashed border-neutral-200 text-xs">
+                <summary className="cursor-pointer px-4 py-2.5 font-medium text-neutral-500 transition-colors hover:text-neutral-700">
+                  開発用テストアカウント
+                </summary>
+                <div className="space-y-2 border-t border-dashed border-neutral-200 px-4 py-3">
+                  {developmentUsers.map((user) => (
+                    <div key={user.id} className="font-mono text-neutral-400">
+                      <p>{`role: ${user.role}`}</p>
+                      <p>{`email: ${user.email}`}</p>
+                      <p>{`pass:  ${user.password_hash}`}</p>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
           </div>
         </div>
       </div>
@@ -321,10 +428,11 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
 }
 
 function RegistrationSuccess({ info }: { info: RegisteredInfo }) {
+  const loginPath = ROUTES.customerLogin
   return (
     <main
       className="flex min-h-dvh items-center justify-center bg-neutral-50 px-4 py-10"
-      style={{ fontFamily: "'Noto Sans JP', sans-serif" }}
+      style={{ fontFamily: "'SF Pro Text', 'SF Pro Display', 'Noto Sans JP', sans-serif" }}
     >
       <div className="w-full max-w-md">
         <div className="rounded-2xl border border-neutral-200 bg-white p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
@@ -356,7 +464,7 @@ function RegistrationSuccess({ info }: { info: RegisteredInfo }) {
               variant="outline"
               className="h-11 w-full rounded-lg border-neutral-200 text-sm font-semibold transition-colors hover:border-neutral-400"
             >
-              <Link to={ROUTES.landing}>トップへ戻る</Link>
+              <Link to={loginPath}>ログイン画面へ</Link>
             </Button>
           </div>
         </div>
@@ -373,8 +481,6 @@ function InfoField({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ""
 
 function HealthCheck() {
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading")
@@ -418,12 +524,12 @@ function HealthCheck() {
   )
 }
 
-function LineLoginButton({ onError }: { onError: (msg: string) => void }) {
+function LineLoginButton({ shopSlug, onError }: { shopSlug?: string; onError: (msg: string) => void }) {
   const [loading, setLoading] = useState(false)
 
   async function handleClick() {
     setLoading(true)
-    const result = await getLineLoginUrl()
+    const result = await getLineLoginUrl(shopSlug)
     if (result.ok) {
       window.location.href = result.url
     } else {

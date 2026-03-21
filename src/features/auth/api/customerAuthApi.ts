@@ -1,15 +1,18 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ""
+import { API_BASE } from "@/lib/apiBase"
+import { clearCustomerPortalClientCaches } from "@/lib/customerSession"
+import { buildSalonApiPath, persistShopSlug, resolveShopSlug } from "@/lib/shopSlug"
 
 interface RegisterPayload {
   email: string
   password: string
   name: string
   phone?: string
+  shopSlug?: string
 }
 
 interface RegisterResponse {
   message: string
-  customer_id: string
+  user_id: string
   name: string
 }
 
@@ -69,11 +72,12 @@ function parseErrorDetail(body: unknown): string {
 interface LoginPayload {
   email: string
   password: string
+  shopSlug?: string
 }
 
 interface LoginResponse {
   message: string
-  customer_id: string
+  user_id: string
   name: string
 }
 
@@ -81,12 +85,16 @@ export async function loginCustomer(payload: LoginPayload): Promise<
   | { ok: true; data: LoginResponse }
   | { ok: false; error: string }
 > {
+  const shopSlug = resolveShopSlug(payload.shopSlug)
+  if (!shopSlug) {
+    return { ok: false, error: "店舗情報が見つかりません。店舗ページからアクセスしてください。" }
+  }
   try {
-    const res = await fetch(`${API_BASE}/api/auth/login`, {
+    const res = await fetch(`${API_BASE}${buildSalonApiPath(shopSlug, "/auth/login")}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ email: payload.email, password: payload.password }),
     })
 
     if (res.ok) {
@@ -106,11 +114,21 @@ export async function registerCustomer(payload: RegisterPayload): Promise<
   | { ok: true; data: RegisterResponse }
   | { ok: false; error: string }
 > {
+  const shopSlug = resolveShopSlug(payload.shopSlug)
+  if (!shopSlug) {
+    return { ok: false, error: "店舗情報が見つかりません。店舗ページからアクセスしてください。" }
+  }
   try {
-    const res = await fetch(`${API_BASE}/api/auth/register`, {
+    const res = await fetch(`${API_BASE}${buildSalonApiPath(shopSlug, "/auth/register")}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      credentials: "include",
+      body: JSON.stringify({
+        email: payload.email,
+        password: payload.password,
+        name: payload.name,
+        phone: payload.phone,
+      }),
     })
 
     if (res.ok) {
@@ -126,6 +144,19 @@ export async function registerCustomer(payload: RegisterPayload): Promise<
   }
 }
 
+/** Cookie ベースのセッションが有効か（apiRequest は使わず 401 時のグローバル処理と干渉しない） */
+export async function checkCustomerSessionAlive(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/me`, {
+      method: "GET",
+      credentials: "include",
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 export async function logoutCustomer(): Promise<void> {
   try {
     await fetch(`${API_BASE}/api/auth/logout`, {
@@ -133,16 +164,25 @@ export async function logoutCustomer(): Promise<void> {
       credentials: "include",
     })
   } catch {
-    // ログアウト失敗でもトップへ遷移させる
+    // ログアウト失敗でもクライアント側は掃除する
+  } finally {
+    clearCustomerPortalClientCaches()
   }
 }
 
-export async function getLineLoginUrl(): Promise<
+export async function getLineLoginUrl(inputShopSlug?: string): Promise<
   | { ok: true; url: string }
   | { ok: false; error: string }
 > {
+  const shopSlug = resolveShopSlug(inputShopSlug)
+  if (!shopSlug) {
+    return { ok: false, error: "店舗情報が見つかりません。店舗ページからアクセスしてください。" }
+  }
   try {
-    const res = await fetch(`${API_BASE}/api/auth/line/url`)
+    persistShopSlug(shopSlug)
+    const res = await fetch(`${API_BASE}${buildSalonApiPath(shopSlug, "/auth/line/url")}`, {
+      credentials: "include",
+    })
     if (res.ok) {
       const data = (await res.json()) as { url: string }
       return { ok: true, url: data.url }
@@ -153,20 +193,24 @@ export async function getLineLoginUrl(): Promise<
   }
 }
 
-export async function lineCallback(code: string): Promise<
-  | { ok: true; data: { message: string; customer_id: string; name: string } }
+export async function lineCallback(code: string, state?: string): Promise<
+  | { ok: true; data: { message: string; user_id: string; name: string } }
   | { ok: false; error: string }
 > {
+  const shopSlug = resolveShopSlug()
+  if (!shopSlug) {
+    return { ok: false, error: "店舗情報が見つかりません。再度ログインしてください。" }
+  }
   try {
-    const res = await fetch(`${API_BASE}/api/auth/line/callback`, {
+    const res = await fetch(`${API_BASE}${buildSalonApiPath(shopSlug, "/auth/line/callback")}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, state }),
     })
 
     if (res.ok) {
-      const data = (await res.json()) as { message: string; customer_id: string; name: string }
+      const data = (await res.json()) as { message: string; user_id: string; name: string }
       return { ok: true, data }
     }
 

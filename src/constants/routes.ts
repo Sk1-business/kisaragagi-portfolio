@@ -7,6 +7,7 @@ export const ROUTES = {
   backofficeSignup: "/backoffice/signup",
   userHome: "/user",
   userReservationNomination: "/user/reservation/nomination",
+  userReservationChangeMode: "/user/reservation/change-mode",
   userReservationSchedule: "/user/reservation/schedule",
   userReservationInput: "/user/reservation/input",
   userReservationConfirm: "/user/reservation/confirm",

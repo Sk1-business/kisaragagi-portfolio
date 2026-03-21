@@ -14,6 +14,7 @@ export function LineCallbackPage() {
 
   useEffect(() => {
     const code = searchParams.get("code")
+    const state = searchParams.get("state") ?? undefined
 
     if (!code) {
       setError("LINE認証コードが見つかりませんでした。")
@@ -21,7 +22,7 @@ export function LineCallbackPage() {
       return
     }
 
-    lineCallback(code).then((result) => {
+    lineCallback(code, state).then((result) => {
       if (result.ok) {
         navigate(ROUTES.userMypage, { replace: true })
       } else {
@@ -43,7 +44,7 @@ export function LineCallbackPage() {
           ) : (
             <>
               <p className="text-sm font-medium text-destructive">{error}</p>
-              <Button asChild variant="outline" size="sm" className="mt-4 rounded-md">
+              <Button asChild variant="outline" size="sm" className="mt-4 rounded-lg">
                 <Link to={ROUTES.customerLogin}>ログイン画面へ戻る</Link>
               </Button>
             </>

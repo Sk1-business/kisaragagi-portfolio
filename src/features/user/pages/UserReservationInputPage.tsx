@@ -5,37 +5,43 @@ import {
   CreditCard,
   MessageSquare,
   Phone,
-  Star,
   UserRound,
 } from "lucide-react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
-import mockTrainers from "@/features/user/api/mockTrainers.json"
 import { fetchPaymentCards, type PaymentCard } from "@/features/user/api/userPaymentApi"
+import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { fetchUserProfile } from "@/features/user/api/userProfileApi"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
-
-interface Trainer {
-  id: string
-  name: string
-  specialty: string
-  rating: number
-}
+import { usePersistentReservationId } from "@/features/user/hooks/usePersistentReservationId"
+import { useUserTrainers } from "@/features/user/hooks/useUserTrainers"
+import { formatDateLongWithWeekday } from "@/lib/dateFormat"
+import { formatCardNumber, formatExpiry, maskCardNumber, validateExpiry } from "@/lib/paymentCard"
+import {
+  isCompletePhoneSegments,
+  joinPhoneSegments,
+  parsePhoneToSegments,
+  updatePhoneSegment,
+  type PhoneSegments,
+} from "@/lib/phone"
 
 export interface ReservationInputData {
   reservationId?: string
+  /** true のときのみ既存予約の変更（sessionStorage の古い ID では新規扱いにしない） */
+  isUpdatingExistingReservation?: boolean
   mode: string
   date: string
   time: string
   trainerId: string
   trainerName: string
   trainerRating: number
+  menuId?: string
+  menuName: string
   fullName: string
-  kana: string
   email: string
   phone: string
   note: string
@@ -45,19 +51,6 @@ export interface ReservationInputData {
   cardCvc: string
 }
 
-const trainers = mockTrainers as Trainer[]
-const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"]
-
-function formatDateLabel(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
-  return `${parsed.getFullYear()}年${parsed.getMonth() + 1}月${parsed.getDate()}日 (${WEEKDAY_LABELS[parsed.getDay()]})`
-}
-
-function maskCardNumber(cardNumber: string) {
-  const digits = cardNumber.replace(/\s/g, "")
-  if (digits.length < 4) return "••••"
-  return `•••• •••• •••• ${digits.slice(-4)}`
-}
 
 const PAYMENT_METHODS = [
   { id: "credit", label: "クレジットカード", icon: CreditCard },
@@ -67,33 +60,60 @@ const PAYMENT_METHODS = [
 export function UserReservationInputPage() {
   const shopId = useShopId()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const mode = searchParams.get("mode") ?? "omakase"
-  const trainerId = searchParams.get("trainerId") ?? ""
-  const reservationId = searchParams.get("reservationId") ?? ""
-  const date = searchParams.get("date") ?? ""
-  const time = searchParams.get("time") ?? ""
-  const selectedTrainer =
-    mode === "nomination" ? trainers.find((trainer) => trainer.id === trainerId) : undefined
+  const location = useLocation()
+  const state = (location.state as {
+    mode?: string
+    trainerId?: string
+    trainerName?: string
+    reservationId?: string
+    isUpdatingExistingReservation?: boolean
+    date?: string
+    time?: string
+    preferredMenuId?: string
+    preferredMenuName?: string
+  } | null) ?? null
+  const mode = state?.mode ?? "omakase"
+  const trainerId = state?.trainerId ?? ""
+  const trainerName = state?.trainerName ?? ""
+  const isUpdateFlow = state?.isUpdatingExistingReservation === true
+  const stateReservationId = (state?.reservationId ?? "").trim()
+  const persistentReservationId = usePersistentReservationId()
+  const reservationId = isUpdateFlow
+    ? (stateReservationId || persistentReservationId).trim()
+    : ""
+  const date = state?.date ?? ""
+  const time = state?.time ?? ""
+  const preferredMenuId = state?.preferredMenuId ?? ""
+  const preferredMenuName = state?.preferredMenuName ?? ""
 
   const [paymentMethod, setPaymentMethod] = useState<string>("credit")
-  const [fullName, setFullName] = useState("")
-  const [kana, setKana] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [firstName, setFirstName] = useState("")
   const [email, setEmail] = useState("")
-  const [phone, setPhone] = useState("")
+  const [phoneSegments, setPhoneSegments] = useState<PhoneSegments>(["", "", ""])
+  const [phoneError, setPhoneError] = useState("")
   const [paymentCards, setPaymentCards] = useState<PaymentCard[]>([])
   const [selectedCardId, setSelectedCardId] = useState("")
   const [isLoadingCards, setIsLoadingCards] = useState(true)
   const [useCustomCardInput, setUseCustomCardInput] = useState(false)
+  const [customCardNumber, setCustomCardNumber] = useState("")
+  const [customCardExpiry, setCustomCardExpiry] = useState("")
+  const [customCardCvc, setCustomCardCvc] = useState("")
+  const [cardInputError, setCardInputError] = useState("")
+  const [cardExpiryError, setCardExpiryError] = useState("")
+  const { trainers } = useUserTrainers(shopId)
+  const selectedTrainer =
+    mode === "nomination" ? trainers.find((trainer) => trainer.id === trainerId) : undefined
 
   useEffect(() => {
     let isMounted = true
     fetchUserProfile().then((profile) => {
       if (!isMounted) return
-      setFullName(profile.fullName)
-      setKana(profile.kana)
+      const [parsedLastName, ...restName] = profile.fullName.trim().split(/\s+/)
+      setLastName(parsedLastName ?? "")
+      setFirstName(restName.join(" "))
       setEmail(profile.email)
-      setPhone(profile.phone)
+      setPhoneSegments(parsePhoneToSegments(profile.phone))
     })
     return () => {
       isMounted = false
@@ -114,6 +134,12 @@ export function UserReservationInputPage() {
           setUseCustomCardInput(true)
         }
       })
+      .catch(() => {
+        if (!isMounted) return
+        setPaymentCards([])
+        setSelectedCardId("")
+        setUseCustomCardInput(true)
+      })
       .finally(() => {
         if (!isMounted) return
         setIsLoadingCards(false)
@@ -128,17 +154,49 @@ export function UserReservationInputPage() {
     const fd = new FormData(event.currentTarget)
     const selectedCard = paymentCards.find((card) => card.id === selectedCardId)
     const useSavedCard = paymentMethod === "credit" && !useCustomCardInput && !!selectedCard
+    const useManualCard = paymentMethod === "credit" && useCustomCardInput
+
+    if (useManualCard) {
+      const cardDigits = customCardNumber.replace(/\s/g, "")
+      if (cardDigits.length !== 16) {
+        setCardInputError("カード番号は16桁で入力してください。")
+        return
+      }
+      const expiryError = validateExpiry(customCardExpiry)
+      if (expiryError) {
+        setCardExpiryError(expiryError)
+        return
+      }
+      if (customCardCvc.length < 3 || customCardCvc.length > 4) {
+        setCardInputError("セキュリティコードは3〜4桁で入力してください。")
+        return
+      }
+      setCardInputError("")
+      setCardExpiryError("")
+    }
+    if (!isCompletePhoneSegments(phoneSegments)) {
+      setPhoneError("電話番号は数字のみで3-4-4桁を入力してください。")
+      return
+    }
+    setPhoneError("")
+    const fullName = `${lastName} ${firstName}`.trim()
+    const phone = joinPhoneSegments(phoneSegments)
+    const isNomination = mode === "nomination"
+    const selectedMenuName = isNomination ? preferredMenuName || "未定" : "未定"
+    const selectedMenuId = isNomination ? preferredMenuId || undefined : undefined
 
     const inputData: ReservationInputData = {
-      reservationId: reservationId || undefined,
+      ...(isUpdateFlow && reservationId ? { reservationId } : {}),
+      isUpdatingExistingReservation: isUpdateFlow,
       mode,
       date,
       time,
-      trainerId: selectedTrainer?.id ?? "",
-      trainerName: selectedTrainer?.name ?? "",
+      trainerId: trainerId || selectedTrainer?.id || "",
+      trainerName: trainerName || selectedTrainer?.name || "",
       trainerRating: selectedTrainer?.rating ?? 0,
+      menuId: selectedMenuId,
+      menuName: selectedMenuName,
       fullName,
-      kana,
       email,
       phone,
       note: String(fd.get("note") ?? ""),
@@ -147,28 +205,23 @@ export function UserReservationInputPage() {
         paymentMethod === "credit"
           ? useSavedCard
             ? selectedCard.cardNumber
-            : String(fd.get("cardNumber") ?? "")
+            : customCardNumber
           : "",
       cardExpiry:
         paymentMethod === "credit"
           ? useSavedCard
             ? selectedCard.expiry
-            : String(fd.get("cardExpiry") ?? "")
+            : customCardExpiry
           : "",
       cardCvc:
         paymentMethod === "credit"
           ? useSavedCard
             ? selectedCard.cvc
-            : String(fd.get("cardCvc") ?? "")
+            : customCardCvc
           : "",
     }
 
-    const confirmParams = new URLSearchParams()
-    if (shopId) {
-      confirmParams.set("shopId", shopId)
-    }
-
-    navigate(`${ROUTES.userReservationConfirm}?${confirmParams.toString()}`, {
+    navigate(ROUTES.userReservationConfirm, {
       state: inputData,
     })
   }
@@ -183,11 +236,7 @@ export function UserReservationInputPage() {
 
   return (
     <section className="space-y-5">
-      <div className="rounded-2xl bg-white shadow-lg">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 text-white">
-          <h2 className="font-bold">予約情報入力</h2>
-          <p className="mt-0.5 text-xs text-slate-300">予約に必要な情報を入力してください。</p>
-        </div>
+      <UserSectionCard title="予約情報入力" subtitle="予約に必要な情報を入力してください。">
 
         <div className="space-y-1 border-b border-slate-100 px-6 py-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -199,7 +248,7 @@ export function UserReservationInputPage() {
               <div>
                 <p className="text-[11px] text-muted-foreground">日付</p>
                 <p className="text-sm font-semibold text-foreground">
-                  {date ? formatDateLabel(date) : "未選択"}
+                  {date ? formatDateLongWithWeekday(date) : "未選択"}
                 </p>
               </div>
             </div>
@@ -211,19 +260,17 @@ export function UserReservationInputPage() {
               </div>
             </div>
           </div>
-          {selectedTrainer ? (
+          {mode === "nomination" ? (
             <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100">
                 <UserRound className="size-5 text-slate-400" />
               </div>
               <div>
                 <p className="text-[11px] text-muted-foreground">指名トレーナー</p>
-                <p className="text-sm font-semibold text-foreground">{selectedTrainer.name}</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {(selectedTrainer?.name ?? trainerName?.trim()) || "（一覧の読み込み中）"}
+                </p>
               </div>
-              <span className="ml-auto inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
-                <Star className="size-3 fill-current" />
-                {selectedTrainer.rating.toFixed(1)}
-              </span>
             </div>
           ) : (
             <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -234,6 +281,15 @@ export function UserReservationInputPage() {
               </div>
             </div>
           )}
+          <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+            <div>
+              <p className="text-[11px] text-muted-foreground">メニュー</p>
+              <p className="text-sm font-semibold text-foreground">
+                {mode === "nomination" ? preferredMenuName || "未定" : "未定"}
+              </p>
+            </div>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -243,25 +299,25 @@ export function UserReservationInputPage() {
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="fullName">お名前</Label>
+                <Label htmlFor="lastName">姓</Label>
                 <Input
-                  id="fullName"
-                  name="fullName"
-                  placeholder="山田 太郎"
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
+                  id="lastName"
+                  name="lastName"
+                  placeholder="山田"
+                  value={lastName}
+                  onChange={(event) => setLastName(event.target.value)}
                   required
                   className="rounded-lg"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="kana">フリガナ</Label>
+                <Label htmlFor="firstName">名</Label>
                 <Input
-                  id="kana"
-                  name="kana"
-                  placeholder="ヤマダ タロウ"
-                  value={kana}
-                  onChange={(event) => setKana(event.target.value)}
+                  id="firstName"
+                  name="firstName"
+                  placeholder="太郎"
+                  value={firstName}
+                  onChange={(event) => setFirstName(event.target.value)}
                   required
                   className="rounded-lg"
                 />
@@ -280,17 +336,51 @@ export function UserReservationInputPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="phone">電話番号</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  placeholder="090-0000-0000"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  required
-                  className="rounded-lg"
-                />
+                <Label>電話番号</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="phone1"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="090"
+                    value={phoneSegments[0]}
+                    onChange={(event) => {
+                      setPhoneSegments((prev) => updatePhoneSegment(prev, 0, event.target.value))
+                      setPhoneError("")
+                    }}
+                    required
+                    className="min-w-0 flex-1 rounded-lg text-center"
+                  />
+                  <span className="text-muted-foreground">-</span>
+                  <Input
+                    id="phone2"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="1234"
+                    value={phoneSegments[1]}
+                    onChange={(event) => {
+                      setPhoneSegments((prev) => updatePhoneSegment(prev, 1, event.target.value))
+                      setPhoneError("")
+                    }}
+                    required
+                    className="min-w-0 flex-1 rounded-lg text-center"
+                  />
+                  <span className="text-muted-foreground">-</span>
+                  <Input
+                    id="phone3"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="5678"
+                    value={phoneSegments[2]}
+                    onChange={(event) => {
+                      setPhoneSegments((prev) => updatePhoneSegment(prev, 2, event.target.value))
+                      setPhoneError("")
+                    }}
+                    required
+                    className="min-w-0 flex-1 rounded-lg text-center"
+                  />
+                </div>
+                {phoneError ? <p className="text-xs text-destructive">{phoneError}</p> : null}
               </div>
             </div>
           </div>
@@ -394,11 +484,23 @@ export function UserReservationInputPage() {
 
                 {useCustomCardInput ? (
                   <div className="grid gap-4 sm:grid-cols-2">
+                    {cardInputError ? (
+                      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700 sm:col-span-2">
+                        {cardInputError}
+                      </div>
+                    ) : null}
                     <div className="space-y-1.5 sm:col-span-2">
                       <Label htmlFor="cardNumber">カード番号</Label>
                       <Input
                         id="cardNumber"
                         name="cardNumber"
+                        value={customCardNumber}
+                        onChange={(event) => {
+                          setCustomCardNumber(formatCardNumber(event.target.value))
+                          setCardInputError("")
+                        }}
+                        inputMode="numeric"
+                        autoComplete="cc-number"
                         placeholder="0000 0000 0000 0000"
                         required={paymentMethod === "credit" && useCustomCardInput}
                         className="rounded-lg"
@@ -409,16 +511,36 @@ export function UserReservationInputPage() {
                       <Input
                         id="cardExpiry"
                         name="cardExpiry"
+                        value={customCardExpiry}
+                        onChange={(event) => {
+                          const formatted = formatExpiry(event.target.value)
+                          setCustomCardExpiry(formatted)
+                          if (formatted.length < 5) {
+                            setCardExpiryError("")
+                            return
+                          }
+                          setCardExpiryError(validateExpiry(formatted))
+                        }}
+                        inputMode="numeric"
+                        autoComplete="cc-exp"
                         placeholder="MM/YY"
                         required={paymentMethod === "credit" && useCustomCardInput}
                         className="rounded-lg"
                       />
+                      {cardExpiryError ? <p className="text-xs text-destructive">{cardExpiryError}</p> : null}
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="cardCvc">セキュリティコード</Label>
                       <Input
                         id="cardCvc"
                         name="cardCvc"
+                        value={customCardCvc}
+                        onChange={(event) => {
+                          setCustomCardCvc(event.target.value.replace(/\D/g, "").slice(0, 4))
+                          setCardInputError("")
+                        }}
+                        inputMode="numeric"
+                        autoComplete="cc-csc"
                         placeholder="123"
                         required={paymentMethod === "credit" && useCustomCardInput}
                         className="rounded-lg"
@@ -439,7 +561,7 @@ export function UserReservationInputPage() {
             </Button>
           </div>
         </form>
-      </div>
+      </UserSectionCard>
     </section>
   )
 }

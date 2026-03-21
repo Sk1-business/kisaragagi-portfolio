@@ -8,11 +8,12 @@ import { buildPathWithShopId } from "@/features/user/hooks/useShopId"
 interface UserWelcomeCardProps {
   summary: UserDashboardSummary
   shopId?: string
+  reservationId?: string
 }
 
-export function UserWelcomeCard({ summary, shopId }: UserWelcomeCardProps) {
+export function UserWelcomeCard({ summary, shopId, reservationId }: UserWelcomeCardProps) {
   const nominationPath = buildPathWithShopId(ROUTES.userReservationNomination, shopId)
-  const omakasePath = buildPathWithShopId(ROUTES.userReservationSchedule, shopId, { mode: "omakase" })
+  const omakasePath = buildPathWithShopId(ROUTES.userReservationSchedule, shopId)
 
   return (
     <section className="space-y-6">
@@ -25,7 +26,7 @@ export function UserWelcomeCard({ summary, shopId }: UserWelcomeCardProps) {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
           <div className="absolute left-5 top-5 rounded-full border border-white/30 bg-white/15 px-3 py-1 text-xs font-medium text-white backdrop-blur-md">
-            Boutique Reservation
+            予約サービス
           </div>
           <div className="absolute bottom-0 left-0 right-0 p-6">
             <h2 className="text-2xl font-bold tracking-tight text-white drop-shadow-md sm:text-3xl">
@@ -62,7 +63,9 @@ export function UserWelcomeCard({ summary, shopId }: UserWelcomeCardProps) {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">営業時間</p>
-              <p className="mt-1 text-sm leading-snug text-foreground">{summary.businessHours}</p>
+              <p className="mt-1 whitespace-pre-line text-sm leading-snug text-foreground">
+                {summary.businessHours}
+              </p>
             </div>
           </div>
         </div>
@@ -76,6 +79,11 @@ export function UserWelcomeCard({ summary, shopId }: UserWelcomeCardProps) {
         <div className="grid gap-4 p-6 sm:grid-cols-2">
           <Link
             to={nominationPath}
+            state={
+              reservationId
+                ? { reservationId, isUpdatingExistingReservation: true }
+                : { isUpdatingExistingReservation: false }
+            }
             className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
           >
             <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-violet-50">
@@ -89,6 +97,11 @@ export function UserWelcomeCard({ summary, shopId }: UserWelcomeCardProps) {
           </Link>
           <Link
             to={omakasePath}
+            state={
+              reservationId
+                ? { mode: "omakase", reservationId, isUpdatingExistingReservation: true }
+                : { mode: "omakase", isUpdatingExistingReservation: false }
+            }
             className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
           >
             <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-cyan-50">

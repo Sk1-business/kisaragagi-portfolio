@@ -7,18 +7,32 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import { fetchUserProfile, saveUserProfile } from "@/features/user/api/userProfileApi"
-import { ApiClientError } from "@/lib/apiClient"
+import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
+import {
+  isCompletePhoneSegments,
+  joinPhoneSegments,
+  parsePhoneToSegments,
+  updatePhoneSegment,
+  type PhoneSegments,
+} from "@/lib/phone"
 
 export function UserProfilePage() {
   const shopId = useShopId()
   const [isSaved, setIsSaved] = useState(false)
-  const [fullName, setFullName] = useState("")
-  const [kana, setKana] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [firstName, setFirstName] = useState("")
   const [email, setEmail] = useState("")
-  const [phone, setPhone] = useState("")
+  const [phoneSegments, setPhoneSegments] = useState<PhoneSegments>(["", "", ""])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState("")
+
+  function resolveErrorMessage(error: unknown) {
+    if (error instanceof Error && typeof error.message === "string" && error.message) {
+      return error.message
+    }
+    return "プロフィール保存に失敗しました。"
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -26,10 +40,11 @@ export function UserProfilePage() {
       .then((profile) => {
         if (!isMounted) return
         setErrorMessage("")
-        setFullName(profile.fullName)
-        setKana(profile.kana)
+        const [parsedLastName, ...restName] = profile.fullName.trim().split(/\s+/)
+        setLastName(parsedLastName ?? "")
+        setFirstName(restName.join(" "))
         setEmail(profile.email)
-        setPhone(profile.phone)
+        setPhoneSegments(parsePhoneToSegments(profile.phone))
       })
       .catch(() => {
         if (!isMounted) return
@@ -46,48 +61,46 @@ export function UserProfilePage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const fullName = `${lastName} ${firstName}`.trim()
+    if (!isCompletePhoneSegments(phoneSegments)) {
+      setErrorMessage("電話番号は数字のみで3-4-4桁を入力してください。")
+      return
+    }
+    const phone = joinPhoneSegments(phoneSegments)
     try {
-      await saveUserProfile({ fullName, kana, email, phone })
+      await saveUserProfile({ fullName, email, phone })
       setErrorMessage("")
       setIsSaved(true)
       setTimeout(() => setIsSaved(false), 2000)
     } catch (error) {
-      if (error instanceof ApiClientError) {
-        setErrorMessage(error.message)
-      } else {
-        setErrorMessage("プロフィール保存に失敗しました。")
-      }
+      setErrorMessage(resolveErrorMessage(error))
     }
   }
 
   return (
     <section className="space-y-5">
-      <div className="rounded-2xl bg-white shadow-lg">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 text-white">
-          <h2 className="font-bold">プロフィール編集</h2>
-          <p className="mt-0.5 text-xs text-slate-300">登録情報を変更できます。</p>
-        </div>
+      <UserSectionCard title="プロフィール編集" subtitle="登録情報を変更できます。">
         {errorMessage ? <p className="px-6 pt-4 text-sm text-destructive">{errorMessage}</p> : null}
         <form onSubmit={handleSubmit} className="space-y-5 p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="profileName">お名前</Label>
+              <Label htmlFor="profileLastName">姓</Label>
               <Input
-                id="profileName"
-                name="profileName"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
+                id="profileLastName"
+                name="profileLastName"
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
                 required
                 className="rounded-lg"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="profileKana">フリガナ</Label>
+              <Label htmlFor="profileFirstName">名</Label>
               <Input
-                id="profileKana"
-                name="profileKana"
-                value={kana}
-                onChange={(event) => setKana(event.target.value)}
+                id="profileFirstName"
+                name="profileFirstName"
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
                 required
                 className="rounded-lg"
               />
@@ -105,16 +118,47 @@ export function UserProfilePage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="profilePhone">電話番号</Label>
-              <Input
-                id="profilePhone"
-                name="profilePhone"
-                type="tel"
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                required
-                className="rounded-lg"
-              />
+              <Label>電話番号</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="profilePhone1"
+                  type="tel"
+                  inputMode="numeric"
+                  value={phoneSegments[0]}
+                  onChange={(event) =>
+                    setPhoneSegments((prev) => updatePhoneSegment(prev, 0, event.target.value))
+                  }
+                  required
+                  placeholder="090"
+                  className="min-w-0 flex-1 rounded-lg text-center"
+                />
+                <span className="text-muted-foreground">-</span>
+                <Input
+                  id="profilePhone2"
+                  type="tel"
+                  inputMode="numeric"
+                  value={phoneSegments[1]}
+                  onChange={(event) =>
+                    setPhoneSegments((prev) => updatePhoneSegment(prev, 1, event.target.value))
+                  }
+                  required
+                  placeholder="1234"
+                  className="min-w-0 flex-1 rounded-lg text-center"
+                />
+                <span className="text-muted-foreground">-</span>
+                <Input
+                  id="profilePhone3"
+                  type="tel"
+                  inputMode="numeric"
+                  value={phoneSegments[2]}
+                  onChange={(event) =>
+                    setPhoneSegments((prev) => updatePhoneSegment(prev, 2, event.target.value))
+                  }
+                  required
+                  placeholder="5678"
+                  className="min-w-0 flex-1 rounded-lg text-center"
+                />
+              </div>
             </div>
           </div>
 
@@ -130,7 +174,7 @@ export function UserProfilePage() {
             ) : null}
           </div>
         </form>
-      </div>
+      </UserSectionCard>
 
       <Button asChild variant="outline" size="lg" className="w-full rounded-xl">
         <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ戻る</Link>

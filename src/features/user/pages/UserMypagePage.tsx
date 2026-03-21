@@ -13,12 +13,13 @@ import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import { fetchUserReservations, type UserReservation } from "@/features/user/api/userReservationApi"
+import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
-const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"]
+import { formatDateShortWithWeekday } from "@/lib/dateFormat"
 
-function formatDateLabel(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
-  return `${parsed.getMonth() + 1}/${parsed.getDate()} (${WEEKDAY_LABELS[parsed.getDay()]})`
+function getReservationTimestamp(reservation: UserReservation) {
+  const parsed = new Date(`${reservation.date}T${reservation.time}:00`)
+  return Number.isNaN(parsed.getTime()) ? new Date(`${reservation.date}T00:00:00`).getTime() : parsed.getTime()
 }
 
 type TabType = "upcoming" | "past"
@@ -37,7 +38,7 @@ export function UserMypagePage() {
 
   useEffect(() => {
     let isMounted = true
-    fetchUserReservations()
+    fetchUserReservations(shopId)
       .then((data) => {
         if (!isMounted) return
         setLoadError("")
@@ -54,22 +55,23 @@ export function UserMypagePage() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [shopId])
 
-  const filteredReservations = reservations.filter((reservation) =>
-    activeTab === "upcoming"
-      ? reservation.status === "upcoming"
-      : reservation.status === "past" || reservation.status === "cancelled",
-  )
+  const filteredReservations = reservations
+    .filter((reservation) =>
+      activeTab === "upcoming"
+        ? reservation.status === "upcoming"
+        : reservation.status === "past" || reservation.status === "cancelled",
+    )
+    .sort((a, b) =>
+      activeTab === "upcoming"
+        ? getReservationTimestamp(a) - getReservationTimestamp(b)
+        : getReservationTimestamp(b) - getReservationTimestamp(a),
+    )
 
   return (
     <section className="space-y-5">
-      <div className="rounded-2xl bg-white shadow-lg">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 text-white">
-          <h2 className="font-bold">マイページ</h2>
-          <p className="mt-0.5 text-xs text-slate-300">予約の確認やプロフィール編集ができます。</p>
-        </div>
-
+      <UserSectionCard title="マイページ" subtitle="予約の確認やプロフィール編集ができます。">
         <div className="flex border-b border-slate-200">
           {TABS.map((tab) => {
             const isActive = activeTab === tab.key
@@ -104,9 +106,8 @@ export function UserMypagePage() {
             filteredReservations.map((reservation) => (
               <Link
                 key={reservation.id}
-                to={buildPathWithShopId(ROUTES.userMypageReservationDetail, shopId, {
-                  reservationId: reservation.id,
-                })}
+                to={buildPathWithShopId(ROUTES.userMypageReservationDetail, shopId)}
+                state={{ reservationId: reservation.id }}
                 className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:shadow-md"
               >
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100">
@@ -119,7 +120,7 @@ export function UserMypagePage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                     <CalendarDays className="size-3.5 text-muted-foreground" />
-                    {formatDateLabel(reservation.date)}
+                    {formatDateShortWithWeekday(reservation.date)}
                     <Clock className="ml-1 size-3.5 text-muted-foreground" />
                     {reservation.time}
                   </div>
@@ -146,7 +147,7 @@ export function UserMypagePage() {
             </div>
           )}
         </div>
-      </div>
+      </UserSectionCard>
 
       <div className="rounded-2xl bg-white shadow-lg">
         <div className="border-b border-slate-100 px-6 py-4">

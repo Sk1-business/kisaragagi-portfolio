@@ -1,11 +1,18 @@
-import { useSearchParams } from "react-router-dom"
+import { useLocation } from "react-router-dom"
 
 import { UserWelcomeCard } from "@/features/user/components/UserWelcomeCard"
+import { useShopId } from "@/features/user/hooks/useShopId"
 import { useUserDashboardSummary } from "@/features/user/hooks/useUserDashboardSummary"
 
+interface DashboardLocationState {
+  reservationId?: string
+}
+
 export function UserDashboardPage() {
-  const [searchParams] = useSearchParams()
-  const shopId = searchParams.get("shopId") ?? undefined
+  const shopId = useShopId()
+  const location = useLocation()
+  const locationState = (location.state as DashboardLocationState | null) ?? null
+  const reservationId = locationState?.reservationId
   const { summary, error } = useUserDashboardSummary(shopId)
 
   if (error) {
@@ -16,5 +23,5 @@ export function UserDashboardPage() {
     return <p className="text-sm text-muted-foreground">読み込み中...</p>
   }
 
-  return <UserWelcomeCard summary={summary} shopId={shopId} />
+  return <UserWelcomeCard summary={summary} shopId={shopId} reservationId={reservationId} />
 }

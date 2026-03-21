@@ -2,7 +2,6 @@ import { ApiClientError, apiRequest } from "@/lib/apiClient"
 
 export interface UserProfile {
   fullName: string
-  kana: string
   email: string
   phone: string
 }
@@ -17,7 +16,6 @@ const PROFILE_STORAGE_KEY = "user:profile:v2"
 
 const DEFAULT_PROFILE: UserProfile = {
   fullName: "",
-  kana: "",
   email: "",
   phone: "",
 }
@@ -48,7 +46,6 @@ export async function fetchUserProfile(): Promise<UserProfile> {
     const data = await apiRequest<CustomerProfileResponse>("/api/auth/me")
     const merged: UserProfile = {
       fullName: data.name ?? stored.fullName,
-      kana: stored.kana,
       email: data.email ?? stored.email,
       phone: data.phone ?? stored.phone,
     }
@@ -63,19 +60,13 @@ export async function fetchUserProfile(): Promise<UserProfile> {
 }
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
-  try {
-    await apiRequest<CustomerProfileResponse>("/api/auth/me", {
-      method: "PUT",
-      body: {
-        name: profile.fullName,
-        phone: profile.phone,
-      },
-    })
-  } catch (error) {
-    if (!(error instanceof ApiClientError && error.status === 401)) {
-      throw error
-    }
-    // Auth flow is out of scope for this phase; keep profile editable in frontend.
-  }
+  await apiRequest<CustomerProfileResponse>("/api/auth/me", {
+    method: "PUT",
+    body: {
+      name: profile.fullName,
+      email: profile.email,
+      phone: profile.phone,
+    },
+  })
   safeWriteStorage(PROFILE_STORAGE_KEY, profile)
 }

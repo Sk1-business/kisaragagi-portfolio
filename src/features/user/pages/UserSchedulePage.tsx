@@ -1,34 +1,20 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, Star, UserRound } from "lucide-react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, UserRound } from "lucide-react"
+import { useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
-import mockTrainers from "@/features/user/api/mockTrainers.json"
-import {
-  fetchUserReservationById,
-  fetchUserReservations,
-} from "@/features/user/api/userReservationApi"
+import { UserSectionCard } from "@/features/user/components/UserSectionCard"
+import { useAvailableTimeSlots } from "@/features/user/hooks/useAvailableTimeSlots"
+import { useCustomerBookingRules } from "@/features/user/hooks/useCustomerBookingRules"
+import { usePersistentReservationId } from "@/features/user/hooks/usePersistentReservationId"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
+import { useShiftAvailableDates } from "@/features/user/hooks/useShiftAvailableDates"
+import { useUserReservation } from "@/features/user/hooks/useUserReservation"
+import { useUserTrainers } from "@/features/user/hooks/useUserTrainers"
+import { formatDateShortWithWeekday } from "@/lib/dateFormat"
 
-interface Trainer {
-  id: string
-  name: string
-  specialty: string
-  experienceYears: number
-  rating: number
-  nominationFee: number
-  photoUrl: string
-  availableDates: string[]
-}
-
-const trainers = mockTrainers as Trainer[]
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"]
-
-function formatDateLabel(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
-  return `${parsed.getMonth() + 1}/${parsed.getDate()} (${WEEKDAY_LABELS[parsed.getDay()]})`
-}
 
 function parseDateKey(dateKey: string) {
   return new Date(`${dateKey}T00:00:00`)
@@ -45,19 +31,12 @@ function shiftMonth(base: Date, diff: number) {
   return new Date(base.getFullYear(), base.getMonth() + diff, 1)
 }
 
-function buildReservationTimeSlots() {
-  const slots: string[] = []
-  for (let hour = 10; hour <= 22; hour += 1) {
-    const hourLabel = String(hour).padStart(2, "0")
-    slots.push(`${hourLabel}:00`)
-    if (hour < 22) {
-      slots.push(`${hourLabel}:30`)
-    }
-  }
-  return slots
-}
-
-function createCalendarDays(monthBase: Date, earliestBookableDate: Date) {
+function createCalendarDays(
+  monthBase: Date,
+  earliestBookableDate: Date,
+  latestBookableDate: Date,
+  shiftDateSet: Set<string> | null,
+) {
   const firstDay = new Date(monthBase.getFullYear(), monthBase.getMonth(), 1)
   const monthStartWeekday = firstDay.getDay()
   const gridStart = new Date(firstDay)
@@ -73,7 +52,10 @@ function createCalendarDays(monthBase: Date, earliestBookableDate: Date) {
       day: date.getDate(),
       weekday: date.getDay(),
       isCurrentMonth: date.getMonth() === monthBase.getMonth(),
-      hasAvailability: dayStart.getTime() >= earliestBookableDate.getTime(),
+      hasAvailability:
+        dayStart.getTime() >= earliestBookableDate.getTime() &&
+        dayStart.getTime() <= latestBookableDate.getTime() &&
+        (shiftDateSet === null || shiftDateSet.has(dateKey)),
     }
   })
 }
@@ -81,10 +63,29 @@ function createCalendarDays(monthBase: Date, earliestBookableDate: Date) {
 export function UserSchedulePage() {
   const shopId = useShopId()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const mode = searchParams.get("mode") ?? "omakase"
-  const trainerId = searchParams.get("trainerId") ?? ""
-  const reservationId = searchParams.get("reservationId") ?? ""
+  const location = useLocation()
+  const state = (location.state as {
+    mode?: string
+    trainerId?: string
+    trainerName?: string
+    preferredMenuId?: string
+    preferredMenuName?: string
+    reservationId?: string
+    isUpdatingExistingReservation?: boolean
+  } | null) ?? null
+  const mode = state?.mode ?? "omakase"
+  const trainerId = state?.trainerId ?? ""
+  const trainerName = state?.trainerName ?? ""
+  const preferredMenuId = state?.preferredMenuId ?? ""
+  const preferredMenuName = state?.preferredMenuName ?? ""
+  const isUpdateFlow = state?.isUpdatingExistingReservation === true
+  const stateReservationId = (state?.reservationId ?? "").trim()
+  const persistentReservationId = usePersistentReservationId()
+  const reservationId = isUpdateFlow
+    ? (stateReservationId || persistentReservationId).trim()
+    : ""
+  const { trainers } = useUserTrainers(shopId)
+  const { reservation: currentReservation } = useUserReservation(reservationId, shopId)
   const selectedTrainer =
     mode === "nomination" ? trainers.find((trainer) => trainer.id === trainerId) : undefined
 
@@ -93,98 +94,54 @@ export function UserSchedulePage() {
   const [displayMonth, setDisplayMonth] = useState<Date>(new Date())
   const [currentReservationDate, setCurrentReservationDate] = useState("")
   const [currentReservationTime, setCurrentReservationTime] = useState("")
-  const [blockedTimeSet, setBlockedTimeSet] = useState<Set<string>>(new Set())
-  const availableTimeSlots = useMemo(
-    () => (selectedDate ? buildReservationTimeSlots() : []),
-    [selectedDate],
+  const bookingRules = useCustomerBookingRules(shopId)
+  const shiftAvailableDates = useShiftAvailableDates(
+    displayMonth,
+    shopId,
+    mode === "nomination" ? trainerId : undefined,
+  )
+  const availableTimeSlots = useAvailableTimeSlots(
+    selectedDate,
+    shopId,
+    mode === "nomination" ? trainerId : undefined,
+    isUpdateFlow && reservationId ? reservationId : undefined,
   )
 
   const earliestBookableDate = useMemo(() => {
     const now = new Date()
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-  }, [])
+    const offset = bookingRules.allowSameDay ? 0 : 1
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset)
+  }, [bookingRules.allowSameDay])
+  const latestBookableDate = useMemo(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + bookingRules.maxAdvanceDays)
+  }, [bookingRules.maxAdvanceDays])
+  const shiftDateSet = useMemo(() => {
+    if (!shiftAvailableDates) return null
+    return new Set(shiftAvailableDates)
+  }, [shiftAvailableDates])
   const calendarDays = useMemo(
-    () => createCalendarDays(displayMonth, earliestBookableDate),
-    [displayMonth, earliestBookableDate],
+    () => createCalendarDays(displayMonth, earliestBookableDate, latestBookableDate, shiftDateSet),
+    [displayMonth, earliestBookableDate, latestBookableDate, shiftDateSet],
   )
   const monthLabel = `${displayMonth.getFullYear()}年${displayMonth.getMonth() + 1}月`
 
   useEffect(() => {
-    let mounted = true
     if (!reservationId) {
       setCurrentReservationDate("")
       setCurrentReservationTime("")
-      return () => {
-        mounted = false
-      }
+      return
     }
 
-    void fetchUserReservationById(reservationId).then((reservation) => {
-      if (!mounted || !reservation) return
-      setCurrentReservationDate(reservation.date)
-      setCurrentReservationTime(reservation.time)
-      setSelectedDate(reservation.date)
-      setSelectedTime("")
-      setDisplayMonth(new Date(`${reservation.date}T00:00:00`))
-    })
+    if (!currentReservation) return
+    setCurrentReservationDate(currentReservation.date)
+    setCurrentReservationTime(currentReservation.time)
+    setSelectedDate(currentReservation.date)
+    setSelectedTime("")
+    setDisplayMonth(new Date(`${currentReservation.date}T00:00:00`))
+  }, [reservationId, currentReservation])
 
-    return () => {
-      mounted = false
-    }
-  }, [reservationId])
-
-  useEffect(() => {
-    let mounted = true
-    if (mode !== "nomination" || !trainerId || !selectedDate) {
-      setBlockedTimeSet(new Set())
-      return () => {
-        mounted = false
-      }
-    }
-
-    void fetchUserReservations()
-      .then((reservations) => {
-        if (!mounted) return
-        const blockedTimes = reservations
-          .filter((reservation) => {
-            if (reservation.status !== "upcoming") return false
-            if (reservation.date !== selectedDate) return false
-            if (reservation.trainerId !== trainerId) return false
-            if (reservationId && reservation.id === reservationId) return false
-            return true
-          })
-          .map((reservation) => reservation.time)
-        setBlockedTimeSet(new Set(blockedTimes))
-      })
-      .catch(() => {
-        if (!mounted) return
-        setBlockedTimeSet(new Set())
-      })
-
-    return () => {
-      mounted = false
-    }
-  }, [mode, reservationId, selectedDate, trainerId])
-
-  const confirmPath = (() => {
-    if (!selectedDate || !selectedTime) {
-      return ""
-    }
-    const params = new URLSearchParams()
-    if (shopId) {
-      params.set("shopId", shopId)
-    }
-    params.set("mode", mode)
-    params.set("date", selectedDate)
-    params.set("time", selectedTime)
-    if (selectedTrainer) {
-      params.set("trainerId", selectedTrainer.id)
-    }
-    if (reservationId) {
-      params.set("reservationId", reservationId)
-    }
-    return `${ROUTES.userReservationInput}?${params.toString()}`
-  })()
+  const canProceed = Boolean(selectedDate && selectedTime)
 
   function handleDateSelect(dateKey: string) {
     setSelectedDate(dateKey)
@@ -217,20 +174,11 @@ export function UserSchedulePage() {
               <p className="text-lg font-bold text-foreground">{selectedTrainer.name}</p>
               <p className="text-sm text-muted-foreground">{selectedTrainer.specialty}</p>
             </div>
-            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
-              <Star className="size-3 fill-current" />
-              {selectedTrainer.rating.toFixed(1)}
-            </span>
           </div>
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
-        <div className="flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 text-white">
-          <CalendarDays className="size-5" />
-          <h2 className="font-bold">日時選択</h2>
-        </div>
-
+      <UserSectionCard title="日時選択" className="overflow-hidden">
         <div className="p-5">
           <div className="mb-4 flex items-center justify-between">
             <Button
@@ -239,6 +187,7 @@ export function UserSchedulePage() {
               variant="ghost"
               className="rounded-full"
               onClick={() => setDisplayMonth((prev) => shiftMonth(prev, -1))}
+              aria-label="前の月へ移動"
             >
               <ChevronLeft className="size-4" />
             </Button>
@@ -249,6 +198,7 @@ export function UserSchedulePage() {
               variant="ghost"
               className="rounded-full"
               onClick={() => setDisplayMonth((prev) => shiftMonth(prev, 1))}
+              aria-label="次の月へ移動"
             >
               <ChevronRight className="size-4" />
             </Button>
@@ -310,44 +260,49 @@ export function UserSchedulePage() {
           </div>
 
           <p className="mt-3 text-center text-[11px] text-muted-foreground">
-            翌日以降の日付を選択できます
+            {bookingRules.allowSameDay
+              ? `当日予約可（開始${bookingRules.bookingDeadlineMinutes}分前まで） / ${bookingRules.maxAdvanceDays}日先まで受付`
+              : `翌日以降（${bookingRules.maxAdvanceDays}日先まで） / 締切: 開始${bookingRules.bookingDeadlineMinutes}分前`}
           </p>
         </div>
-      </div>
+      </UserSectionCard>
 
       <div className="rounded-2xl bg-white shadow-lg">
         <div className="flex items-center gap-2 border-b border-slate-100 px-6 py-4">
           <Clock className="size-4 text-muted-foreground" />
           <h3 className="font-bold text-foreground">
             {selectedDate
-              ? `${formatDateLabel(selectedDate)} の予約可能な日時`
+              ? `${formatDateShortWithWeekday(selectedDate)} の予約可能な日時`
               : "日付を選択してください"}
           </h3>
         </div>
         <div className="p-5">
           {availableTimeSlots.length > 0 ? (
             <div className="grid grid-cols-5 gap-2">
-              {availableTimeSlots.map((time) => {
-                const isTimeSelected = selectedTime === time
-                const isCurrentReservationTime = reservationId && currentReservationTime === time
-                const isBlocked = blockedTimeSet.has(time) && !isCurrentReservationTime
+              {availableTimeSlots.map((slot) => {
+                const isTimeSelected = selectedTime === slot.time
+                const isCurrentReservationTime =
+                  Boolean(reservationId) &&
+                  selectedDate === currentReservationDate &&
+                  currentReservationTime === slot.time
+                const isDisabled = !slot.selectable && !isCurrentReservationTime
                 return (
                   <button
-                    key={time}
+                    key={slot.time}
                     type="button"
-                    onClick={() => setSelectedTime(time)}
-                    disabled={isBlocked}
+                    onClick={() => setSelectedTime(slot.time)}
+                    disabled={isDisabled}
                     className={`rounded-xl border px-4 py-3 text-center text-sm font-medium transition ${
                       isTimeSelected
                         ? "border-slate-900 bg-slate-900 text-white shadow-sm"
                         : isCurrentReservationTime
                           ? "bg-emerald-100 font-semibold text-emerald-700 ring-1 ring-emerald-300"
-                        : isBlocked
+                        : isDisabled
                           ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                        : "border-slate-200 bg-white text-foreground hover:border-slate-300 hover:bg-slate-50"
+                          : "border-slate-200 bg-white text-foreground hover:border-slate-300 hover:bg-slate-50"
                     }`}
                   >
-                    {time}
+                    {slot.time}
                   </button>
                 )
               })}
@@ -365,12 +320,29 @@ export function UserSchedulePage() {
         </div>
       </div>
 
-      {confirmPath ? (
-        <Button asChild size="lg" className="w-full rounded-xl text-base">
-          <Link to={confirmPath}>
-            予約情報入力へ進む
-            <ArrowRight className="ml-1 size-4" />
-          </Link>
+      {canProceed ? (
+        <Button
+          type="button"
+          size="lg"
+          className="w-full rounded-xl text-base"
+          onClick={() =>
+            navigate(buildPathWithShopId(ROUTES.userReservationInput, shopId), {
+              state: {
+                mode,
+                date: selectedDate,
+                time: selectedTime,
+                trainerId: trainerId || selectedTrainer?.id || "",
+                trainerName: trainerName || selectedTrainer?.name || "",
+                preferredMenuId: preferredMenuId || undefined,
+                preferredMenuName: preferredMenuName || undefined,
+                ...(isUpdateFlow && reservationId ? { reservationId } : {}),
+                isUpdatingExistingReservation: isUpdateFlow,
+              },
+            })
+          }
+        >
+          予約情報入力へ進む
+          <ArrowRight className="ml-1 size-4" />
         </Button>
       ) : null}
       <Button type="button" variant="outline" size="lg" className="w-full rounded-xl" onClick={handleBack}>

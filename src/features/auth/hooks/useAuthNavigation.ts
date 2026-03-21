@@ -7,7 +7,7 @@ import { ROUTES } from "@/constants/routes"
 import type { AuthAudience, AuthMode, UserRole } from "@/types"
 
 const REDIRECT_BY_ROLE: Record<UserRole, string> = {
-  CUSTOMER: ROUTES.userMypage,
+  CUSTOMER: ROUTES.userHome,
   ADMIN: ROUTES.adminHome,
   STAFF: ROUTES.adminHome,
 }
@@ -33,6 +33,7 @@ export function useAuthNavigation(audience: AuthAudience, mode: AuthMode) {
         password: values.password,
         name,
         phone: values.phone,
+        shopSlug: values.shopSlug,
       })
 
       if (!result.ok) {
@@ -53,13 +54,14 @@ export function useAuthNavigation(audience: AuthAudience, mode: AuthMode) {
       const result = await loginCustomer({
         email: values.email,
         password: values.password,
+        shopSlug: values.shopSlug,
       })
 
       if (!result.ok) {
         return { ok: false, error: result.error }
       }
 
-      navigate(REDIRECT_BY_ROLE.CUSTOMER)
+      navigate(REDIRECT_BY_ROLE.CUSTOMER, { replace: true })
       return { ok: true }
     }
 

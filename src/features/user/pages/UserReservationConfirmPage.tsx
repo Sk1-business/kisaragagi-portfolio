@@ -16,21 +16,17 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import { createUserReservation, updateUserReservation } from "@/features/user/api/userReservationApi"
+import { UserSectionCard } from "@/features/user/components/UserSectionCard"
+import { useSalonName } from "@/features/user/hooks/useSalonName"
+import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
+import {
+  clearReservationUpdateIntent,
+  readReservationUpdateIntent,
+  usePersistentReservationId,
+} from "@/features/user/hooks/usePersistentReservationId"
 import type { ReservationInputData } from "@/features/user/pages/UserReservationInputPage"
-import { buildPathWithShopId, resolveShopName, useShopId } from "@/features/user/hooks/useShopId"
-
-const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"]
-
-function formatDateLabel(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
-  return `${parsed.getFullYear()}年${parsed.getMonth() + 1}月${parsed.getDate()}日 (${WEEKDAY_LABELS[parsed.getDay()]})`
-}
-
-function maskCardNumber(cardNumber: string) {
-  const digits = cardNumber.replace(/\s/g, "")
-  if (digits.length < 4) return "••••"
-  return `•••• •••• •••• ${digits.slice(-4)}`
-}
+import { formatDateLongWithWeekday } from "@/lib/dateFormat"
+import { maskCardNumber } from "@/lib/paymentCard"
 
 function InfoRow({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
   return (
@@ -48,11 +44,12 @@ function InfoRow({ label, value, icon }: { label: string; value: string; icon: R
 
 export function UserReservationConfirmPage() {
   const shopId = useShopId()
+  const shopName = useSalonName(shopId)
   const location = useLocation()
   const navigate = useNavigate()
+  const persistentReservationId = usePersistentReservationId()
   const data = location.state as ReservationInputData | null
   const [isSubmitted, setIsSubmitted] = useState(false)
-  const [submittedReservationId, setSubmittedReservationId] = useState<string>("")
   const [submitError, setSubmitError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -67,8 +64,19 @@ export function UserReservationConfirmPage() {
     )
   }
 
+  /** state が欠けても session の変更意図で復元（明示的 false の新規予約は除外） */
+  const treatAsReservationUpdateFlow =
+    data.isUpdatingExistingReservation === true ||
+    (data.isUpdatingExistingReservation !== false && readReservationUpdateIntent())
+
+  const effectiveReservationId = (
+    data.reservationId?.trim() ||
+    (treatAsReservationUpdateFlow ? persistentReservationId : "")
+  ).trim()
+
   if (isSubmitted) {
-    const isReservationUpdate = Boolean(data.reservationId)
+    const isReservationUpdate =
+      treatAsReservationUpdateFlow && Boolean(effectiveReservationId)
     const successMessage = isReservationUpdate
       ? "予約変更が完了しました。更新内容はマイページで確認できます。"
       : "ご予約内容は登録メールアドレスへ送信されます。"
@@ -82,31 +90,21 @@ export function UserReservationConfirmPage() {
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">{successMessage}</p>
         <Button asChild size="lg" className="mt-6 rounded-xl">
-          <Link
-            to={
-              isReservationUpdate
-                ? buildPathWithShopId(ROUTES.userMypageReservationDetail, shopId, {
-                    reservationId: submittedReservationId || data.reservationId || "",
-                  })
-                : buildPathWithShopId(ROUTES.userMypage, shopId)
-            }
-          >
-            {isReservationUpdate ? "予約詳細へ" : "マイページへ"}
-          </Link>
+          <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ</Link>
         </Button>
       </section>
     )
   }
 
-  const shopName = resolveShopName(shopId)
   const paymentLabel = data.paymentMethod === "credit" ? "クレジットカード" : "PayPay"
   const PaymentIcon = data.paymentMethod === "credit" ? CreditCard : Phone
-  const isReservationUpdate = Boolean(data.reservationId)
+  const isChangeReservationFlow = treatAsReservationUpdateFlow
+  const isReservationUpdate = treatAsReservationUpdateFlow && Boolean(effectiveReservationId)
 
   async function handleSubmit() {
     if (!data) return
 
-    if (!isReservationUpdate || !data.reservationId) {
+    if (!isReservationUpdate) {
       setSubmitError("")
       setIsSubmitting(true)
       const result = await createUserReservation({
@@ -119,22 +117,29 @@ export function UserReservationConfirmPage() {
         fullName: data.fullName,
         email: data.email,
         phone: data.phone,
+        preferredMenuId: data.menuId,
+        shopSlug: shopId,
+        paymentMethod: data.paymentMethod,
       })
       if (!result.ok) {
         setSubmitError(result.error)
         setIsSubmitting(false)
         return
       }
-      setSubmittedReservationId(result.reservation.id)
+      clearReservationUpdateIntent()
       setIsSubmitting(false)
       setIsSubmitted(true)
       return
     }
 
+    if (!effectiveReservationId) {
+      setSubmitError("予約IDが見つかりません。やり直してください。")
+      return
+    }
     setSubmitError("")
     setIsSubmitting(true)
     const result = await updateUserReservation({
-      reservationId: data.reservationId,
+      reservationId: effectiveReservationId,
       date: data.date,
       time: data.time,
       mode: data.mode,
@@ -152,20 +157,21 @@ export function UserReservationConfirmPage() {
       return
     }
 
+    clearReservationUpdateIntent()
     setIsSubmitting(false)
-    setSubmittedReservationId(result.reservation.id)
     setIsSubmitted(true)
   }
 
   return (
     <section className="space-y-5">
-      <div className="rounded-2xl bg-white shadow-lg">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 text-white">
-          <h2 className="font-bold">予約確認</h2>
-          <p className="mt-0.5 text-xs text-slate-300">
-            入力内容をご確認のうえ、「予約する」ボタンで確定してください。
-          </p>
-        </div>
+      <UserSectionCard
+        title="予約確認"
+        subtitle={
+          isChangeReservationFlow
+            ? "入力内容をご確認のうえ、「予約変更を確定する」で更新してください。"
+            : "入力内容をご確認のうえ、「予約を確定する」で確定してください。"
+        }
+      >
 
         <div className="space-y-5 p-6">
           <div>
@@ -174,17 +180,19 @@ export function UserReservationConfirmPage() {
             </p>
             <InfoRow label="店舗" value={shopName} icon={<Store className="size-4" />} />
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <InfoRow label="日付" value={data.date ? formatDateLabel(data.date) : "未選択"} icon={<CalendarDays className="size-4" />} />
+              <InfoRow label="日付" value={data.date ? formatDateLongWithWeekday(data.date) : "未選択"} icon={<CalendarDays className="size-4" />} />
               <InfoRow label="時間" value={data.time} icon={<Clock className="size-4" />} />
             </div>
-            {data.mode === "nomination" && data.trainerName ? (
+            {data.mode === "nomination" ? (
               <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100">
                   <UserRound className="size-5 text-slate-400" />
                 </div>
                 <div>
                   <p className="text-[11px] text-muted-foreground">指名トレーナー</p>
-                  <p className="text-sm font-semibold text-foreground">{data.trainerName}</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {data.trainerName?.trim() || "（トレーナー名の取得待ち）"}
+                  </p>
                 </div>
                 {data.trainerRating > 0 ? (
                   <span className="ml-auto inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
@@ -198,6 +206,9 @@ export function UserReservationConfirmPage() {
                 <InfoRow label="予約モード" value="おまかせ" icon={<CalendarDays className="size-4" />} />
               </div>
             )}
+            <div className="mt-3">
+              <InfoRow label="メニュー" value={data.menuName || "未定"} icon={<MessageSquare className="size-4" />} />
+            </div>
           </div>
 
           <hr className="border-slate-100" />
@@ -208,7 +219,6 @@ export function UserReservationConfirmPage() {
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <InfoRow label="お名前" value={data.fullName} icon={<UserRound className="size-4" />} />
-              <InfoRow label="フリガナ" value={data.kana} icon={<UserRound className="size-4" />} />
               <InfoRow label="メールアドレス" value={data.email} icon={<MessageSquare className="size-4" />} />
               <InfoRow label="電話番号" value={data.phone} icon={<Phone className="size-4" />} />
             </div>
@@ -263,13 +273,17 @@ export function UserReservationConfirmPage() {
             }}
             disabled={isSubmitting}
           >
-            {isSubmitting ? "処理中..." : isReservationUpdate ? "予約変更を確定する" : "予約する"}
+            {isSubmitting
+              ? "処理中..."
+              : isChangeReservationFlow
+                ? "予約変更を確定する"
+                : "予約を確定する"}
           </Button>
         </div>
         {submitError ? (
           <p className="px-6 pb-5 text-sm text-destructive">{submitError}</p>
         ) : null}
-      </div>
+      </UserSectionCard>
     </section>
   )
 }
