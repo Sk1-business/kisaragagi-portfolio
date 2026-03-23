@@ -12,7 +12,7 @@ export function UserLayout() {
           <h1 className="text-lg font-semibold">予約者画面</h1>
         </div>
         <Button asChild variant="outline" size="sm" className="rounded-md">
-          <Link to={ROUTES.landing}>トップへ</Link>
+          <Link to={ROUTES.landing}>ログアウト</Link>
         </Button>
       </header>
       <Outlet />

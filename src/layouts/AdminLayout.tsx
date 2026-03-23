@@ -34,7 +34,7 @@ export function AdminLayout() {
             <NavLink to={ROUTES.adminStaff}>スタッフ管理</NavLink>
           </Button>
           <Button asChild variant="outline" size="sm" className="ml-2 rounded-md">
-            <Link to={ROUTES.landing}>トップへ</Link>
+            <Link to={ROUTES.landing}>ログアウト</Link>
           </Button>
         </nav>
       </header>
