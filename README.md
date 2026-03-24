@@ -133,3 +133,5 @@ npm run dev
 - TypeScript: `~5.9.3`
 - Vite: `^7.3.1`
 - Tailwind CSS: `^4.2.1`
+- @tailwindcss/vite: `^4.2.1`
+- Lucide React: `^0.575.0`

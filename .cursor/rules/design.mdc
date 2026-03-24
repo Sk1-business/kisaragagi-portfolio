@@ -1,0 +1,26 @@
+# Frontend Design Principles
+
+You must follow these high-quality design principles for all frontend-related tasks. Avoid "generic AI-generated aesthetics" and strive for production-grade, distinctive interfaces.
+
+## 1. Avoid Generic AI Aesthetics
+- DO NOT use overused fonts (Inter, Roboto, system fonts) unless specified.
+- DO NOT use clichéd color palettes (e.g., white background with purple gradients).
+- DO NOT use predictable, cookie-cutter layout patterns.
+
+## 2. Design Guidelines
+- **Typography:** Use Noto Sans JP for Japanese + San Francisco (SF Pro) for alphabet.(Primary users are Japanese. All UI text should be in Japanese. However, avoid traditional Japanese serif fonts (e.g., Mincho / 明朝体).). Play with extreme sizing (massive hero text vs. tiny captions).
+- **Background:** Use pure white (#FFFFFF) as the base background color for all pages.
+- **Color Theory:** Focus on "Monochromatic Sophistication." Use a refined grayscale palette (Soft Whites, Ink Blacks, and Slate Grays) instead of high contrast. Create depth through subtle value shifts and layering rather than vibrant accents. Avoid pure black #000; prefer deep, muted tones like #1A1A1A for better readability and a premium feel. (Accent colors are permitted when they serve a functional purpose, such as distinguishing categories, indicating status, or improving visual hierarchy and readability.)
+- **Layout:** Experiment with asymmetrical grids, overlapping elements, and generous white space. Use clear panels and sidebars for complex UI.
+- **Texture & Depth:** Add subtle noise textures, soft expansive shadows, or light glassmorphism. Use decorative borders (double lines, custom radius).
+- **Border Radius:** Use generous, consistent rounding on all interactive and container elements. Cards use `rounded-2xl`, inputs and buttons use `rounded-xl`, small interactive elements use `rounded-lg`. Avoid sharp corners. All UI elements (cards, inputs, buttons, panels) must have visible boundaries against the background using borders, shadows, or both. Never let elements blend into the background without clear visual separation.
+
+## 3. Technical Implementation
+- **Stack:** Tailwind CSS, Lucide Icons, and high-quality Web Fonts.
+- **Quality:** Ensure 100% responsiveness and A11y (aria-labels, contrast ratios).
+- **Interactions:** Include polished hover states, smooth transitions, and micro-interactions for all interactive elements.
+
+## 4. Specific Styles to Consider
+When asked for a "modern UI," lean towards one of these:
+- **Brutalist:** Raw, functional, bold lines.
+- **Swiss Style:** Grid-based, minimalist, high-impact.
