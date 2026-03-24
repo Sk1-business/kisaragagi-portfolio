@@ -17,4 +17,9 @@ export const ROUTES = {
   userMypagePayment: "/user/mypage/payment",
   userMypagePaymentDetail: "/user/mypage/payment/detail",
   adminHome: "/admin",
+  adminCalendar: "/admin/calendar",
+  adminShiftCalendar: "/admin/shifts",
+  adminCancelled: "/admin/cancelled",
+  adminStaff: "/admin/staff",
+  adminReservationDetail: "/admin/reservations/:id",
 } as const
