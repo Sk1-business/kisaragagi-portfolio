@@ -172,6 +172,9 @@ export function UserLayout() {
             </Button>
           </div>
         </div>
+        <Button asChild variant="outline" size="sm" className="rounded-md">
+          <Link to={ROUTES.landing}>ログアウト</Link>
+        </Button>
       </header>
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <Outlet />
