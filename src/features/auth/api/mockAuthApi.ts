@@ -1,12 +1,8 @@
 import mockUsers from "@/features/auth/api/mockUsers.json"
+import { AUTH_AUDIENCE_ALLOWED_ROLES } from "@/features/auth/constants"
 import type { AuthFormValues } from "@/features/auth/types/auth"
 import type { MockUser } from "@/features/auth/types/auth"
 import type { AuthAudience, AuthMode, UserRole } from "@/types"
-
-const ALLOWED_ROLES_BY_AUDIENCE: Record<AuthAudience, UserRole[]> = {
-  CUSTOMER_PORTAL: ["CUSTOMER"],
-  BACKOFFICE_PORTAL: ["ADMIN", "STAFF"],
-}
 
 export async function submitMockAuth(
   audience: AuthAudience,
@@ -21,7 +17,7 @@ export async function submitMockAuth(
   }
 
   if (mode === "login") {
-    const allowedRoles = ALLOWED_ROLES_BY_AUDIENCE[audience]
+    const allowedRoles = AUTH_AUDIENCE_ALLOWED_ROLES[audience]
     const existingUser = (mockUsers as MockUser[]).find(
       (user) =>
         user.email.toLowerCase() === normalizedEmail &&
@@ -42,7 +38,7 @@ export async function submitMockAuth(
   }
 
   const signupRole: UserRole = payload.signupRole ?? "CUSTOMER"
-  const allowedSignupRoles = ALLOWED_ROLES_BY_AUDIENCE[audience]
+  const allowedSignupRoles = AUTH_AUDIENCE_ALLOWED_ROLES[audience]
 
   if (!allowedSignupRoles.includes(signupRole)) {
     return Promise.resolve({ ok: false as const })

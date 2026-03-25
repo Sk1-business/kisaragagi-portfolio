@@ -1,0 +1,42 @@
+[
+  {
+    "id": "rsv-001",
+    "date": "2026-03-09",
+    "time": "14:30",
+    "mode": "nomination",
+    "trainerId": "trainer-001",
+    "trainerName": "高橋 健太",
+    "status": "upcoming",
+    "note": "肩こりがひどいので重点的にお願いします"
+  },
+  {
+    "id": "rsv-002",
+    "date": "2026-05-10",
+    "time": "11:30",
+    "mode": "omakase",
+    "trainerId": null,
+    "trainerName": null,
+    "status": "upcoming",
+    "note": ""
+  },
+  {
+    "id": "rsv-003",
+    "date": "2026-02-20",
+    "time": "10:00",
+    "mode": "nomination",
+    "trainerId": "trainer-003",
+    "trainerName": "中村 直人",
+    "status": "past",
+    "note": ""
+  },
+  {
+    "id": "rsv-004",
+    "date": "2026-02-14",
+    "time": "16:00",
+    "mode": "omakase",
+    "trainerId": null,
+    "trainerName": null,
+    "status": "past",
+    "note": "ストレッチ多めでお願いします"
+  }
+]

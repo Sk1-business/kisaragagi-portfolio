@@ -4,6 +4,9 @@ export interface AuthFormValues {
   email: string
   password: string
   signupRole?: UserRole
+  name?: string
+  phone?: string
+  shopSlug?: string
 }
 
 export interface AuthFormCardProps {
