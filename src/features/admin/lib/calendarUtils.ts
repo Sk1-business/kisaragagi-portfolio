@@ -68,12 +68,27 @@ export function isInRange(date: Date, start: Date, end: Date): boolean {
   return t >= start.getTime() && t <= end.getTime()
 }
 
-/** 日付を YYYY-MM-DD 形式にする（タイムゾーンに依存しない比較用） */
-function toDateKey(d: Date): string {
+/** 日付を YYYY-MM-DD 形式にする（ローカル日付） */
+export function toDateKey(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, "0")
   const day = String(d.getDate()).padStart(2, "0")
   return `${y}-${m}-${day}`
+}
+
+/** 指定タイムゾーンにおける暦日の YYYY-MM-DD（例: 日本時間の「今日」） */
+export function getDateKeyInTimeZone(d: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d)
+}
+
+/** ISO 日時を指定タイムゾーンの暦日キーに変換 */
+export function getIsoDateKeyInTimeZone(iso: string, timeZone: string): string {
+  return getDateKeyInTimeZone(new Date(iso), timeZone)
 }
 
 /** 予約の startAt から日付部分 YYYY-MM-DD を取得（ISO の日付をそのまま使用） */
@@ -114,6 +129,16 @@ export function formatTimeRange(startIso: string, endIso: string): string {
 
 export function formatDateJa(d: Date): string {
   return d.toLocaleDateString("ja-JP", {
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  })
+}
+
+/** 日本語の日付表示（指定タイムゾーンの暦日。ダッシュボードの「本日」表記用） */
+export function formatDateJaInTimeZone(d: Date, timeZone: string): string {
+  return d.toLocaleDateString("ja-JP", {
+    timeZone,
     month: "long",
     day: "numeric",
     weekday: "short",

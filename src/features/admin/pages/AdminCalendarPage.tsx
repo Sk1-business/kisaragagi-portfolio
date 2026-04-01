@@ -1,8 +1,9 @@
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { useStaff } from "@/features/admin/hooks/useStaff"
 import { ROUTES } from "@/constants/routes"
@@ -40,10 +41,15 @@ function parseDateParam(s: string | null): Date {
 }
 
 export function AdminCalendarPage() {
-  const { reservations, loading } = useAdminReservations()
+  const { reservations, loading, replaceReservations } = useAdminReservations()
   const { staffList, loading: staffLoading } = useStaff()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<Set<string>>(
+    () => new Set(),
+  )
+  const [calendarListLoading, setCalendarListLoading] = useState(true)
+  const [calendarListError, setCalendarListError] = useState(false)
 
   const viewMode = useMemo(
     () => parseViewParam(searchParams.get("view")),
@@ -53,6 +59,63 @@ export function AdminCalendarPage() {
     () => parseDateParam(searchParams.get("date")),
     [searchParams],
   )
+
+  const reservationFetchOptions = useMemo(
+    () => ({
+      viewMode,
+      anchorDate: currentDate,
+    }),
+    [viewMode, currentDate],
+  )
+
+  useEffect(() => {
+    if (staffLoading) return
+    let cancelled = false
+    void (async () => {
+      setCalendarListLoading(true)
+      setCalendarListError(false)
+      try {
+        const list = await fetchAdminReservations(
+          staffList,
+          reservationFetchOptions,
+        )
+        if (cancelled) return
+        replaceReservations(list)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setCalendarListError(true)
+      } finally {
+        if (!cancelled) setCalendarListLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    staffLoading,
+    staffList,
+    replaceReservations,
+    navigate,
+    reservationFetchOptions,
+  ])
+
+  useEffect(() => {
+    const validIds = new Set(staffList.map((s) => s.id))
+    setSelectedAssigneeIds((prev) => {
+      const next = new Set<string>()
+      prev.forEach((id) => {
+        if (validIds.has(id)) next.add(id)
+      })
+      if (next.size === prev.size && [...prev].every((id) => next.has(id))) {
+        return prev
+      }
+      return next
+    })
+  }, [staffList])
 
   const patchSearchParams = (patch: (p: URLSearchParams) => void) => {
     setSearchParams(
@@ -137,14 +200,116 @@ export function AdminCalendarPage() {
         ? `${weekStart.getMonth() + 1}/${weekStart.getDate()} ～ ${weekEnd.getMonth() + 1}/${weekEnd.getDate()}`
         : `${currentDate.getFullYear()}年 ${currentDate.getMonth() + 1}月`
 
-  if (loading || staffLoading) {
+  const filteredReservations = useMemo(() => {
+    if (selectedAssigneeIds.size === 0) return reservations
+    return reservations.filter((r) => {
+      if (selectedAssigneeIds.has(r.assigneeId)) return true
+      const t = r.trainerName?.trim()
+      if (!t) return false
+      return staffList.some(
+        (s) => selectedAssigneeIds.has(s.id) && s.name.trim() === t,
+      )
+    })
+  }, [reservations, selectedAssigneeIds, staffList])
+
+  const toggleAssignee = (id: string) => {
+    setSelectedAssigneeIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const clearAssigneeFilter = () => setSelectedAssigneeIds(new Set())
+
+  if (loading || staffLoading || calendarListLoading) {
     return (
       <p className="text-sm text-muted-foreground">読み込み中...</p>
     )
   }
 
+  if (calendarListError) {
+    return (
+      <div className="space-y-3 rounded-lg border border-border bg-card p-6">
+        <p className="text-sm text-muted-foreground">
+          予約一覧の取得に失敗しました。ネットワークまたはサーバーを確認してください。
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setCalendarListError(false)
+            setCalendarListLoading(true)
+            void (async () => {
+              try {
+                const list = await fetchAdminReservations(
+                  staffList,
+                  reservationFetchOptions,
+                )
+                replaceReservations(list)
+                setCalendarListError(false)
+              } catch (e) {
+                if (e instanceof Error && e.message === "UNAUTHORIZED") {
+                  navigate(ROUTES.backofficeLogin, { replace: true })
+                  return
+                }
+                setCalendarListError(true)
+              } finally {
+                setCalendarListLoading(false)
+              }
+            })()
+          }}
+        >
+          再試行
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
+      <Card className="rounded-lg border-border shadow-xs">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">担当者で絞り込み</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            担当者を選ぶと、その担当に割り当てられた予約だけ表示します。複数人を選べます。未選択のときは全員分を表示します。
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-2">
+            {staffList.map((staff) => (
+              <Button
+                key={staff.id}
+                variant={selectedAssigneeIds.has(staff.id) ? "default" : "outline"}
+                size="sm"
+                className="rounded-full px-4"
+                onClick={() => toggleAssignee(staff.id)}
+                aria-pressed={selectedAssigneeIds.has(staff.id)}
+              >
+                <span
+                  className="mr-2 inline-block size-3 shrink-0 rounded-full"
+                  style={{ backgroundColor: staff.color }}
+                />
+                {staff.name}
+              </Button>
+            ))}
+            {staffList.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={clearAssigneeFilter}
+                disabled={selectedAssigneeIds.size === 0}
+              >
+                選択をクリア
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="rounded-lg border-border shadow-xs">
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-lg">予約カレンダー</CardTitle>
@@ -179,7 +344,7 @@ export function AdminCalendarPage() {
           {viewMode === "day" && (
             <CalendarDayView
               date={currentDate}
-              reservations={reservations}
+              reservations={filteredReservations}
               staffList={staffList}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
             />
@@ -187,7 +352,7 @@ export function AdminCalendarPage() {
           {viewMode === "week" && (
             <CalendarWeekView
               date={currentDate}
-              reservations={reservations}
+              reservations={filteredReservations}
               staffList={staffList}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
             />
@@ -195,7 +360,7 @@ export function AdminCalendarPage() {
           {viewMode === "month" && (
             <CalendarMonthView
               date={currentDate}
-              reservations={reservations}
+              reservations={filteredReservations}
               staffList={staffList}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
               onSelectDay={(day) => {

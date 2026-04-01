@@ -15,6 +15,8 @@ const STORAGE_KEY = "saas_admin_reservations_v2"
 type AdminReservationsContextValue = {
   reservations: Reservation[]
   loading: boolean
+  /** 予約カレンダー用 API などで一覧を差し替える（localStorage は更新しない） */
+  replaceReservations: (items: Reservation[]) => void
   updateReservationStatus: (id: string, status: "CONFIRMED" | "CANCELLED") => void
   updateReservationMemo: (id: string, memo: string | undefined) => void
   updateReservationAssignee: (id: string, assigneeId: string) => void
@@ -44,6 +46,10 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
   useEffect(() => {
     setReservations(loadInitial())
     setLoading(false)
+  }, [])
+
+  const replaceReservations = useCallback((items: Reservation[]) => {
+    setReservations(items)
   }, [])
 
   const updateReservationStatus = useCallback(
@@ -101,6 +107,7 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
     () => ({
       reservations,
       loading,
+      replaceReservations,
       updateReservationStatus,
       updateReservationMemo,
       updateReservationAssignee,
@@ -110,6 +117,7 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
     [
       reservations,
       loading,
+      replaceReservations,
       updateReservationStatus,
       updateReservationMemo,
       updateReservationAssignee,

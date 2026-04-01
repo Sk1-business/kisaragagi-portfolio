@@ -1,37 +1,79 @@
 import { useEffect, useMemo, useState } from "react"
+import { useNavigate } from "react-router-dom"
+
+import { ROUTES } from "@/constants/routes"
 import { AdminWelcomeCard } from "@/features/admin/components/AdminWelcomeCard"
 import { TodayReservationsCard } from "@/features/admin/components/TodayReservationsCard"
-import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
+import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import { useAdminDashboardSummary } from "@/features/admin/hooks/useAdminDashboardSummary"
 import { useStaff } from "@/features/admin/hooks/useStaff"
-import { getReservationsForDay, startOfDay } from "@/features/admin/lib/calendarUtils"
+import {
+  getDateKeyInTimeZone,
+  getIsoDateKeyInTimeZone,
+} from "@/features/admin/lib/calendarUtils"
+import type { Reservation } from "@/features/admin/types/reservation"
 
 export function AdminDashboardPage() {
+  const navigate = useNavigate()
   const summary = useAdminDashboardSummary()
-  const { reservations, loading } = useAdminReservations()
   const { staffList, loading: staffLoading } = useStaff()
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   /** 終了済み予約を定期的に一覧から外す */
   const [nowTick, setNowTick] = useState(() => Date.now())
+  const [todaySource, setTodaySource] = useState<Reservation[]>([])
+  const [todayFetchLoading, setTodayFetchLoading] = useState(true)
 
   useEffect(() => {
     const id = window.setInterval(() => setNowTick(Date.now()), 60_000)
     return () => window.clearInterval(id)
   }, [])
 
+  useEffect(() => {
+    if (staffLoading) return
+    let cancelled = false
+    void (async () => {
+      setTodayFetchLoading(true)
+      try {
+        const jstKey = getDateKeyInTimeZone(new Date(), "Asia/Tokyo")
+        const list = await fetchAdminReservations(staffList, {
+          viewMode: "day",
+          anchorDate: new Date(),
+          dateKeyOverride: jstKey,
+        })
+        if (cancelled) return
+        const onlyToday = list.filter(
+          (r) =>
+            getIsoDateKeyInTimeZone(r.startAt, "Asia/Tokyo") === jstKey &&
+            r.status !== "CANCELLED",
+        )
+        setTodaySource(onlyToday)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setTodaySource([])
+      } finally {
+        if (!cancelled) setTodayFetchLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [staffList, staffLoading, navigate])
+
   const todayReservations = useMemo(() => {
-    return getReservationsForDay(reservations, startOfDay(new Date())).filter(
-      (r) => new Date(r.endAt).getTime() > nowTick,
-    )
-  }, [reservations, nowTick])
+    return todaySource.filter((r) => new Date(r.endAt).getTime() > nowTick)
+  }, [todaySource, nowTick])
 
   useEffect(() => {
-    if (!loading && !staffLoading && summary) {
+    if (!todayFetchLoading && !staffLoading && summary) {
       setLastUpdated(new Date())
     }
-  }, [loading, staffLoading, summary, reservations])
+  }, [todayFetchLoading, staffLoading, summary])
 
-  if (!summary || loading || staffLoading) {
+  if (!summary || staffLoading || todayFetchLoading) {
     return <p className="text-sm text-muted-foreground">読み込み中...</p>
   }
 
@@ -43,6 +85,7 @@ export function AdminDashboardPage() {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
+      timeZone: "Asia/Tokyo",
     }) ?? ""
 
   return (

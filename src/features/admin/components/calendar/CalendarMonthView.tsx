@@ -10,7 +10,7 @@ import {
 } from "@/features/admin/lib/calendarUtils"
 import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
-import { getAssigneeColor } from "@/features/admin/hooks/useStaff"
+import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
 
 interface CalendarMonthViewProps {
   date: Date
@@ -102,7 +102,7 @@ export function CalendarMonthView({
                 )}
                 <div className="mt-0.5 space-y-0.5">
                   {dayReservations.map((r) => {
-                    const bgColor = getAssigneeColor(r.assigneeId, staffList)
+                    const bgColor = getReservationTrainerColor(r, staffList)
                     return (
                     <button
                       key={r.id}

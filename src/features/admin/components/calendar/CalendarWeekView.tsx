@@ -7,7 +7,7 @@ import {
   endOfDay,
   formatTimeRange,
 } from "@/features/admin/lib/calendarUtils"
-import { getAssigneeColor } from "@/features/admin/hooks/useStaff"
+import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
 
 // 8:00〜22:00 を表示対象（14時間）
 const START_HOUR = 8
@@ -184,7 +184,7 @@ export function CalendarWeekView({
                       const n = keyToCount[key]
                       const leftPercent = (idx / n) * 100
                       const widthPercent = 100 / n
-                      const bgColor = getAssigneeColor(r.assigneeId, staffList)
+                      const bgColor = getReservationTrainerColor(r, staffList)
                       return (
                         <button
                           key={r.id}
