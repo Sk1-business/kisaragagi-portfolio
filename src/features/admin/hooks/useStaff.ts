@@ -11,8 +11,8 @@ export function getAssigneeColor(assigneeId: string, staffList: Staff[]): string
   return staff?.color ?? "#94a3b8"
 }
 
-/** トレーナー名に一致するスタッフがいればその色、いなければ名前から安定した色 */
-function colorFromTrainerName(name: string): string {
+/** トレーナー名からカレンダー・チップ用の安定した色（hex 相当の HSL） */
+export function colorFromTrainerName(name: string): string {
   let h = 2166136261
   for (let i = 0; i < name.length; i++) {
     h ^= name.charCodeAt(i)

@@ -130,11 +130,16 @@ export function CalendarDayView({
                   >
                     <span className="font-medium">{formatTime(r.startAt)}</span>
                     <span className="block truncate font-medium">{r.customerName}</span>
-                    {r.memo && (
+                    {r.menuName?.trim() ? (
                       <span className="line-clamp-2 text-[10px] leading-tight text-muted-foreground">
-                        {r.memo}
+                        {r.menuName.trim()}
                       </span>
-                    )}
+                    ) : null}
+                    {r.memo?.trim() ? (
+                      <span className="line-clamp-2 text-[10px] leading-tight text-muted-foreground/90">
+                        {r.memo.trim()}
+                      </span>
+                    ) : null}
                   </button>
                 )
               })

@@ -1,14 +1,18 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { Pencil, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  countFutureReservationsForTrainer,
+  fetchAllReservationsForAdmin,
+} from "@/features/admin/api/reservationsApi"
 import { isStaffNameTaken } from "@/features/admin/api/staffApi"
-import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { useAdminStaff } from "@/features/admin/context/AdminStaffContext"
+import { ROUTES } from "@/constants/routes"
 import type { Staff } from "@/features/admin/types/staff"
-import type { Reservation } from "@/features/admin/types/reservation"
 
 const COLOR_PRESETS = [
   "#3b82f6",
@@ -28,32 +32,28 @@ function normalizeHex(c: string): string {
   return t
 }
 
-/** 現在時刻より後に終了する確定予約が当該担当に付いている */
-function staffHasReservationFromNow(
-  staffId: string,
-  reservations: Reservation[],
-  now: Date = new Date(),
-): boolean {
-  const t = now.getTime()
-  return reservations.some(
-    (r) =>
-      r.assigneeId === staffId &&
-      r.status === "CONFIRMED" &&
-      new Date(r.endAt).getTime() > t,
-  )
-}
-
 export function AdminStaffPage() {
-  const { staffList, loading, addStaff, updateStaff, deleteStaff } = useAdminStaff()
-  const { reservations } = useAdminReservations()
+  const navigate = useNavigate()
+  const {
+    staffList,
+    loading,
+    staffLoadError,
+    refetchStaff,
+    addStaff,
+    updateStaff,
+    deleteStaff,
+  } = useAdminStaff()
 
   const [formOpen, setFormOpen] = useState<"add" | { edit: Staff } | null>(null)
   const [formName, setFormName] = useState("")
   const [formColor, setFormColor] = useState("#6366f1")
   const [formError, setFormError] = useState("")
+  const [formSaving, setFormSaving] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<Staff | null>(null)
   const [pageError, setPageError] = useState("")
+  const [deleteWorking, setDeleteWorking] = useState(false)
+  const [deletePrecheckLoading, setDeletePrecheckLoading] = useState(false)
 
   const openAdd = () => {
     setFormError("")
@@ -77,36 +77,50 @@ export function AdminStaffPage() {
   }
 
   const submitForm = () => {
-    const color = normalizeHex(formColor)
-    if (!/^#[0-9a-f]{6}$/i.test(color)) {
-      setFormError("色は #RRGGBB 形式で入力してください")
-      return
-    }
-    if (formOpen === "add") {
-      if (isStaffNameTaken(staffList, formName)) {
-        setFormError("すでに登録されている名前です")
+    void (async () => {
+      const color = normalizeHex(formColor)
+      if (!/^#[0-9a-f]{6}$/i.test(color)) {
+        setFormError("色は #RRGGBB 形式で入力してください")
         return
       }
-      const created = addStaff({ name: formName, color })
-      if (!created) {
-        setFormError("名前を入力してください")
-        return
+      setFormSaving(true)
+      setFormError("")
+      try {
+        if (formOpen === "add") {
+          if (isStaffNameTaken(staffList, formName)) {
+            setFormError("すでに登録されている名前です")
+            return
+          }
+          const created = await addStaff({ name: formName, color })
+          if (!created) {
+            setFormError("追加できませんでした（名前を確認するか、サーバーの設定を確認してください）")
+            return
+          }
+          closeForm()
+          return
+        }
+        if (formOpen && typeof formOpen === "object" && "edit" in formOpen) {
+          if (isStaffNameTaken(staffList, formName, formOpen.edit.id)) {
+            setFormError("すでに登録されている名前です")
+            return
+          }
+          const ok = await updateStaff(formOpen.edit.id, { name: formName, color })
+          if (!ok) {
+            setFormError("保存できませんでした")
+            return
+          }
+          closeForm()
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setFormError("通信に失敗しました")
+      } finally {
+        setFormSaving(false)
       }
-      closeForm()
-      return
-    }
-    if (formOpen && typeof formOpen === "object" && "edit" in formOpen) {
-      if (isStaffNameTaken(staffList, formName, formOpen.edit.id)) {
-        setFormError("すでに登録されている名前です")
-        return
-      }
-      const ok = updateStaff(formOpen.edit.id, { name: formName, color })
-      if (!ok) {
-        setFormError("保存できませんでした")
-        return
-      }
-      closeForm()
-    }
+    })()
   }
 
   const openDelete = (s: Staff) => {
@@ -116,31 +130,76 @@ export function AdminStaffPage() {
       setPageError("スタッフは少なくとも1名必要です")
       return
     }
-    if (staffHasReservationFromNow(s.id, reservations)) {
-      setPageError(
-        `担当者「${s.name}」は予約が入っているため、削除できません`,
-      )
-      return
-    }
-    setDeleteTarget(s)
+    void (async () => {
+      setDeletePrecheckLoading(true)
+      try {
+        const list = await fetchAllReservationsForAdmin(staffList)
+        if (countFutureReservationsForTrainer(s.id, list) > 0) {
+          setPageError(
+            `担当者「${s.name}」は予約が入っているため、削除できません`,
+          )
+          return
+        }
+        setDeleteTarget(s)
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setPageError(
+          "予約一覧の取得に失敗しました。しばらくしてから再度お試しください。",
+        )
+      } finally {
+        setDeletePrecheckLoading(false)
+      }
+    })()
   }
 
   const confirmDelete = () => {
-    if (!deleteTarget) return
-    if (staffHasReservationFromNow(deleteTarget.id, reservations)) {
-      setPageError(
-        `担当者「${deleteTarget.name}」は予約が入っているため、削除できません`,
-      )
-      setDeleteTarget(null)
-      return
-    }
-    deleteStaff(deleteTarget.id)
-    setDeleteTarget(null)
-    setPageError("")
+    void (async () => {
+      if (!deleteTarget) return
+      setDeleteWorking(true)
+      setPageError("")
+      try {
+        const list = await fetchAllReservationsForAdmin(staffList)
+        if (countFutureReservationsForTrainer(deleteTarget.id, list) > 0) {
+          setPageError(
+            `担当者「${deleteTarget.name}」は予約が入っているため、削除できません`,
+          )
+          setDeleteTarget(null)
+          return
+        }
+        await deleteStaff(deleteTarget)
+        setDeleteTarget(null)
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setPageError(
+          "無効化に失敗しました。ネットワークまたはサーバーを確認してください。",
+        )
+      } finally {
+        setDeleteWorking(false)
+      }
+    })()
   }
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">読み込み中...</p>
+  }
+
+  if (staffLoadError) {
+    return (
+      <div className="space-y-3 rounded-lg border border-border bg-card p-6">
+        <p className="text-sm text-muted-foreground">
+          スタッフ一覧の取得に失敗しました。ネットワークまたはサーバーを確認してください。
+        </p>
+        <Button type="button" variant="outline" size="sm" onClick={() => void refetchStaff()}>
+          再試行
+        </Button>
+      </div>
+    )
   }
 
   return (
@@ -159,6 +218,9 @@ export function AdminStaffPage() {
         <p className="text-sm text-destructive" role="alert">
           {pageError}
         </p>
+      )}
+      {deletePrecheckLoading && (
+        <p className="text-sm text-muted-foreground">予約状況を確認しています...</p>
       )}
 
       <Card className="border-border shadow-xs">
@@ -202,6 +264,7 @@ export function AdminStaffPage() {
                         variant="outline"
                         size="sm"
                         className="rounded-md text-destructive hover:bg-destructive/10"
+                        disabled={deletePrecheckLoading}
                         onClick={() => openDelete(s)}
                       >
                         <Trash2 className="mr-1 size-3.5" />
@@ -283,8 +346,13 @@ export function AdminStaffPage() {
                 <Button type="button" variant="outline" className="rounded-md" onClick={closeForm}>
                   キャンセル
                 </Button>
-                <Button type="button" className="rounded-md" onClick={submitForm}>
-                  保存
+                <Button
+                  type="button"
+                  className="rounded-md"
+                  disabled={formSaving}
+                  onClick={submitForm}
+                >
+                  {formSaving ? "保存中..." : "保存"}
                 </Button>
               </div>
             </CardContent>
@@ -306,19 +374,23 @@ export function AdminStaffPage() {
           >
             <CardHeader>
               <CardTitle id="staff-delete-title" className="text-base">
-                スタッフを削除
+                削除の確認
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                「<strong className="text-foreground">{deleteTarget.name}</strong>
-                」を削除します。
+              <p className="text-sm text-foreground">
+                本当に<strong className="font-semibold">「{deleteTarget.name}」</strong>
+                を削除しますか？
+              </p>
+              <p className="text-xs text-muted-foreground">
+                実行すると無効化（is_active=false）となり、過去の予約データは保持されます。
               </p>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   className="rounded-md"
+                  disabled={deleteWorking}
                   onClick={() => setDeleteTarget(null)}
                 >
                   キャンセル
@@ -327,9 +399,10 @@ export function AdminStaffPage() {
                   type="button"
                   variant="destructive"
                   className="rounded-md"
+                  disabled={deleteWorking}
                   onClick={confirmDelete}
                 >
-                  削除する
+                  {deleteWorking ? "削除中..." : "削除"}
                 </Button>
               </div>
             </CardContent>

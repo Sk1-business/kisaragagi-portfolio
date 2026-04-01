@@ -8,6 +8,7 @@ import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import { useAdminDashboardSummary } from "@/features/admin/hooks/useAdminDashboardSummary"
 import { useStaff } from "@/features/admin/hooks/useStaff"
 import {
+  ADMIN_CALENDAR_TIME_ZONE,
   getDateKeyInTimeZone,
   getIsoDateKeyInTimeZone,
 } from "@/features/admin/lib/calendarUtils"
@@ -34,7 +35,7 @@ export function AdminDashboardPage() {
     void (async () => {
       setTodayFetchLoading(true)
       try {
-        const jstKey = getDateKeyInTimeZone(new Date(), "Asia/Tokyo")
+        const jstKey = getDateKeyInTimeZone(new Date(), ADMIN_CALENDAR_TIME_ZONE)
         const list = await fetchAdminReservations(staffList, {
           viewMode: "day",
           anchorDate: new Date(),
@@ -43,8 +44,8 @@ export function AdminDashboardPage() {
         if (cancelled) return
         const onlyToday = list.filter(
           (r) =>
-            getIsoDateKeyInTimeZone(r.startAt, "Asia/Tokyo") === jstKey &&
-            r.status !== "CANCELLED",
+            getIsoDateKeyInTimeZone(r.startAt, ADMIN_CALENDAR_TIME_ZONE) ===
+              jstKey && r.status !== "CANCELLED",
         )
         setTodaySource(onlyToday)
       } catch (e) {
@@ -85,7 +86,7 @@ export function AdminDashboardPage() {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
-      timeZone: "Asia/Tokyo",
+      timeZone: ADMIN_CALENDAR_TIME_ZONE,
     }) ?? ""
 
   return (

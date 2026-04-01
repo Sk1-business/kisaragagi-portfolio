@@ -3,29 +3,42 @@ import { useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
-import { fetchAdminSession } from "@/features/auth/api/adminSessionApi"
+import {
+  fetchAdminMe,
+  type AdminMeProfile,
+} from "@/features/auth/api/adminSessionApi"
+import { AdminProfileProvider } from "@/features/auth/context/AdminProfileContext"
 
 type GuardStatus = "checking" | "ok" | "error"
+
+const EMPTY_PROFILE: AdminMeProfile = {
+  name: "",
+  avatarUrl: null,
+  salonName: null,
+}
 
 /**
  * 管理者ルート用。Cookie が無効ならログインへ replace し、
  * ブラウザの戻る（bfcache 含む）で画面だけ戻っても再検証する。
+ * 認証成功時は `GET /api/admin/me` の内容を `AdminProfileProvider` で子へ渡す。
  */
 export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [status, setStatus] = useState<GuardStatus>("checking")
+  const [profile, setProfile] = useState<AdminMeProfile>(EMPTY_PROFILE)
 
   const runCheck = useCallback(
     async (signal?: AbortSignal) => {
       setStatus("checking")
-      const result = await fetchAdminSession()
+      const result = await fetchAdminMe()
       if (signal?.aborted) return
-      if (result === "ok") {
+      if (result.kind === "ok") {
+        setProfile(result.profile)
         setStatus("ok")
         return
       }
-      if (result === "unauthorized") {
+      if (result.kind === "unauthorized") {
         navigate(ROUTES.backofficeLogin, { replace: true })
         return
       }
@@ -68,5 +81,9 @@ export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
     )
   }
 
-  return <>{children}</>
+  return (
+    <AdminProfileProvider value={profile}>
+      {children}
+    </AdminProfileProvider>
+  )
 }

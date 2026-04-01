@@ -5,7 +5,11 @@ import { ROUTES } from "@/constants/routes"
 import type { Reservation } from "@/features/admin/types/reservation"
 import { getStaffById } from "@/features/admin/api/staffApi"
 import type { Staff } from "@/features/admin/types/staff"
-import { formatTime, formatDateJaInTimeZone } from "@/features/admin/lib/calendarUtils"
+import {
+  ADMIN_CALENDAR_TIME_ZONE,
+  formatTime,
+  formatDateJaInTimeZone,
+} from "@/features/admin/lib/calendarUtils"
 import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
 
 interface TodayReservationsCardProps {
@@ -20,7 +24,7 @@ export function TodayReservationsCard({
   staffList,
   updatedAtLabel,
 }: TodayReservationsCardProps) {
-  const todayLabel = formatDateJaInTimeZone(new Date(), "Asia/Tokyo")
+  const todayLabel = formatDateJaInTimeZone(new Date(), ADMIN_CALENDAR_TIME_ZONE)
 
   const sorted = [...reservations].sort(
     (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),

@@ -1,5 +1,8 @@
 import type { Reservation } from "@/features/admin/types/reservation"
 
+/** 管理画面の予約カレンダー・一覧で暦日を揃えるタイムゾーン（API が UTC で返す場合も JST の「何日」で表示する） */
+export const ADMIN_CALENDAR_TIME_ZONE = "Asia/Tokyo" as const
+
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 
 export function toLocalDate(iso: string): Date {
@@ -91,13 +94,13 @@ export function getIsoDateKeyInTimeZone(iso: string, timeZone: string): string {
   return getDateKeyInTimeZone(new Date(iso), timeZone)
 }
 
-/** 予約の startAt から日付部分 YYYY-MM-DD を取得（ISO の日付をそのまま使用） */
+/** 予約の startAt を指定 TZ の暦日 YYYY-MM-DD に変換（UTC の `...T23:00:00Z` は JST では翌日になるなど） */
 function getReservationDateKey(startAt: string): string {
-  return startAt.slice(0, 10)
+  return getIsoDateKeyInTimeZone(startAt, ADMIN_CALENDAR_TIME_ZONE)
 }
 
 export function getReservationsForDay(reservations: Reservation[], day: Date): Reservation[] {
-  const dayKey = toDateKey(day)
+  const dayKey = getDateKeyInTimeZone(day, ADMIN_CALENDAR_TIME_ZONE)
   return reservations.filter((r) => {
     if (r.status === "CANCELLED") return false
     return getReservationDateKey(r.startAt) === dayKey
@@ -109,8 +112,8 @@ export function getReservationsInRange(
   rangeStart: Date,
   rangeEnd: Date,
 ): Reservation[] {
-  const startKey = toDateKey(rangeStart)
-  const endKey = toDateKey(rangeEnd)
+  const startKey = getDateKeyInTimeZone(rangeStart, ADMIN_CALENDAR_TIME_ZONE)
+  const endKey = getDateKeyInTimeZone(rangeEnd, ADMIN_CALENDAR_TIME_ZONE)
   return reservations.filter((r) => {
     if (r.status === "CANCELLED") return false
     const key = getReservationDateKey(r.startAt)
@@ -125,6 +128,17 @@ export function formatTime(iso: string): string {
 
 export function formatTimeRange(startIso: string, endIso: string): string {
   return `${formatTime(startIso)}-${formatTime(endIso)}`
+}
+
+/** 開始・終了 ISO から所要時間を日本語で表示（例: 45分 / 1時間30分） */
+export function formatReservationDurationJa(startIso: string, endIso: string): string {
+  const ms = new Date(endIso).getTime() - new Date(startIso).getTime()
+  if (!Number.isFinite(ms) || ms <= 0) return "—"
+  const totalMin = Math.round(ms / 60_000)
+  if (totalMin < 60) return `${totalMin}分`
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return m === 0 ? `${h}時間` : `${h}時間${m}分`
 }
 
 export function formatDateJa(d: Date): string {

@@ -3,6 +3,8 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
+import { AdminHeaderAvatar } from "@/features/auth/components/AdminHeaderAvatar"
+import { useAdminProfile } from "@/features/auth/context/AdminProfileContext"
 import { postAdminLogout } from "@/features/auth/api/adminLogoutApi"
 import { AdminReservationsProvider } from "@/features/admin/context/AdminReservationsContext"
 import { AdminShiftAvailabilityProvider } from "@/features/admin/context/AdminShiftAvailabilityContext"
@@ -13,7 +15,9 @@ import {
   LogoutSuccessDialog,
 } from "@/layouts/AdminLogoutDialogs"
 
-export function AdminLayout() {
+/** `AdminAuthGuard` 内（`AdminProfileProvider` 配下）でマウントする */
+function AdminLayoutContent() {
+  const profile = useAdminProfile()
   const navigate = useNavigate()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
@@ -45,15 +49,21 @@ export function AdminLayout() {
   }
 
   return (
-    <AdminReservationsProvider>
-    <AdminStaffProvider>
-    <AdminShiftAvailabilityProvider>
-    <AdminAuthGuard>
+    <>
     <main className="mx-auto min-h-dvh w-full max-w-6xl px-4 py-6 sm:px-6">
       <header className="mb-6 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Admin</p>
-          <h1 className="text-lg font-semibold">管理者画面</h1>
+        <div className="flex min-w-0 items-start gap-3">
+          <AdminHeaderAvatar name={profile.name} avatarUrl={profile.avatarUrl} />
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Admin</p>
+            {profile.salonName ? (
+              <p className="truncate text-sm font-medium text-muted-foreground">{profile.salonName}</p>
+            ) : null}
+            <h1 className="text-lg font-semibold leading-tight">管理者画面</h1>
+            {profile.name.trim() && profile.avatarUrl?.trim() ? (
+              <p className="truncate text-sm text-muted-foreground">{profile.name.trim()}</p>
+            ) : null}
+          </div>
         </div>
         <nav className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm" className="rounded-md">
@@ -95,6 +105,17 @@ export function AdminLayout() {
       onConfirm={() => void confirmLogout()}
     />
     <LogoutSuccessDialog open={successOpen} onDismiss={dismissSuccessAndGoToLogin} />
+    </>
+  )
+}
+
+export function AdminLayout() {
+  return (
+    <AdminReservationsProvider>
+    <AdminStaffProvider>
+    <AdminShiftAvailabilityProvider>
+    <AdminAuthGuard>
+    <AdminLayoutContent />
     </AdminAuthGuard>
     </AdminShiftAvailabilityProvider>
     </AdminStaffProvider>

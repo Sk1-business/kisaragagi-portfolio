@@ -2,6 +2,9 @@ import { addDays } from "@/features/admin/lib/calendarUtils"
 import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
 import {
+  ADMIN_CALENDAR_TIME_ZONE,
+  getDateKeyInTimeZone,
+  getIsoDateKeyInTimeZone,
   getReservationsInRange,
   startOfWeek,
   endOfDay,
@@ -115,14 +118,12 @@ export function CalendarWeekView({
 
           {/* 各日の列 */}
           {days.map((day) => {
-            const dayReservations = weekReservations.filter((r) => {
-              const start = new Date(r.startAt)
-              return (
-                start.getFullYear() === day.getFullYear() &&
-                start.getMonth() === day.getMonth() &&
-                start.getDate() === day.getDate()
-              )
-            })
+            const dayKey = getDateKeyInTimeZone(day, ADMIN_CALENDAR_TIME_ZONE)
+            const dayReservations = weekReservations.filter(
+              (r) =>
+                getIsoDateKeyInTimeZone(r.startAt, ADMIN_CALENDAR_TIME_ZONE) ===
+                dayKey,
+            )
 
             return (
               <div

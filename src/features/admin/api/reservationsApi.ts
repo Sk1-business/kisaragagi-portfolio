@@ -1,9 +1,10 @@
 import { ADMIN_RESERVATIONS_LIST_PATH } from "@/constants/adminApi"
 import { apiFetch } from "@/lib/api"
 import {
+  ADMIN_CALENDAR_TIME_ZONE,
+  getDateKeyInTimeZone,
   startOfDay,
   startOfWeek,
-  toDateKey,
 } from "@/features/admin/lib/calendarUtils"
 import type { Reservation, ReservationStatus } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
@@ -15,6 +16,14 @@ function formatDateKey(d: Date): string {
   const day = String(d.getDate()).padStart(2, "0")
   return `${y}-${m}-${day}`
 }
+
+const MOCK_MENU_SAMPLES = [
+  "パーソナル 60分",
+  "パーソナル 90分",
+  "初回体験",
+  "ペアトレーニング",
+  "コンディショニング",
+] as const
 
 /** 今日を基準にした3日分のモック予約を生成（常にカレンダーに表示されるようにする） */
 export function buildMockReservations(): Reservation[] {
@@ -333,7 +342,10 @@ export function buildMockReservations(): Reservation[] {
       assigneeId: "st_003",
       createdAt: base.toISOString(),
     },
-  ]
+  ].map((r, i) => ({
+    ...r,
+    menuName: MOCK_MENU_SAMPLES[i % MOCK_MENU_SAMPLES.length],
+  })) as Reservation[]
 }
 
 export async function fetchAllReservations(): Promise<Reservation[]> {
@@ -415,14 +427,19 @@ export function mapApiReservationRowToReservation(
     (tid ? `tid_${tid}` : hashTrainerKey(trainerName || "unknown"))
 
   const memo = row.notes?.trim()
+  const menuName = row.menu_name?.trim()
+  const customerPhone = row.customer_phone?.trim()
   return {
     id: String(row.reservation_id),
     customerName: String(row.customer_name ?? ""),
     customerEmail: String(row.customer_email ?? ""),
+    menuName: menuName ? menuName : undefined,
+    customerPhone: customerPhone ? customerPhone : undefined,
     startAt: String(row.start_at),
     endAt: String(row.service_end_at),
     status: mapStructStatusToReservationStatus(row.status),
     assigneeId,
+    trainerId: tid ? tid : undefined,
     trainerName: trainerName || undefined,
     memo: memo ? memo : undefined,
     createdAt: String(row.created_at ?? row.start_at),
@@ -450,10 +467,11 @@ function appendListQuery(
   }
   const dateStr =
     options.dateKeyOverride ??
-    toDateKey(
+    getDateKeyInTimeZone(
       options.viewMode === "week"
         ? startOfWeek(options.anchorDate)
         : startOfDay(options.anchorDate),
+      ADMIN_CALENDAR_TIME_ZONE,
     )
   params.set("date", dateStr)
   params.set("view", options.viewMode === "week" ? "week" : "day")
@@ -517,6 +535,45 @@ export async function fetchAdminReservations(
   }
 
   return collected
+}
+
+/** 予約が `trainer_id`（`Staff.id` と同一）に紐づくか */
+export function reservationBelongsToTrainer(
+  r: Reservation,
+  trainerId: string,
+): boolean {
+  if (r.trainerId && r.trainerId === trainerId) return true
+  if (r.assigneeId === trainerId) return true
+  if (r.assigneeId === `tid_${trainerId}`) return true
+  return false
+}
+
+/**
+ * 現在時刻以降に開始する、そのトレーナーに割り当てられた予約件数（キャンセルは除外）。
+ */
+export function countFutureReservationsForTrainer(
+  trainerId: string,
+  reservations: Reservation[],
+  now: Date = new Date(),
+): number {
+  const t0 = now.getTime()
+  return reservations.filter((r) => {
+    if (r.status === "CANCELLED") return false
+    if (!reservationBelongsToTrainer(r, trainerId)) return false
+    return new Date(r.startAt).getTime() >= t0
+  }).length
+}
+
+/**
+ * スタッフ無効化の可否判定用に `GET /api/admin/reservations` を全件ページング取得。
+ */
+export async function fetchAllReservationsForAdmin(
+  staffList: Staff[],
+): Promise<Reservation[]> {
+  return fetchAdminReservations(staffList, {
+    viewMode: "month",
+    anchorDate: new Date(),
+  })
 }
 
 /**

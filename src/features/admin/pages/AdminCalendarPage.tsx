@@ -4,8 +4,9 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
+import { fetchAdminTrainerNames } from "@/features/admin/api/trainersApi"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
-import { useStaff } from "@/features/admin/hooks/useStaff"
+import { colorFromTrainerName, useStaff } from "@/features/admin/hooks/useStaff"
 import { ROUTES } from "@/constants/routes"
 import { CalendarDayView } from "@/features/admin/components/calendar/CalendarDayView"
 import { CalendarWeekView } from "@/features/admin/components/calendar/CalendarWeekView"
@@ -45,7 +46,10 @@ export function AdminCalendarPage() {
   const { staffList, loading: staffLoading } = useStaff()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<Set<string>>(
+  const [trainerNameList, setTrainerNameList] = useState<string[]>([])
+  const [trainersLoading, setTrainersLoading] = useState(true)
+  const [trainersError, setTrainersError] = useState(false)
+  const [selectedTrainerNames, setSelectedTrainerNames] = useState<Set<string>>(
     () => new Set(),
   )
   const [calendarListLoading, setCalendarListLoading] = useState(true)
@@ -104,18 +108,44 @@ export function AdminCalendarPage() {
   ])
 
   useEffect(() => {
-    const validIds = new Set(staffList.map((s) => s.id))
-    setSelectedAssigneeIds((prev) => {
+    let cancelled = false
+    void (async () => {
+      setTrainersLoading(true)
+      setTrainersError(false)
+      try {
+        const names = await fetchAdminTrainerNames()
+        if (cancelled) return
+        setTrainerNameList(names)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setTrainerNameList([])
+        setTrainersError(true)
+      } finally {
+        if (!cancelled) setTrainersLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    const valid = new Set(trainerNameList)
+    setSelectedTrainerNames((prev) => {
       const next = new Set<string>()
-      prev.forEach((id) => {
-        if (validIds.has(id)) next.add(id)
+      prev.forEach((n) => {
+        if (valid.has(n)) next.add(n)
       })
-      if (next.size === prev.size && [...prev].every((id) => next.has(id))) {
+      if (next.size === prev.size && [...prev].every((n) => next.has(n))) {
         return prev
       }
       return next
     })
-  }, [staffList])
+  }, [trainerNameList])
 
   const patchSearchParams = (patch: (p: URLSearchParams) => void) => {
     setSearchParams(
@@ -201,27 +231,47 @@ export function AdminCalendarPage() {
         : `${currentDate.getFullYear()}年 ${currentDate.getMonth() + 1}月`
 
   const filteredReservations = useMemo(() => {
-    if (selectedAssigneeIds.size === 0) return reservations
+    if (selectedTrainerNames.size === 0) return reservations
     return reservations.filter((r) => {
-      if (selectedAssigneeIds.has(r.assigneeId)) return true
       const t = r.trainerName?.trim()
-      if (!t) return false
-      return staffList.some(
-        (s) => selectedAssigneeIds.has(s.id) && s.name.trim() === t,
-      )
+      if (t && selectedTrainerNames.has(t)) return true
+      const staff = staffList.find((s) => s.id === r.assigneeId)
+      const byStaffName = staff?.name.trim()
+      if (byStaffName && selectedTrainerNames.has(byStaffName)) return true
+      return false
     })
-  }, [reservations, selectedAssigneeIds, staffList])
+  }, [reservations, selectedTrainerNames, staffList])
 
-  const toggleAssignee = (id: string) => {
-    setSelectedAssigneeIds((prev) => {
+  const toggleTrainerName = (name: string) => {
+    setSelectedTrainerNames((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
       return next
     })
   }
 
-  const clearAssigneeFilter = () => setSelectedAssigneeIds(new Set())
+  const clearTrainerFilter = () => setSelectedTrainerNames(new Set())
+
+  const refetchTrainers = () => {
+    void (async () => {
+      setTrainersLoading(true)
+      setTrainersError(false)
+      try {
+        const names = await fetchAdminTrainerNames()
+        setTrainerNameList(names)
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setTrainerNameList([])
+        setTrainersError(true)
+      } finally {
+        setTrainersLoading(false)
+      }
+    })()
+  }
 
   if (loading || staffLoading || calendarListLoading) {
     return (
@@ -272,41 +322,57 @@ export function AdminCalendarPage() {
     <div className="space-y-4">
       <Card className="rounded-lg border-border shadow-xs">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">担当者で絞り込み</CardTitle>
+          <CardTitle className="text-base">トレーナーで絞り込み</CardTitle>
           <p className="text-sm text-muted-foreground">
-            担当者を選ぶと、その担当に割り当てられた予約だけ表示します。複数人を選べます。未選択のときは全員分を表示します。
+            このサロンに登録されているトレーナー名から選びます。複数選べます。未選択のときは全員分を表示します。
           </p>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap items-center gap-2">
-            {staffList.map((staff) => (
-              <Button
-                key={staff.id}
-                variant={selectedAssigneeIds.has(staff.id) ? "default" : "outline"}
-                size="sm"
-                className="rounded-full px-4"
-                onClick={() => toggleAssignee(staff.id)}
-                aria-pressed={selectedAssigneeIds.has(staff.id)}
-              >
-                <span
-                  className="mr-2 inline-block size-3 shrink-0 rounded-full"
-                  style={{ backgroundColor: staff.color }}
-                />
-                {staff.name}
+          {trainersLoading ? (
+            <p className="text-sm text-muted-foreground">トレーナー一覧を読み込み中...</p>
+          ) : trainersError ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                トレーナー一覧の取得に失敗しました。ネットワークまたはサーバーを確認してください。
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={refetchTrainers}>
+                再試行
               </Button>
-            ))}
-            {staffList.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                onClick={clearAssigneeFilter}
-                disabled={selectedAssigneeIds.size === 0}
-              >
-                選択をクリア
-              </Button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              {trainerNameList.map((name) => (
+                <Button
+                  key={name}
+                  variant={selectedTrainerNames.has(name) ? "default" : "outline"}
+                  size="sm"
+                  className="rounded-full px-4"
+                  onClick={() => toggleTrainerName(name)}
+                  aria-pressed={selectedTrainerNames.has(name)}
+                >
+                  <span
+                    className="mr-2 inline-block size-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: colorFromTrainerName(name) }}
+                  />
+                  {name}
+                </Button>
+              ))}
+              {trainerNameList.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={clearTrainerFilter}
+                  disabled={selectedTrainerNames.size === 0}
+                >
+                  選択をクリア
+                </Button>
+              )}
+              {trainerNameList.length === 0 && !trainersError ? (
+                <p className="text-sm text-muted-foreground">登録されているトレーナーがありません。</p>
+              ) : null}
+            </div>
+          )}
         </CardContent>
       </Card>
 

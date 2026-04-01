@@ -13,5 +13,8 @@ export const ADMIN_AUTH_PATHS = {
   me: "/api/admin/me",
 } as const
 
+/** Struct `app/api/admin/trainers.py` — `GET /trainers`（prefix `/api/admin`） */
+export const ADMIN_TRAINERS_LIST_PATH = "/api/admin/trainers" as const
+
 /** Struct `app/api/admin/reservations.py` — `GET /reservations`（prefix `/api/admin`） */
 export const ADMIN_RESERVATIONS_LIST_PATH = "/api/admin/reservations" as const

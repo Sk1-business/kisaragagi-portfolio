@@ -4,7 +4,11 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
-import { formatTime, formatDateJa } from "@/features/admin/lib/calendarUtils"
+import {
+  formatTime,
+  formatDateJa,
+  formatReservationDurationJa,
+} from "@/features/admin/lib/calendarUtils"
 import { getStaffById } from "@/features/admin/api/staffApi"
 import { hasConfirmedOverlapForAssignee } from "@/features/admin/lib/reservationOverlap"
 import { X } from "lucide-react"
@@ -115,6 +119,16 @@ export function ReservationDetailCard({
           <p>{reservation.customerName}</p>
         </div>
         <div>
+          <p className="text-xs font-medium text-muted-foreground">メニュー</p>
+          <p>{reservation.menuName?.trim() ? reservation.menuName : "—"}</p>
+        </div>
+        {reservation.customerPhone?.trim() ? (
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">電話番号</p>
+            <p className="tabular-nums">{reservation.customerPhone.trim()}</p>
+          </div>
+        ) : null}
+        <div>
           <p className="text-xs font-medium text-muted-foreground">メールアドレス</p>
           <p>{reservation.customerEmail}</p>
         </div>
@@ -122,6 +136,9 @@ export function ReservationDetailCard({
           <p className="text-xs font-medium text-muted-foreground">日時</p>
           <p>
             {formatDateJa(startDate)} {formatTime(reservation.startAt)} ～ {formatTime(reservation.endAt)}
+          </p>
+          <p className="mt-0.5 text-muted-foreground">
+            所要時間 {formatReservationDurationJa(reservation.startAt, reservation.endAt)}
           </p>
         </div>
         <div>
