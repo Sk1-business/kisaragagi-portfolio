@@ -9,7 +9,11 @@ import {
   formatDateJa,
   formatReservationDurationJa,
 } from "@/features/admin/lib/calendarUtils"
-import { getStaffById } from "@/features/admin/api/staffApi"
+import {
+  getReservationAssigneeDisplayName,
+  getStaffById,
+} from "@/features/admin/api/staffApi"
+import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
 import { hasConfirmedOverlapForAssignee } from "@/features/admin/lib/reservationOverlap"
 import { X } from "lucide-react"
 
@@ -37,7 +41,6 @@ export function ReservationDetailCard({
   onUpdateAssignee,
 }: ReservationDetailCardProps) {
   const startDate = new Date(reservation.startAt)
-  const assignee = staffList.length > 0 ? getStaffById(reservation.assigneeId, staffList) : undefined
   const effectiveStatus: "CONFIRMED" | "CANCELLED" =
     reservation.status === "CANCELLED" ? "CANCELLED" : "CONFIRMED"
 
@@ -244,17 +247,15 @@ export function ReservationDetailCard({
                 </Button>
               </div>
             </div>
-          ) : assignee ? (
+          ) : (
             <p className="flex items-center gap-2">
               <span
                 className="inline-block size-3 shrink-0 rounded-full"
-                style={{ backgroundColor: assignee.color }}
+                style={{
+                  backgroundColor: getReservationTrainerColor(reservation, staffList),
+                }}
               />
-              {assignee.name}
-            </p>
-          ) : (
-            <p className="text-muted-foreground">
-              （スタッフ一覧にない担当: {reservation.assigneeId}）
+              {getReservationAssigneeDisplayName(reservation, staffList)}
             </p>
           )}
         </div>

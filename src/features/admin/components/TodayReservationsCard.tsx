@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import type { Reservation } from "@/features/admin/types/reservation"
-import { getStaffById } from "@/features/admin/api/staffApi"
+import { getReservationAssigneeDisplayName } from "@/features/admin/api/staffApi"
 import type { Staff } from "@/features/admin/types/staff"
 import {
   ADMIN_CALENDAR_TIME_ZONE,
@@ -53,7 +53,6 @@ export function TodayReservationsCard({
         ) : (
           <ul className="flex flex-col gap-2">
             {sorted.map((r) => {
-              const staff = getStaffById(r.assigneeId, staffList)
               const color = getReservationTrainerColor(r, staffList)
               return (
                 <li
@@ -68,15 +67,13 @@ export function TodayReservationsCard({
                     <p className="font-medium">{r.customerName}</p>
                     <p className="text-sm text-muted-foreground">
                       {formatTime(r.startAt)} ～ {formatTime(r.endAt)}
-                      {staff && (
-                        <span className="ml-2 inline-flex items-center gap-1">
-                          <span
-                            className="inline-block size-2.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: color }}
-                          />
-                          担当: {staff.name}
-                        </span>
-                      )}
+                      <span className="ml-2 inline-flex items-center gap-1">
+                        <span
+                          className="inline-block size-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: color }}
+                        />
+                        担当: {getReservationAssigneeDisplayName(r, staffList)}
+                      </span>
                     </p>
                   </div>
                   <Button asChild variant="outline" size="sm" className="shrink-0 rounded-md">

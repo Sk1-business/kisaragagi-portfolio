@@ -32,7 +32,11 @@ type AdminStaffContextValue = {
   /** 初回（または再取得）の一覧取得に失敗したとき */
   staffLoadError: boolean
   refetchStaff: () => Promise<void>
-  addStaff: (input: { name: string; color: string }) => Promise<Staff | null>
+  addStaff: (input: {
+    name: string
+    color: string
+    description?: string
+  }) => Promise<Staff | null>
   updateStaff: (id: string, input: { name: string; color: string }) => Promise<boolean>
   deleteStaff: (staff: Staff) => Promise<void>
 }
@@ -63,13 +67,21 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
   }, [refetchStaff])
 
   const addStaff = useCallback(
-    async (input: { name: string; color: string }): Promise<Staff | null> => {
+    async (input: {
+      name: string
+      color: string
+      description?: string
+    }): Promise<Staff | null> => {
       const name = input.name.trim()
       const color = input.color.trim()
       if (!name || !isValidHexColor(color)) return null
       const normalized = normalizeColorInput(color)
       try {
-        const created = await postAdminTrainer({ name, color: normalized })
+        const created = await postAdminTrainer({
+          name,
+          color: normalized,
+          description: input.description?.trim() || undefined,
+        })
         setStaffList((prev) =>
           [...prev.filter((s) => s.id !== created.id), created].sort((a, b) =>
             a.name.localeCompare(b.name, "ja"),

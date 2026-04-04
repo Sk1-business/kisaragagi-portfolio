@@ -1,3 +1,4 @@
+import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
 
 export const DEFAULT_STAFF: Staff[] = [
@@ -30,4 +31,19 @@ export async function fetchStaffList(): Promise<Staff[]> {
 
 export function getStaffById(id: string, list: Staff[]): Staff | undefined {
   return list.find((s) => s.id === id)
+}
+
+/**
+ * 予約の担当表示名。アクティブなスタッフ一覧にいればその名前、
+ * 無効化などで一覧にいない場合は API の `trainer_name`（`Reservation.trainerName`）を使う。
+ */
+export function getReservationAssigneeDisplayName(
+  r: Reservation,
+  staffList: Staff[],
+): string {
+  const staff = getStaffById(r.assigneeId, staffList)
+  if (staff) return staff.name
+  const tn = r.trainerName?.trim()
+  if (tn) return tn
+  return r.assigneeId
 }

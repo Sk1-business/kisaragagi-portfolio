@@ -9,10 +9,24 @@ function normalizeTrainerColor(raw: unknown): string {
   return "#64748b"
 }
 
+/** `trainers.is_active` — true のときだけ一覧に含める。未指定は true とみなす（後方互換） */
+function parseTrainerIsActive(o: Record<string, unknown>): boolean {
+  const v = o.is_active ?? o.isActive
+  if (v === undefined || v === null) return true
+  if (typeof v === "boolean") return v
+  if (typeof v === "number") return v === 1
+  if (typeof v === "string") {
+    const t = v.trim().toLowerCase()
+    return t === "1" || t === "true"
+  }
+  return Boolean(v)
+}
+
 /** `GET /api/admin/trainers` の各行を `Staff` に（`trainer_id` / `id`・`name`・`color` 等） */
 export function mapTrainerRowToStaff(row: unknown): Staff | null {
   if (!row || typeof row !== "object") return null
   const o = row as Record<string, unknown>
+  if (!parseTrainerIsActive(o)) return null
   const idRaw = o.trainer_id ?? o.id
   const id = idRaw != null ? String(idRaw) : ""
   const name = typeof o.name === "string" ? o.name.trim() : ""
@@ -20,7 +34,12 @@ export function mapTrainerRowToStaff(row: unknown): Staff | null {
   const color = normalizeTrainerColor(
     o.color ?? o.display_color ?? o.calendar_color,
   )
-  return { id, name, color }
+  const descRaw = o.description
+  const description =
+    typeof descRaw === "string" && descRaw.trim()
+      ? descRaw.trim()
+      : undefined
+  return { id, name, color, description }
 }
 
 function extractTrainerRows(data: unknown): unknown[] {
@@ -42,7 +61,8 @@ function extractTrainerRows(data: unknown): unknown[] {
 }
 
 /**
- * 対象サロンの全トレーナー（`trainers` テーブル相当）。要 `access_token` Cookie。
+ * 対象サロンのトレーナー（`is_active` が true / 1 の行のみ。未指定は表示する）。
+ * 要 `access_token` Cookie。
  */
 export async function fetchAdminTrainers(): Promise<Staff[]> {
   const res = await apiFetch(ADMIN_TRAINERS_LIST_PATH, { method: "GET" })
@@ -105,19 +125,29 @@ export async function putAdminTrainer(
 }
 
 /**
- * `POST /api/admin/trainers` — トレーナー追加（バックエンド実装がある場合）。
+ * `POST /api/admin/trainers` — トレーナー登録。
+ * `display_order` はサーバーが当サロンの `trainers.display_order` 最大値+1で採番する。
+ * `is_active: true` はサーバー側デフォルト。
  */
 export async function postAdminTrainer(input: {
   name: string
   color: string
+  /** 未入力のときは送らない（NULL 相当） */
+  description?: string
 }): Promise<Staff> {
+  const payload: Record<string, unknown> = {
+    name: input.name.trim(),
+    color: input.color.trim(),
+  }
+  const d = input.description?.trim()
+  if (d) {
+    payload.description = d
+  }
+
   const res = await apiFetch(ADMIN_TRAINERS_LIST_PATH, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: input.name.trim(),
-      color: input.color.trim(),
-    }),
+    body: JSON.stringify(payload),
   })
   if (res.status === 401) {
     throw new Error("UNAUTHORIZED")

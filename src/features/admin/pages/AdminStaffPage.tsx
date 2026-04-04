@@ -46,9 +46,12 @@ export function AdminStaffPage() {
 
   const [formOpen, setFormOpen] = useState<"add" | { edit: Staff } | null>(null)
   const [formName, setFormName] = useState("")
+  const [formDescription, setFormDescription] = useState("")
   const [formColor, setFormColor] = useState("#6366f1")
   const [formError, setFormError] = useState("")
   const [formSaving, setFormSaving] = useState(false)
+  /** 追加フロー: 入力後の登録確認ダイアログ */
+  const [addConfirmOpen, setAddConfirmOpen] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<Staff | null>(null)
   const [pageError, setPageError] = useState("")
@@ -59,7 +62,9 @@ export function AdminStaffPage() {
     setFormError("")
     setPageError("")
     setFormName("")
+    setFormDescription("")
     setFormColor(COLOR_PRESETS[staffList.length % COLOR_PRESETS.length])
+    setAddConfirmOpen(false)
     setFormOpen("add")
   }
 
@@ -74,43 +79,99 @@ export function AdminStaffPage() {
   const closeForm = () => {
     setFormOpen(null)
     setFormError("")
+    setAddConfirmOpen(false)
   }
 
-  const submitForm = () => {
+  /** 追加: 入力検証のうえ確認ダイアログへ */
+  const requestAddConfirm = () => {
+    const name = formName.trim()
+    if (!name) {
+      setFormError("スタッフ名を入力してください")
+      return
+    }
+    if (name.length > 100) {
+      setFormError("スタッフ名は100文字以内で入力してください")
+      return
+    }
+    const color = normalizeHex(formColor)
+    if (!/^#[0-9a-f]{6}$/i.test(color)) {
+      setFormError("表示色は #RRGGBB 形式で入力してください")
+      return
+    }
+    if (isStaffNameTaken(staffList, formName)) {
+      setFormError("すでに登録されている名前です")
+      return
+    }
+    setFormError("")
+    setAddConfirmOpen(true)
+  }
+
+  /** 追加: 確認後に POST /api/admin/trainers */
+  const confirmRegisterStaff = () => {
     void (async () => {
+      const color = normalizeHex(formColor)
+      setFormSaving(true)
+      setFormError("")
+      try {
+        if (isStaffNameTaken(staffList, formName)) {
+          setFormError("すでに登録されている名前です")
+          setAddConfirmOpen(false)
+          return
+        }
+        const created = await addStaff({
+          name: formName.trim(),
+          color,
+          description: formDescription.trim() || undefined,
+        })
+        if (!created) {
+          setFormError("登録できませんでした。サーバーの設定を確認してください。")
+          return
+        }
+        setAddConfirmOpen(false)
+        closeForm()
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setFormError("通信に失敗しました")
+      } finally {
+        setFormSaving(false)
+      }
+    })()
+  }
+
+  /** 編集のみ保存 */
+  const submitEditForm = () => {
+    void (async () => {
+      if (!formOpen || typeof formOpen !== "object" || !("edit" in formOpen)) return
       const color = normalizeHex(formColor)
       if (!/^#[0-9a-f]{6}$/i.test(color)) {
         setFormError("色は #RRGGBB 形式で入力してください")
         return
       }
+      const name = formName.trim()
+      if (!name) {
+        setFormError("名前を入力してください")
+        return
+      }
+      if (name.length > 100) {
+        setFormError("名前は100文字以内で入力してください")
+        return
+      }
       setFormSaving(true)
       setFormError("")
       try {
-        if (formOpen === "add") {
-          if (isStaffNameTaken(staffList, formName)) {
-            setFormError("すでに登録されている名前です")
-            return
-          }
-          const created = await addStaff({ name: formName, color })
-          if (!created) {
-            setFormError("追加できませんでした（名前を確認するか、サーバーの設定を確認してください）")
-            return
-          }
-          closeForm()
+        if (isStaffNameTaken(staffList, name, formOpen.edit.id)) {
+          setFormError("すでに登録されている名前です")
           return
         }
-        if (formOpen && typeof formOpen === "object" && "edit" in formOpen) {
-          if (isStaffNameTaken(staffList, formName, formOpen.edit.id)) {
-            setFormError("すでに登録されている名前です")
-            return
-          }
-          const ok = await updateStaff(formOpen.edit.id, { name: formName, color })
-          if (!ok) {
-            setFormError("保存できませんでした")
-            return
-          }
-          closeForm()
+        const ok = await updateStaff(formOpen.edit.id, { name, color })
+        if (!ok) {
+          setFormError("保存できませんでした")
+          return
         }
+        closeForm()
       } catch (e) {
         if (e instanceof Error && e.message === "UNAUTHORIZED") {
           navigate(ROUTES.backofficeLogin, { replace: true })
@@ -279,7 +340,7 @@ export function AdminStaffPage() {
         </CardContent>
       </Card>
 
-      {formOpen && (
+      {formOpen && !(formOpen === "add" && addConfirmOpen) && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           role="dialog"
@@ -288,7 +349,7 @@ export function AdminStaffPage() {
           onClick={closeForm}
         >
           <Card
-            className="w-full max-w-md border-border shadow-lg"
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto border-border shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <CardHeader>
@@ -298,15 +359,32 @@ export function AdminStaffPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="staff-name">名前</Label>
+                <Label htmlFor="staff-name">スタッフ名</Label>
                 <Input
                   id="staff-name"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="例: 山田"
+                  maxLength={100}
                   className="rounded-md"
+                  autoComplete="off"
                 />
+                <p className="text-xs text-muted-foreground">100文字以内（必須）</p>
               </div>
+              {formOpen === "add" && (
+                <div className="space-y-2">
+                  <Label htmlFor="staff-description">自己紹介</Label>
+                  <textarea
+                    id="staff-description"
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    placeholder="任意で入力できます"
+                    rows={4}
+                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  <p className="text-xs text-muted-foreground">未入力の場合は登録されません（NULL）</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="staff-color">表示色</Label>
                 <div className="flex flex-wrap items-center gap-3">
@@ -346,13 +424,96 @@ export function AdminStaffPage() {
                 <Button type="button" variant="outline" className="rounded-md" onClick={closeForm}>
                   キャンセル
                 </Button>
+                {formOpen === "add" ? (
+                  <Button
+                    type="button"
+                    className="rounded-md"
+                    disabled={formSaving}
+                    onClick={requestAddConfirm}
+                  >
+                    追加
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    className="rounded-md"
+                    disabled={formSaving}
+                    onClick={submitEditForm}
+                  >
+                    {formSaving ? "保存中..." : "保存"}
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {formOpen === "add" && addConfirmOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="staff-add-confirm-title"
+          onClick={() => setAddConfirmOpen(false)}
+        >
+          <Card
+            className="w-full max-w-md border-border shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader>
+              <CardTitle id="staff-add-confirm-title" className="text-base">
+                登録の確認
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-foreground">
+                この内容でスタッフを登録しますか？
+              </p>
+              <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+                <p>
+                  <span className="text-muted-foreground">スタッフ名: </span>
+                  <span className="font-medium">{formName.trim()}</span>
+                </p>
+                <p className="mt-2 flex items-center gap-2">
+                  <span className="text-muted-foreground">表示色: </span>
+                  <span
+                    className="inline-block size-4 rounded-full border border-border"
+                    style={{ backgroundColor: normalizeHex(formColor) }}
+                  />
+                  <span className="font-mono text-xs">{normalizeHex(formColor)}</span>
+                </p>
+                {formDescription.trim() ? (
+                  <p className="mt-2 whitespace-pre-wrap">
+                    <span className="text-muted-foreground">自己紹介: </span>
+                    {formDescription.trim()}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-muted-foreground">自己紹介: （未入力）</p>
+                )}
+              </div>
+              {formError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {formError}
+                </p>
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-md"
+                  disabled={formSaving}
+                  onClick={() => setAddConfirmOpen(false)}
+                >
+                  キャンセル
+                </Button>
                 <Button
                   type="button"
                   className="rounded-md"
                   disabled={formSaving}
-                  onClick={submitForm}
+                  onClick={confirmRegisterStaff}
                 >
-                  {formSaving ? "保存中..." : "保存"}
+                  {formSaving ? "登録中..." : "登録"}
                 </Button>
               </div>
             </CardContent>
