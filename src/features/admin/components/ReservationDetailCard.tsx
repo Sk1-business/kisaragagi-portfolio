@@ -12,6 +12,9 @@ import {
 import {
   getReservationAssigneeDisplayName,
   getStaffById,
+  isSameReservationTrainer,
+  reservationStaffMatchesReservation,
+  resolveReservationStaffIdForUi,
 } from "@/features/admin/api/staffApi"
 import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
 import { hasConfirmedOverlapForAssignee } from "@/features/admin/lib/reservationOverlap"
@@ -23,12 +26,25 @@ interface ReservationDetailCardProps {
   /** 担当者の空き判定用（この予約以外の重複を見る） */
   reservations?: Reservation[]
   onClose: () => void
-  /** 指定時はメモを管理者が編集可能 */
-  onUpdateMemo?: (memo: string | undefined) => void
+  /** 指定時はメモを管理者が編集可能（非同期可・失敗時は編集を閉じない） */
+  onUpdateMemo?: (memo: string | undefined) => void | Promise<void>
   /** 指定時はステータスを編集可能（変更時は確認後に呼ぶ） */
   onUpdateStatus?: (status: "CONFIRMED" | "CANCELLED") => void
-  /** 指定時は担当者を編集可能（変更時は確認後に呼ぶ） */
-  onUpdateAssignee?: (assigneeId: string) => void
+  /** 指定時は担当者を編集可能（非同期可・失敗時は確認を閉じない） */
+  onUpdateAssignee?: (assigneeId: string) => void | Promise<void>
+  /** メモ保存 API 実行中 */
+  memoSaving?: boolean
+  /** 担当者変更 API 実行中 */
+  assigneeSaving?: boolean
+  /**
+   * 各スタッフが予約日・予約時間帯にシフトを持つか（GET …/trainers/{id}/shifts）。
+   * 未指定のときはシフトによる制限を行わない。
+   */
+  shiftCoverageByStaffId?: Record<string, boolean>
+  /** シフト一覧取得中 */
+  shiftCoverageLoading?: boolean
+  /** シフト取得失敗 */
+  shiftCoverageError?: boolean
 }
 
 export function ReservationDetailCard({
@@ -39,6 +55,11 @@ export function ReservationDetailCard({
   onUpdateMemo,
   onUpdateStatus,
   onUpdateAssignee,
+  memoSaving = false,
+  assigneeSaving = false,
+  shiftCoverageByStaffId,
+  shiftCoverageLoading = false,
+  shiftCoverageError = false,
 }: ReservationDetailCardProps) {
   const startDate = new Date(reservation.startAt)
   const effectiveStatus: "CONFIRMED" | "CANCELLED" =
@@ -46,7 +67,7 @@ export function ReservationDetailCard({
 
   /** この時間帯にほかの確定予約がなければ選択可。現在の担当は常に可。 */
   const canSelectStaffForSlot = (staffId: string) =>
-    staffId === reservation.assigneeId ||
+    isSameReservationTrainer(staffId, reservation) ||
     !hasConfirmedOverlapForAssignee(
       reservations,
       staffId,
@@ -54,6 +75,32 @@ export function ReservationDetailCard({
       reservation.endAt,
       reservation.id,
     )
+
+  /** シフトが予約時間を覆うか（未設定 API では制限しない）。現在の担当は常に可。 */
+  const canSelectStaffByShift = (staffId: string) => {
+    if (shiftCoverageByStaffId === undefined) return true
+    if (isSameReservationTrainer(staffId, reservation)) return true
+    if (shiftCoverageLoading) return false
+    if (shiftCoverageError) return false
+    return shiftCoverageByStaffId[staffId] === true
+  }
+
+  const canSelectStaffForAssignee = (staffId: string) =>
+    canSelectStaffForSlot(staffId) && canSelectStaffByShift(staffId)
+
+  const assigneeOptionTitle = (staffId: string): string | undefined => {
+    if (isSameReservationTrainer(staffId, reservation)) return undefined
+    if (!canSelectStaffForSlot(staffId)) {
+      return "この時間帯にはすでにほかの確定予約があります"
+    }
+    if (shiftCoverageByStaffId === undefined) return undefined
+    if (shiftCoverageLoading) return "シフトを確認しています…"
+    if (shiftCoverageError) return "シフト情報を取得できませんでした"
+    if (shiftCoverageByStaffId[staffId] !== true) {
+      return "この日の予約時間帯にシフトが登録されていません"
+    }
+    return undefined
+  }
 
   const assigneeHasOtherBookingInSlot = (staffId: string) =>
     hasConfirmedOverlapForAssignee(
@@ -70,7 +117,9 @@ export function ReservationDetailCard({
   const [statusDraft, setStatusDraft] = useState<"CONFIRMED" | "CANCELLED">(effectiveStatus)
   const [statusConfirm, setStatusConfirm] = useState<"CONFIRMED" | "CANCELLED" | null>(null)
   const [editingAssignee, setEditingAssignee] = useState(false)
-  const [assigneeDraft, setAssigneeDraft] = useState(reservation.assigneeId)
+  const [assigneeDraft, setAssigneeDraft] = useState(() =>
+    resolveReservationStaffIdForUi(reservation, staffList),
+  )
   const [assigneeConfirm, setAssigneeConfirm] = useState<string | null>(null)
   const [assigneeSlotError, setAssigneeSlotError] = useState("")
 
@@ -88,19 +137,46 @@ export function ReservationDetailCard({
 
   useEffect(() => {
     if (!editingAssignee) {
-      setAssigneeDraft(reservation.assigneeId)
+      setAssigneeDraft(resolveReservationStaffIdForUi(reservation, staffList))
     }
-  }, [reservation.assigneeId, reservation.id, editingAssignee])
+  }, [
+    reservation.assigneeId,
+    reservation.trainerId,
+    reservation.id,
+    editingAssignee,
+    staffList,
+  ])
+
+  /** シフト取得後などで選択が無効になったとき、表示と state を一致させる */
+  useEffect(() => {
+    if (!editingAssignee) return
+    const effective = staffList.some(
+      (s) => s.id === assigneeDraft && canSelectStaffForAssignee(s.id),
+    )
+      ? assigneeDraft
+      : staffList.find((s) => canSelectStaffForAssignee(s.id))?.id ??
+        resolveReservationStaffIdForUi(reservation, staffList)
+    if (effective !== assigneeDraft) {
+      setAssigneeDraft(effective)
+    }
+  }, [
+    editingAssignee,
+    assigneeDraft,
+    staffList,
+    reservation.assigneeId,
+    reservation.trainerId,
+    reservation.id,
+    reservation.startAt,
+    reservation.endAt,
+    shiftCoverageByStaffId,
+    shiftCoverageLoading,
+    shiftCoverageError,
+    reservations,
+  ])
 
   const openAssigneeEdit = () => {
     setAssigneeSlotError("")
-    const inList = staffList.some((s) => s.id === reservation.assigneeId)
-    if (inList) {
-      setAssigneeDraft(reservation.assigneeId)
-    } else {
-      const firstOk = staffList.find((s) => canSelectStaffForSlot(s.id))
-      setAssigneeDraft(firstOk?.id ?? staffList[0]?.id ?? "")
-    }
+    setAssigneeDraft(resolveReservationStaffIdForUi(reservation, staffList))
     setEditingAssignee(true)
   }
 
@@ -167,41 +243,49 @@ export function ReservationDetailCard({
               <select
                 id="reservation-assignee-edit"
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={
-                  staffList.some(
-                    (s) => s.id === assigneeDraft && canSelectStaffForSlot(s.id),
-                  )
-                    ? assigneeDraft
-                    : (staffList.find((s) => canSelectStaffForSlot(s.id))?.id ??
-                        staffList[0]?.id ??
-                        "")
-                }
+                value={assigneeDraft}
                 onChange={(e) => {
                   setAssigneeSlotError("")
                   setAssigneeDraft(e.target.value)
                 }}
               >
                 {staffList.map((s) => {
-                  const selectable = canSelectStaffForSlot(s.id)
+                  const selectable = canSelectStaffForAssignee(s.id)
+                  const reason = assigneeOptionTitle(s.id)
                   return (
                     <option
                       key={s.id}
                       value={s.id}
                       disabled={!selectable}
-                      title={
-                        !selectable
-                          ? "この時間帯にはすでにほかの確定予約があります"
-                          : undefined
-                      }
+                      title={reason}
                     >
                       {s.name}
-                      {!selectable ? "（選択不可・予約あり）" : ""}
+                      {!selectable
+                        ? !canSelectStaffForSlot(s.id)
+                          ? "（選択不可・予約あり）"
+                          : shiftCoverageLoading
+                            ? "（選択不可・確認中）"
+                            : shiftCoverageError
+                              ? "（選択不可・シフト未取得）"
+                              : "（選択不可・シフトなし）"
+                        : ""}
                     </option>
                   )
                 })}
               </select>
+              {shiftCoverageError ? (
+                <p className="text-xs text-destructive">
+                  シフト情報を取得できませんでした。担当変更は現在の担当のままにしてください。
+                </p>
+              ) : null}
+              {shiftCoverageLoading ? (
+                <p className="text-xs text-muted-foreground">シフトを確認しています…</p>
+              ) : null}
               <p className="text-xs text-muted-foreground">
                 この予約の時間帯に、すでに確定予約が入っている担当者は選択できません。
+                {shiftCoverageByStaffId !== undefined
+                  ? " また、その日の予約時間にシフトが登録されていない担当者は選択できません。"
+                  : null}
               </p>
               {assigneeSlotError && (
                 <p className="text-sm text-destructive" role="alert">
@@ -213,19 +297,46 @@ export function ReservationDetailCard({
                   type="button"
                   size="sm"
                   className="rounded-md"
+                  disabled={assigneeSaving}
                   onClick={() => {
                     setAssigneeSlotError("")
-                    if (assigneeDraft === reservation.assigneeId) {
+                    if (
+                      reservationStaffMatchesReservation(
+                        assigneeDraft,
+                        reservation,
+                        staffList,
+                      )
+                    ) {
                       setEditingAssignee(false)
                       return
                     }
+                    const nm =
+                      getStaffById(assigneeDraft, staffList)?.name ?? assigneeDraft
                     if (!canSelectStaffForSlot(assigneeDraft)) {
-                      const nm =
-                        getStaffById(assigneeDraft, staffList)?.name ?? assigneeDraft
                       setAssigneeSlotError(
                         `「${nm}」はすでに予約が入っているため、変更できません`,
                       )
                       return
+                    }
+                    if (shiftCoverageByStaffId !== undefined) {
+                      if (shiftCoverageLoading) {
+                        setAssigneeSlotError(
+                          "シフト情報を確認しています。しばらく待ってから再度お試しください。",
+                        )
+                        return
+                      }
+                      if (shiftCoverageError) {
+                        setAssigneeSlotError(
+                          "シフト情報を取得できませんでした。ネットワークを確認してください。",
+                        )
+                        return
+                      }
+                      if (!canSelectStaffByShift(assigneeDraft)) {
+                        setAssigneeSlotError(
+                          `「${nm}」はこの日の予約時間帯にシフトが登録されていないため、担当にできません`,
+                        )
+                        return
+                      }
                     }
                     setAssigneeConfirm(assigneeDraft)
                   }}
@@ -358,6 +469,7 @@ export function ReservationDetailCard({
                 id="reservation-memo-edit"
                 className="min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={memoDraft}
+                disabled={memoSaving}
                 onChange={(e) => setMemoDraft(e.target.value)}
                 placeholder="メモを入力（空にすると削除）"
               />
@@ -366,13 +478,19 @@ export function ReservationDetailCard({
                   type="button"
                   size="sm"
                   className="rounded-md"
-                  onClick={() => {
+                  disabled={memoSaving}
+                  onClick={async () => {
                     const t = memoDraft.trim()
-                    onUpdateMemo(t || undefined)
-                    setEditingMemo(false)
+                    if (!onUpdateMemo) return
+                    try {
+                      await Promise.resolve(onUpdateMemo(t || undefined))
+                      setEditingMemo(false)
+                    } catch {
+                      /* 親がエラー表示 */
+                    }
                   }}
                 >
-                  保存
+                  {memoSaving ? "保存中…" : "保存"}
                 </Button>
                 <Button
                   type="button"
@@ -486,7 +604,8 @@ export function ReservationDetailCard({
                 <Button
                   type="button"
                   className="rounded-md"
-                  onClick={() => {
+                  disabled={assigneeSaving}
+                  onClick={async () => {
                     if (assigneeHasOtherBookingInSlot(assigneeConfirm)) {
                       const nm =
                         getStaffById(assigneeConfirm, staffList)?.name ??
@@ -497,13 +616,30 @@ export function ReservationDetailCard({
                       )
                       return
                     }
-                    onUpdateAssignee(assigneeConfirm)
-                    setAssigneeConfirm(null)
-                    setEditingAssignee(false)
-                    setAssigneeSlotError("")
+                    if (shiftCoverageByStaffId !== undefined && assigneeConfirm !== reservation.assigneeId) {
+                      if (!canSelectStaffByShift(assigneeConfirm)) {
+                        const nm =
+                          getStaffById(assigneeConfirm, staffList)?.name ??
+                          assigneeConfirm
+                        setAssigneeConfirm(null)
+                        setAssigneeSlotError(
+                          `「${nm}」はこの日の予約時間帯にシフトが登録されていないため、担当にできません`,
+                        )
+                        return
+                      }
+                    }
+                    if (!onUpdateAssignee) return
+                    try {
+                      await Promise.resolve(onUpdateAssignee(assigneeConfirm))
+                      setAssigneeConfirm(null)
+                      setEditingAssignee(false)
+                      setAssigneeSlotError("")
+                    } catch {
+                      /* 親がエラー表示 */
+                    }
                   }}
                 >
-                  はい
+                  {assigneeSaving ? "保存中…" : "はい"}
                 </Button>
               </div>
             </CardContent>

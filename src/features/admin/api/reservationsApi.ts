@@ -597,3 +597,50 @@ export async function fetchAdminReservationById(
   const row = (await res.json()) as AdminReservationOut
   return mapApiReservationRowToReservation(row, staffList)
 }
+
+/**
+ * `PUT /api/admin/reservations/{reservation_id}` — `trainer_id` のみ更新（他列はサーバー側で据え置き）。
+ */
+/** API の `trainer_id` 用。フロントの `tid_` 付き表現を除去する。 */
+export function normalizeTrainerIdForApi(trainerId: string): string {
+  return trainerId.startsWith("tid_") ? trainerId.slice(4) : trainerId
+}
+
+export async function putAdminReservationTrainerId(
+  reservationId: string,
+  trainerId: string,
+): Promise<void> {
+  const url = `${ADMIN_RESERVATIONS_LIST_PATH}/${encodeURIComponent(reservationId)}`
+  const res = await apiFetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ trainer_id: normalizeTrainerIdForApi(trainerId) }),
+  })
+  if (res.status === 401) {
+    throw new Error("UNAUTHORIZED")
+  }
+  if (!res.ok) {
+    throw new Error("FETCH_FAILED")
+  }
+}
+
+/**
+ * `PUT /api/admin/reservations/{reservation_id}` — `notes` のみ更新（他列はサーバー側で据え置き）。
+ */
+export async function putAdminReservationNotes(
+  reservationId: string,
+  notes: string | null,
+): Promise<void> {
+  const url = `${ADMIN_RESERVATIONS_LIST_PATH}/${encodeURIComponent(reservationId)}`
+  const res = await apiFetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notes: notes ?? null }),
+  })
+  if (res.status === 401) {
+    throw new Error("UNAUTHORIZED")
+  }
+  if (!res.ok) {
+    throw new Error("FETCH_FAILED")
+  }
+}

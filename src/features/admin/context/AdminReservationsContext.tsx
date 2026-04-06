@@ -81,7 +81,9 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
 
   const updateReservationAssignee = useCallback((id: string, assigneeId: string) => {
     setReservations((prev) => {
-      const next = prev.map((r) => (r.id === id ? { ...r, assigneeId } : r))
+      const next = prev.map((r) =>
+        r.id === id ? { ...r, assigneeId, trainerId: assigneeId } : r,
+      )
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
       return next
     })

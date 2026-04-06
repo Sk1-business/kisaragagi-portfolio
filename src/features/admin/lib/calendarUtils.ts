@@ -162,6 +162,17 @@ export function formatTimeRange(startIso: string, endIso: string): string {
   return `${formatTime(startIso)}-${formatTime(endIso)}`
 }
 
+/**
+ * 日・週タイムラインの予約ブロックで、時間帯＋予約者を1行にまとめるか。
+ * 短いブロックや高さが足りないときは true。
+ */
+export function isCompactReservationTimelineBlock(
+  durationMinutes: number,
+  heightPercent: number,
+): boolean {
+  return durationMinutes <= 50 || heightPercent <= 5.5
+}
+
 export function formatTimeRangeInAdminCalendarTz(startIso: string, endIso: string): string {
   return `${formatTimeInAdminCalendarTz(startIso)}〜${formatTimeInAdminCalendarTz(endIso)}`
 }
