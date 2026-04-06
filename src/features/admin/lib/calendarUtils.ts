@@ -94,6 +94,28 @@ export function getIsoDateKeyInTimeZone(iso: string, timeZone: string): string {
   return getDateKeyInTimeZone(new Date(iso), timeZone)
 }
 
+/**
+ * ISO 日時を `timeZone` の「その日の 0 時からの経過分」（0〜1439）に変換。
+ * シフトの HH:mm と比較する際に `ADMIN_CALENDAR_TIME_ZONE` と揃える。
+ */
+export function isoToMinutesInTimeZone(iso: string, timeZone: string): number {
+  const d = new Date(iso)
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(d)
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0)
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0)
+  return hour * 60 + minute
+}
+
+/** 管理カレンダーと同じタイムゾーンでの「分」表現 */
+export function isoToMinutesInAdminCalendarTz(iso: string): number {
+  return isoToMinutesInTimeZone(iso, ADMIN_CALENDAR_TIME_ZONE)
+}
+
 /** 予約の startAt を指定 TZ の暦日 YYYY-MM-DD に変換（UTC の `...T23:00:00Z` は JST では翌日になるなど） */
 function getReservationDateKey(startAt: string): string {
   return getIsoDateKeyInTimeZone(startAt, ADMIN_CALENDAR_TIME_ZONE)
@@ -126,8 +148,22 @@ export function formatTime(iso: string): string {
   return d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false })
 }
 
+/** `formatTime` と同じ表記だが、暦日・シフト判定と揃えて `ADMIN_CALENDAR_TIME_ZONE` で表示 */
+export function formatTimeInAdminCalendarTz(iso: string): string {
+  return new Date(iso).toLocaleTimeString("ja-JP", {
+    timeZone: ADMIN_CALENDAR_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+}
+
 export function formatTimeRange(startIso: string, endIso: string): string {
   return `${formatTime(startIso)}-${formatTime(endIso)}`
+}
+
+export function formatTimeRangeInAdminCalendarTz(startIso: string, endIso: string): string {
+  return `${formatTimeInAdminCalendarTz(startIso)}〜${formatTimeInAdminCalendarTz(endIso)}`
 }
 
 /** 開始・終了 ISO から所要時間を日本語で表示（例: 45分 / 1時間30分） */

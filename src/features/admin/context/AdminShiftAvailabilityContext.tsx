@@ -5,13 +5,14 @@ import {
   useEffect,
   useMemo,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from "react"
+import type { TrainerShiftRow } from "@/features/admin/api/trainerShiftsApi"
+import { rowsToSlots } from "@/features/admin/api/trainerShiftsApi"
 import { toDateKey } from "@/features/admin/lib/calendarUtils"
-import {
-  getStaffAvailabilityForDay,
-  type AvailabilitySlot,
-} from "@/features/admin/lib/shiftAvailability"
+import type { AvailabilitySlot } from "@/features/admin/lib/shiftAvailability"
 import type { Staff } from "@/features/admin/types/staff"
 
 const STORAGE_KEY = "saas_admin_shift_availability_v1"
@@ -19,8 +20,11 @@ const STORAGE_KEY = "saas_admin_shift_availability_v1"
 /** 上書き: 勤務時間 or 明示的な休み */
 export type ShiftOverrideValue = AvailabilitySlot | "off"
 
+/** `GET .../shifts` 由来（スタッフID → 日付 → 行） */
+export type ApiShiftRowsMap = Record<string, Record<string, TrainerShiftRow[]>>
+
 export type ResolvedShiftDay =
-  | { kind: "work"; slot: AvailabilitySlot }
+  | { kind: "work"; slot: AvailabilitySlot; moreSlots?: AvailabilitySlot[] }
   | { kind: "off_explicit" }
   | { kind: "none" }
 
@@ -65,9 +69,9 @@ function normalizeOverrides(raw: OverridesMap): OverridesMap {
 }
 
 type AdminShiftAvailabilityContextValue = {
-  /** 既定値と上書きをマージした表示用の解決結果 */
+  apiShiftRows: ApiShiftRowsMap
+  setApiShiftRows: Dispatch<SetStateAction<ApiShiftRowsMap>>
   resolveStaffDay: (staff: Staff, day: Date) => ResolvedShiftDay
-  /** 上書きを保存。null でその日の上書きを削除（既定に戻す） */
   setOverride: (
     staffId: string,
     dateKey: string,
@@ -80,6 +84,7 @@ const AdminShiftAvailabilityContext =
 
 export function AdminShiftAvailabilityProvider({ children }: { children: ReactNode }) {
   const [overrides, setOverrides] = useState<OverridesMap>({})
+  const [apiShiftRows, setApiShiftRows] = useState<ApiShiftRowsMap>({})
 
   useEffect(() => {
     setOverrides(normalizeOverrides(loadInitial()))
@@ -100,11 +105,17 @@ export function AdminShiftAvailabilityProvider({ children }: { children: ReactNo
       const o = overrides[dateKey]?.[staff.id]
       if (o === "off") return { kind: "off_explicit" }
       if (o && typeof o === "object") return { kind: "work", slot: o }
-      const base = getStaffAvailabilityForDay(staff, day)
-      if (!base) return { kind: "none" }
-      return { kind: "work", slot: base }
+      const rows = apiShiftRows[staff.id]?.[dateKey] ?? []
+      if (rows.length === 0) return { kind: "none" }
+      const slots = rowsToSlots(rows)
+      const [first, ...rest] = slots
+      return {
+        kind: "work",
+        slot: first,
+        moreSlots: rest.length > 0 ? rest : undefined,
+      }
     },
-    [overrides],
+    [overrides, apiShiftRows],
   )
 
   const setOverride = useCallback(
@@ -127,10 +138,12 @@ export function AdminShiftAvailabilityProvider({ children }: { children: ReactNo
 
   const value = useMemo(
     () => ({
+      apiShiftRows,
+      setApiShiftRows,
       resolveStaffDay,
       setOverride,
     }),
-    [resolveStaffDay, setOverride],
+    [apiShiftRows, resolveStaffDay, setOverride],
   )
 
   return (

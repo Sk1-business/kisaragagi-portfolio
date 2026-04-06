@@ -1,4 +1,17 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import type { BusinessHoursItem } from "@/features/admin/api/adminSettingsApi"
+import {
+  createTrainerShift,
+  deleteTrainerShift,
+  updateTrainerShift,
+} from "@/features/admin/api/trainerShiftsApi"
+import { useAdminShiftAvailability } from "@/features/admin/context/AdminShiftAvailabilityContext"
+import type { ResolvedShiftDay } from "@/features/admin/context/AdminShiftAvailabilityContext"
+import {
+  ShiftAvailabilityEditDialog,
+  type ShiftEditCommit,
+} from "@/features/admin/components/calendar/ShiftAvailabilityEditDialog"
 import {
   startOfMonth,
   endOfMonth,
@@ -8,20 +21,33 @@ import {
   toDateKey,
   WEEKDAY_LABELS,
 } from "@/features/admin/lib/calendarUtils"
-import { useAdminShiftAvailability } from "@/features/admin/context/AdminShiftAvailabilityContext"
-import type { ResolvedShiftDay } from "@/features/admin/context/AdminShiftAvailabilityContext"
+import { getBusinessHoursForJsDate } from "@/features/admin/lib/businessHours"
+import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
-import { ShiftAvailabilityEditDialog } from "./ShiftAvailabilityEditDialog"
+import { ROUTES } from "@/constants/routes"
 import { cn } from "@/lib/utils"
 
 interface ShiftCalendarMonthViewProps {
   date: Date
   staffList: Staff[]
+  businessHoursItems: BusinessHoursItem[]
+  settingsLoading: boolean
+  reservations: Reservation[]
+  reservationsLoading: boolean
+  reservationsFetchFailed: boolean
+  refetchShifts: () => void
+}
+
+function workSlotsLabel(resolved: Extract<ResolvedShiftDay, { kind: "work" }>): string {
+  const parts = [resolved.slot, ...(resolved.moreSlots ?? [])].map(
+    (s) => `${s.start}-${s.end}`,
+  )
+  return parts.join(" / ")
 }
 
 function rowLabel(resolved: ResolvedShiftDay, staff: Staff): string {
   if (resolved.kind === "work") {
-    return `${staff.name}：${resolved.slot.start}-${resolved.slot.end}`
+    return `${staff.name}：${workSlotsLabel(resolved)}`
   }
   if (resolved.kind === "off_explicit") {
     return `${staff.name}：休み`
@@ -32,8 +58,15 @@ function rowLabel(resolved: ResolvedShiftDay, staff: Staff): string {
 export function ShiftCalendarMonthView({
   date,
   staffList,
+  businessHoursItems,
+  settingsLoading,
+  reservations,
+  reservationsLoading,
+  reservationsFetchFailed,
+  refetchShifts,
 }: ShiftCalendarMonthViewProps) {
-  const { resolveStaffDay, setOverride } = useAdminShiftAvailability()
+  const navigate = useNavigate()
+  const { resolveStaffDay, setOverride, apiShiftRows } = useAdminShiftAvailability()
   const [editing, setEditing] = useState<{ staff: Staff; day: Date } | null>(null)
 
   const monthStart = startOfMonth(date)
@@ -59,6 +92,48 @@ export function ShiftCalendarMonthView({
 
   const resolvedEditing =
     editing != null ? resolveStaffDay(editing.staff, editing.day) : null
+
+  const businessDayForEdit =
+    editing != null ? getBusinessHoursForJsDate(businessHoursItems, editing.day) : null
+
+  const handleCommit = async (commit: ShiftEditCommit) => {
+    if (!editing) return
+    const { staff, day } = editing
+    const dateKey = toDateKey(day)
+    const trainerId = staff.id
+    const rows = apiShiftRows[trainerId]?.[dateKey] ?? []
+    const ids = rows.map((r) => r.shift_id)
+
+    try {
+      if (commit.type === "save") {
+        const body = {
+          date: dateKey,
+          start_time: commit.slot.start,
+          end_time: commit.slot.end,
+        }
+        if (ids.length === 0) {
+          await createTrainerShift(trainerId, body)
+        } else {
+          for (const id of ids.slice(1)) {
+            await deleteTrainerShift(trainerId, id)
+          }
+          await updateTrainerShift(trainerId, ids[0], body)
+        }
+        setOverride(trainerId, dateKey, null)
+      } else if (commit.type === "off") {
+        for (const id of ids) {
+          await deleteTrainerShift(trainerId, id)
+        }
+        setOverride(trainerId, dateKey, null)
+      }
+      refetchShifts()
+    } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+      }
+      throw e
+    }
+  }
 
   return (
     <>
@@ -125,7 +200,7 @@ export function ShiftCalendarMonthView({
                           <span className="font-medium">{staff.name}</span>
                           <span className="text-muted-foreground">
                             {resolved.kind === "work"
-                              ? `：${resolved.slot.start}-${resolved.slot.end}`
+                              ? `：${workSlotsLabel(resolved)}`
                               : resolved.kind === "off_explicit"
                                 ? "：休み"
                                 : "：—"}
@@ -142,15 +217,18 @@ export function ShiftCalendarMonthView({
       </div>
 
       <ShiftAvailabilityEditDialog
+        key={editing ? `${editing.staff.id}-${toDateKey(editing.day)}` : "shift-edit-closed"}
         open={editing != null}
         staff={editing?.staff ?? null}
         day={editing?.day ?? null}
         resolved={resolvedEditing}
+        businessDay={businessDayForEdit}
+        settingsLoading={settingsLoading}
+        reservations={reservations}
+        reservationsLoading={reservationsLoading}
+        reservationsFetchFailed={reservationsFetchFailed}
         onClose={() => setEditing(null)}
-        onCommit={(value) => {
-          if (!editing) return
-          setOverride(editing.staff.id, toDateKey(editing.day), value)
-        }}
+        onCommit={handleCommit}
       />
     </>
   )
