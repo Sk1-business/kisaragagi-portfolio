@@ -1,5 +1,7 @@
 import type { AuthAudience, AuthMode, UserRole } from "@/types"
 
+export type Gender = "male" | "female" | "not_specified"
+
 export interface AuthFormValues {
   email: string
   password: string
@@ -7,6 +9,8 @@ export interface AuthFormValues {
   name?: string
   phone?: string
   shopSlug?: string
+  gender?: Gender
+  birthDate?: string
 }
 
 export interface AuthFormCardProps {

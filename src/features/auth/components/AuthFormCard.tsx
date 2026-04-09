@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { ArrowRight, CheckCircle2, Dumbbell, Eye, EyeOff } from "lucide-react"
+import { ArrowRight, CheckCircle2, ChevronDown, Dumbbell, Eye, EyeOff, X } from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -10,8 +10,9 @@ import { getLineLoginUrl } from "@/features/auth/api/customerAuthApi"
 import mockUsers from "@/features/auth/api/mockUsers.json"
 import { AUTH_AUDIENCE_ALLOWED_ROLES, AUTH_AUDIENCE_TEXT, AUTH_TEXT } from "@/features/auth/constants"
 import { useAuthNavigation, type RegisteredInfo } from "@/features/auth/hooks/useAuthNavigation"
-import type { AuthFormCardProps, MockUser } from "@/features/auth/types/auth"
+import type { AuthFormCardProps, Gender, MockUser } from "@/features/auth/types/auth"
 import { API_BASE } from "@/lib/apiBase"
+import { fetchSalonPage } from "@/features/user/api/userSalonApi"
 import { persistShopSlug, resolveShopSlug } from "@/lib/shopSlug"
 import {
   isCompletePhoneSegments,
@@ -37,23 +38,41 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "STAFF", label: "スタッフ (STAFF)" },
 ]
 
+const GENDER_OPTIONS: { value: Gender; label: string }[] = [
+  { value: "male", label: "男性" },
+  { value: "female", label: "女性" },
+  { value: "not_specified", label: "回答しない" },
+]
+
 export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   const [searchParams] = useSearchParams()
   const text = AUTH_TEXT[mode]
   const audienceText = AUTH_AUDIENCE_TEXT[audience]
   const { submit } = useAuthNavigation(audience, mode)
   const isCustomerPortal = audience === "CUSTOMER_PORTAL"
-  const [shopSlugInput, setShopSlugInput] = useState(
+  const [shopSlug] = useState(
     () => resolveShopSlug(searchParams.get("shopId") ?? undefined) ?? "",
   )
+  const [salonName, setSalonName] = useState<string | null>(null)
   const [loginError, setLoginError] = useState("")
   const [registeredInfo, setRegisteredInfo] = useState<RegisteredInfo | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [phoneSegments, setPhoneSegments] = useState<PhoneSegments>(["", "", ""])
+  const [gender, setGender] = useState<Gender | "">("")
+  const [birthDateInput, setBirthDateInput] = useState("")
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [showTermsModal, setShowTermsModal] = useState(false)
   const isDev = import.meta.env.DEV
   const developmentUsers = (mockUsers as MockUser[]).filter((user) =>
     AUTH_AUDIENCE_ALLOWED_ROLES[audience].includes(user.role),
   )
+
+  useEffect(() => {
+    if (!isCustomerPortal || !shopSlug) return
+    fetchSalonPage(shopSlug)
+      .then((salon) => setSalonName(salon.salon_name))
+      .catch(() => {})
+  }, [isCustomerPortal, shopSlug])
 
   const sessionReason = searchParams.get("reason")
   const customerSessionNotice =
@@ -66,6 +85,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
           : null
 
   function withShopId(path: string) {
+    if (shopSlug) return `${path}?shopId=${encodeURIComponent(shopSlug)}`
     return path
   }
 
@@ -75,6 +95,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
     const formData = new FormData(event.currentTarget)
     const email = String(formData.get("email") ?? "").trim().toLowerCase()
     const password = String(formData.get("password") ?? "")
+    const passwordConfirm = String(formData.get("passwordConfirm") ?? "")
     const signupRole = isCustomerPortal
       ? "CUSTOMER"
       : (String(formData.get("role") ?? "ADMIN") as UserRole)
@@ -83,18 +104,35 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
     const firstName = String(formData.get("firstName") ?? "")
     const phone = joinPhoneSegments(phoneSegments)
     const name = lastName && firstName ? `${lastName} ${firstName}` : undefined
-    const shopSlug = shopSlugInput.trim() || undefined
+    const resolvedShopSlug = shopSlug.trim() || undefined
 
+    const birthDate = birthDateInput.trim()
+
+    if (mode === "signup" && password !== passwordConfirm) {
+      setLoginError("パスワードが一致しません。")
+      return
+    }
     if (mode === "signup" && isCustomerPortal && !isCompletePhoneSegments(phoneSegments)) {
       setLoginError("電話番号は数字のみで3-4-4桁を入力してください。")
       return
     }
-    if (isCustomerPortal && !shopSlug) {
-      setLoginError("店舗情報を入力してください。")
+    if (mode === "signup" && isCustomerPortal && !gender) {
+      setLoginError("性別を選択してください。")
       return
     }
-    if (shopSlug) {
-      persistShopSlug(shopSlug)
+    if (mode === "signup" && isCustomerPortal) {
+      const bdError = validateBirthDate(birthDate)
+      if (bdError) {
+        setLoginError(bdError)
+        return
+      }
+    }
+    if (mode === "signup" && isCustomerPortal && !agreedToTerms) {
+      setLoginError("利用規約に同意してください。")
+      return
+    }
+    if (resolvedShopSlug) {
+      persistShopSlug(resolvedShopSlug)
     }
 
     const result = await submit({
@@ -103,7 +141,9 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
       signupRole,
       name,
       phone: phone || undefined,
-      shopSlug,
+      shopSlug: resolvedShopSlug,
+      gender: gender || undefined,
+      birthDate: birthDate ? birthDate.replace(/\//g, "-") : undefined,
     })
 
     if (result.ok) {
@@ -189,6 +229,9 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               <h2 className="mt-2 text-2xl font-bold tracking-tight text-neutral-900">
                 {text.title}
               </h2>
+              {salonName ? (
+                <p className="mt-1.5 text-sm font-medium text-neutral-700">{salonName}</p>
+              ) : null}
               <p className="mt-1 text-sm text-neutral-500">{text.description}</p>
             </div>
 
@@ -203,7 +246,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
 
             {isCustomerPortal ? (
               <>
-                <LineLoginButton shopSlug={shopSlugInput.trim() || undefined} onError={setLoginError} />
+                <LineLoginButton shopSlug={shopSlug.trim() || undefined} onError={setLoginError} />
                 <div className="relative my-6">
                   <div className="absolute inset-0 flex items-center">
                     <span className="w-full border-t border-neutral-200" />
@@ -218,23 +261,6 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
             ) : null}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {isCustomerPortal ? (
-                <FieldGroup label="店舗情報">
-                  <Input
-                    id="shopSlug"
-                    name="shopSlug"
-                    autoComplete="off"
-                    placeholder="店舗情報を入力"
-                    value={shopSlugInput}
-                    onChange={(event) => {
-                      setShopSlugInput(event.target.value)
-                      setLoginError("")
-                    }}
-                    required
-                    className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
-                  />
-                </FieldGroup>
-              ) : null}
               <FieldGroup label="メールアドレス">
                 <Input
                   id="email"
@@ -246,6 +272,43 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                   className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
                 />
               </FieldGroup>
+
+              <FieldGroup label="パスワード">
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    placeholder="••••••••"
+                    required
+                    className="h-11 rounded-lg border-neutral-200 bg-neutral-50 pr-10 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 transition-colors hover:text-neutral-700"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "パスワードを隠す" : "パスワードを表示"}
+                  >
+                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
+                </div>
+              </FieldGroup>
+
+              {mode === "signup" ? (
+                <FieldGroup label="パスワード（確認）">
+                  <Input
+                    id="passwordConfirm"
+                    name="passwordConfirm"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    placeholder="••••••••"
+                    required
+                    className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                  />
+                </FieldGroup>
+              ) : null}
 
               {mode === "signup" && isCustomerPortal ? (
                 <>
@@ -314,31 +377,61 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                       />
                     </div>
                   </FieldGroup>
+
+                  <FieldGroup label="性別">
+                    <div className="relative">
+                      <select
+                        id="gender"
+                        name="gender"
+                        value={gender}
+                        onChange={(e) => {
+                          setGender(e.target.value as Gender)
+                          setLoginError("")
+                        }}
+                        required
+                        className="h-11 w-full appearance-none rounded-lg border border-neutral-200 bg-neutral-50 px-3 pr-9 text-sm outline-none transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      >
+                        <option value="" disabled>
+                          選択してください
+                        </option>
+                        {GENDER_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-neutral-400" />
+                    </div>
+                  </FieldGroup>
+
+                  <FieldGroup label="生年月日">
+                    <BirthDateInput value={birthDateInput} onChange={(v) => { setBirthDateInput(v); setLoginError("") }} />
+                  </FieldGroup>
+
+                  <div className="flex items-start gap-2.5 pt-1">
+                    <input
+                      id="agreeTerms"
+                      type="checkbox"
+                      checked={agreedToTerms}
+                      onChange={(e) => {
+                        setAgreedToTerms(e.target.checked)
+                        setLoginError("")
+                      }}
+                      className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-neutral-300 accent-black"
+                    />
+                    <label htmlFor="agreeTerms" className="text-sm leading-snug text-neutral-600">
+                      <button
+                        type="button"
+                        onClick={() => setShowTermsModal(true)}
+                        className="font-semibold text-black underline decoration-neutral-300 underline-offset-4 transition-colors hover:decoration-black"
+                      >
+                        利用規約
+                      </button>
+                      に同意する
+                    </label>
+                  </div>
                 </>
               ) : null}
-
-              <FieldGroup label="パスワード">
-                <div className="relative">
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                    placeholder="••••••••"
-                    required
-                    className="h-11 rounded-lg border-neutral-200 bg-neutral-50 pr-10 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
-                  />
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 transition-colors hover:text-neutral-700"
-                    onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? "パスワードを隠す" : "パスワードを表示"}
-                  >
-                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                  </button>
-                </div>
-              </FieldGroup>
 
               {mode === "signup" && !isCustomerPortal ? (
                 <FieldGroup label="ロール">
@@ -371,6 +464,10 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                 </div>
               ) : null}
             </form>
+
+            {showTermsModal ? (
+              <TermsOfServiceModal onClose={() => setShowTermsModal(false)} />
+            ) : null}
 
             <div className="mt-6 flex items-center justify-between border-t border-neutral-100 pt-5">
               <div className="text-sm text-neutral-500">
@@ -524,6 +621,112 @@ function HealthCheck() {
   )
 }
 
+function TermsOfServiceModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose()
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+      document.body.style.overflow = ""
+    }
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div className="relative max-h-[80vh] w-full max-w-lg overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-neutral-100 px-6 py-4">
+          <h3 className="text-base font-bold text-neutral-900">利用規約</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
+            aria-label="閉じる"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(80vh - 120px)" }}>
+          <div className="space-y-4 text-sm leading-relaxed text-neutral-700">
+            <p className="text-xs font-medium text-neutral-400">最終更新日: 2025年1月1日</p>
+
+            <section>
+              <h4 className="mb-1.5 font-bold text-neutral-900">第1条（適用）</h4>
+              <p>
+                本規約は、当サービス（以下「本サービス」）の利用に関する条件を定めるものです。
+                登録ユーザーの皆さま（以下「ユーザー」）には、本規約に従って本サービスをご利用いただきます。
+              </p>
+            </section>
+
+            <section>
+              <h4 className="mb-1.5 font-bold text-neutral-900">第2条（利用登録）</h4>
+              <p>
+                登録希望者が本規約に同意の上、所定の方法によって利用登録を申請し、
+                当社がこれを承認することによって利用登録が完了するものとします。
+              </p>
+            </section>
+
+            <section>
+              <h4 className="mb-1.5 font-bold text-neutral-900">第3条（ユーザーIDおよびパスワードの管理）</h4>
+              <p>
+                ユーザーは、自己の責任において本サービスのユーザーIDおよびパスワードを適切に管理するものとします。
+                ユーザーIDおよびパスワードの管理不十分、使用上の過誤、第三者の使用等によって生じた損害に関する責任はユーザーが負うものとします。
+              </p>
+            </section>
+
+            <section>
+              <h4 className="mb-1.5 font-bold text-neutral-900">第4条（禁止事項）</h4>
+              <p>ユーザーは、本サービスの利用にあたり以下の行為をしてはなりません。</p>
+              <ul className="mt-1.5 list-inside list-disc space-y-1 pl-2 text-neutral-600">
+                <li>法令または公序良俗に違反する行為</li>
+                <li>犯罪行為に関連する行為</li>
+                <li>当社のサーバーまたはネットワークの機能を破壊したり妨害したりする行為</li>
+                <li>当社のサービスの運営を妨害するおそれのある行為</li>
+                <li>他のユーザーに関する個人情報等を収集または蓄積する行為</li>
+                <li>不正アクセスをし、またはこれを試みる行為</li>
+              </ul>
+            </section>
+
+            <section>
+              <h4 className="mb-1.5 font-bold text-neutral-900">第5条（個人情報の取り扱い）</h4>
+              <p>
+                当社は、本サービスの利用によって取得する個人情報については、
+                当社のプライバシーポリシーに従い適切に取り扱うものとします。
+              </p>
+            </section>
+
+            <section>
+              <h4 className="mb-1.5 font-bold text-neutral-900">第6条（免責事項）</h4>
+              <p>
+                当社は、本サービスに事実上または法律上の瑕疵がないことを明示的にも黙示的にも保証しておりません。
+                当社は、本サービスに起因してユーザーに生じたあらゆる損害について一切の責任を負いません。
+              </p>
+            </section>
+
+            <p className="pt-2 text-xs text-neutral-400">※ 本利用規約はサンプルです。正式な規約は別途定めます。</p>
+          </div>
+        </div>
+        <div className="border-t border-neutral-100 px-6 py-4">
+          <Button
+            type="button"
+            onClick={onClose}
+            className="h-10 w-full rounded-lg bg-black text-sm font-semibold text-white transition-all hover:bg-neutral-800"
+          >
+            閉じる
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LineLoginButton({ shopSlug, onError }: { shopSlug?: string; onError: (msg: string) => void }) {
   const [loading, setLoading] = useState(false)
 
@@ -549,4 +752,73 @@ function LineLoginButton({ shopSlug, onError }: { shopSlug?: string; onError: (m
       {loading ? "リダイレクト中…" : "LINEでログイン / 新規登録"}
     </button>
   )
+}
+
+function BirthDateInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 8)
+
+    let formatted = ""
+    for (let i = 0; i < raw.length; i++) {
+      formatted += raw[i]
+      if ((i === 3 || i === 5) && i < raw.length - 1) formatted += "/"
+    }
+    if (raw.length === 4 || raw.length === 6) formatted += "/"
+    onChange(formatted)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Backspace" && value.endsWith("/")) {
+      e.preventDefault()
+      onChange(value.slice(0, -2))
+    }
+  }
+
+  const filled = /^\d{4}\/\d{2}\/\d{2}$/.test(value)
+
+  return (
+    <div className="relative">
+      <Input
+        id="birthDate"
+        type="text"
+        inputMode="numeric"
+        autoComplete="bday"
+        placeholder="1990/01/15"
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        maxLength={10}
+        required
+        className={`h-11 rounded-lg border-neutral-200 bg-neutral-50 font-mono text-sm tracking-wider transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black ${
+          filled ? "pr-9" : ""
+        }`}
+      />
+      {filled ? (
+        <CheckCircle2 className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-emerald-500" />
+      ) : (
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-neutral-400">
+          YYYY/MM/DD
+        </span>
+      )}
+    </div>
+  )
+}
+
+function validateBirthDate(value: string): string | null {
+  if (!value) return "生年月日を入力してください。"
+  if (!/^\d{4}\/\d{2}\/\d{2}$/.test(value)) return "生年月日を YYYY/MM/DD の形式で入力してください。"
+
+  const [y, m, d] = value.split("/").map(Number)
+  const date = new Date(y, m - 1, d)
+
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
+    return "存在しない日付です。正しい生年月日を入力してください。"
+  }
+  if (date > new Date()) {
+    return "未来の日付は指定できません。"
+  }
+  if (y < 1900) {
+    return "1900年以降の日付を入力してください。"
+  }
+  return null
 }
