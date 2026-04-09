@@ -3,6 +3,10 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  fetchAdminSettings,
+  type BusinessHoursItem,
+} from "@/features/admin/api/adminSettingsApi"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import { fetchAdminTrainerNames } from "@/features/admin/api/trainersApi"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
@@ -54,6 +58,8 @@ export function AdminCalendarPage() {
   )
   const [calendarListLoading, setCalendarListLoading] = useState(true)
   const [calendarListError, setCalendarListError] = useState(false)
+  const [businessHoursItems, setBusinessHoursItems] = useState<BusinessHoursItem[]>([])
+  const [holidayDateKeys, setHolidayDateKeys] = useState<ReadonlySet<string>>(() => new Set())
 
   const viewMode = useMemo(
     () => parseViewParam(searchParams.get("view")),
@@ -126,6 +132,29 @@ export function AdminCalendarPage() {
         setTrainersError(true)
       } finally {
         if (!cancelled) setTrainersLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const s = await fetchAdminSettings()
+        if (cancelled) return
+        setBusinessHoursItems(s.business_hours)
+        setHolidayDateKeys(new Set(s.holidays))
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setBusinessHoursItems([])
+        setHolidayDateKeys(new Set())
       }
     })()
     return () => {
@@ -413,6 +442,8 @@ export function AdminCalendarPage() {
               reservations={filteredReservations}
               staffList={staffList}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
+              holidayDateKeys={holidayDateKeys}
+              businessHoursItems={businessHoursItems}
             />
           )}
           {viewMode === "week" && (
@@ -421,6 +452,8 @@ export function AdminCalendarPage() {
               reservations={filteredReservations}
               staffList={staffList}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
+              holidayDateKeys={holidayDateKeys}
+              businessHoursItems={businessHoursItems}
             />
           )}
           {viewMode === "month" && (
@@ -435,6 +468,8 @@ export function AdminCalendarPage() {
                   p.set("date", ymd(startOfDay(day)))
                 })
               }}
+              holidayDateKeys={holidayDateKeys}
+              businessHoursItems={businessHoursItems}
             />
           )}
         </CardContent>

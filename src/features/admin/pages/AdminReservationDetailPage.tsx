@@ -9,7 +9,9 @@ import {
   groupTrainerShiftRowsByDate,
 } from "@/features/admin/api/trainerShiftsApi"
 import {
+  type AdminReservationApiStatus,
   fetchAdminReservationById,
+  patchAdminReservationStatus,
   putAdminReservationNotes,
   putAdminReservationTrainerId,
 } from "@/features/admin/api/reservationsApi"
@@ -26,11 +28,7 @@ import type { Reservation } from "@/features/admin/types/reservation"
 export function AdminReservationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const {
-    reservations,
-    replaceReservations,
-    updateReservationStatus,
-  } = useAdminReservations()
+  const { reservations, replaceReservations } = useAdminReservations()
   const reservationsRef = useRef(reservations)
   reservationsRef.current = reservations
   const { staffList, loading: staffLoading } = useStaff()
@@ -40,6 +38,7 @@ export function AdminReservationDetailPage() {
   const [detailError, setDetailError] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [memoSaving, setMemoSaving] = useState(false)
+  const [statusSaving, setStatusSaving] = useState(false)
   const [assigneeSaving, setAssigneeSaving] = useState(false)
   const [shiftCoverageByStaffId, setShiftCoverageByStaffId] = useState<
     Record<string, boolean>
@@ -207,6 +206,32 @@ export function AdminReservationDetailPage() {
     }
   }
 
+  const handleUpdateStatus = async (apiStatus: AdminReservationApiStatus) => {
+    if (!detail || !id) return
+    setSaveError(null)
+    setStatusSaving(true)
+    try {
+      await patchAdminReservationStatus(detail.id, apiStatus)
+      const fresh = await fetchAdminReservationById(id, staffList)
+      if (!fresh) {
+        throw new Error("FETCH_FAILED")
+      }
+      setDetail(fresh)
+      mergeReservationIntoList(fresh)
+    } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
+      setSaveError(
+        "ステータスの変更に失敗しました。通信またはサーバーを確認してください。",
+      )
+      throw e
+    } finally {
+      setStatusSaving(false)
+    }
+  }
+
   const handleUpdateAssignee = async (assigneeId: string) => {
     setSaveError(null)
     setAssigneeSaving(true)
@@ -255,9 +280,10 @@ export function AdminReservationDetailPage() {
         reservations={reservationsForOverlap}
         onClose={() => navigate(-1)}
         onUpdateMemo={handleUpdateMemo}
-        onUpdateStatus={(status) => updateReservationStatus(detail.id, status)}
+        onUpdateStatus={handleUpdateStatus}
         onUpdateAssignee={handleUpdateAssignee}
         memoSaving={memoSaving}
+        statusSaving={statusSaving}
         assigneeSaving={assigneeSaving}
         shiftCoverageByStaffId={shiftCoverageByStaffId}
         shiftCoverageLoading={shiftCoverageLoading}

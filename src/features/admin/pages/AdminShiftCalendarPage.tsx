@@ -23,6 +23,7 @@ export function AdminShiftCalendarPage() {
   const [reservationsFetchFailed, setReservationsFetchFailed] = useState(false)
   const [currentDate, setCurrentDate] = useState(() => startOfDay(new Date()))
   const [businessHoursItems, setBusinessHoursItems] = useState<BusinessHoursItem[]>([])
+  const [holidayDateKeys, setHolidayDateKeys] = useState<ReadonlySet<string>>(() => new Set())
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [settingsError, setSettingsError] = useState(false)
 
@@ -38,7 +39,10 @@ export function AdminShiftCalendarPage() {
       setSettingsError(false)
       try {
         const s = await fetchAdminSettings()
-        if (!cancelled) setBusinessHoursItems(s.business_hours)
+        if (!cancelled) {
+          setBusinessHoursItems(s.business_hours)
+          setHolidayDateKeys(new Set(s.holidays))
+        }
       } catch {
         if (!cancelled) setSettingsError(true)
       } finally {
@@ -161,6 +165,7 @@ export function AdminShiftCalendarPage() {
               date={currentDate}
               staffList={staffList}
               businessHoursItems={businessHoursItems}
+              holidayDateKeys={holidayDateKeys}
               settingsLoading={settingsLoading}
               reservations={reservations}
               reservationsLoading={reservationsLoading}

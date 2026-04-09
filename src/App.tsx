@@ -12,6 +12,8 @@ import {
 } from "@/features/auth/pages"
 import { AdminCalendarPage } from "@/features/admin/pages/AdminCalendarPage"
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage"
+import { AdminNewReservationConfirmPage } from "@/features/admin/pages/AdminNewReservationConfirmPage"
+import { AdminNewReservationPage } from "@/features/admin/pages/AdminNewReservationPage"
 import { AdminReservationDetailPage } from "@/features/admin/pages/AdminReservationDetailPage"
 import { AdminCancelledListPage } from "@/features/admin/pages/AdminCancelledListPage"
 import { AdminShiftCalendarPage } from "@/features/admin/pages/AdminShiftCalendarPage"
@@ -99,6 +101,11 @@ function App() {
           <Route path={ROUTES.adminShiftCalendar} element={<AdminShiftCalendarPage />} />
           <Route path={ROUTES.adminCancelled} element={<AdminCancelledListPage />} />
           <Route path={ROUTES.adminStaff} element={<AdminStaffPage />} />
+          <Route
+            path={ROUTES.adminNewReservationConfirm}
+            element={<AdminNewReservationConfirmPage />}
+          />
+          <Route path={ROUTES.adminNewReservation} element={<AdminNewReservationPage />} />
           <Route
             path={ROUTES.adminReservationDetail}
             element={<AdminReservationDetailPage />}

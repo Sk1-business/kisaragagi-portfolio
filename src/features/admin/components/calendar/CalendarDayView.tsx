@@ -1,10 +1,14 @@
-import type { Reservation } from "@/features/admin/types/reservation"
-import type { Staff } from "@/features/admin/types/staff"
+import type { BusinessHoursItem } from "@/features/admin/api/adminSettingsApi"
+import { getBusinessHoursForJsDate } from "@/features/admin/lib/businessHours"
 import {
+  ADMIN_CALENDAR_TIME_ZONE,
+  getDateKeyInTimeZone,
   getReservationsForDay,
   formatTimeRange,
   isCompactReservationTimelineBlock,
 } from "@/features/admin/lib/calendarUtils"
+import type { Reservation } from "@/features/admin/types/reservation"
+import type { Staff } from "@/features/admin/types/staff"
 import { layoutOverlappingIntervals } from "@/features/admin/lib/calendarOverlapLayout"
 import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
 
@@ -22,6 +26,8 @@ interface CalendarDayViewProps {
   reservations: Reservation[]
   staffList: Staff[]
   onSelectReservation: (r: Reservation) => void
+  holidayDateKeys?: ReadonlySet<string>
+  businessHoursItems?: BusinessHoursItem[]
 }
 
 function toMinutesFromDayStart(date: Date): number {
@@ -33,12 +39,35 @@ export function CalendarDayView({
   reservations,
   staffList,
   onSelectReservation,
+  holidayDateKeys,
+  businessHoursItems,
 }: CalendarDayViewProps) {
   const dayReservations = getReservationsForDay(reservations, date)
+  const dateKey = getDateKeyInTimeZone(date, ADMIN_CALENDAR_TIME_ZONE)
+  const isHoliday = holidayDateKeys != null && holidayDateKeys.has(dateKey)
+  const biz =
+    businessHoursItems != null && businessHoursItems.length > 0
+      ? getBusinessHoursForJsDate(businessHoursItems, date)
+      : null
+  const isWeekdayClosed = biz?.isClosed === true
 
   return (
     <div className="overflow-x-auto">
       <div className="min-w-[320px]">
+        {isHoliday || isWeekdayClosed ? (
+          <p
+            className="mb-2 rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground"
+            role="status"
+          >
+            {isHoliday ? (
+              <span className="text-amber-900 dark:text-amber-100">
+                この日は定休日（holidays）です。
+              </span>
+            ) : (
+              "この曜日は営業時間（business_hours）で休業です。"
+            )}
+          </p>
+        ) : null}
         <div className="grid grid-cols-[56px_1fr] gap-2">
           {/* 時間ラベル列 */}
           <div className="relative">

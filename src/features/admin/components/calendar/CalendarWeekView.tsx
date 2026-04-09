@@ -1,8 +1,8 @@
-import { addDays } from "@/features/admin/lib/calendarUtils"
-import type { Reservation } from "@/features/admin/types/reservation"
-import type { Staff } from "@/features/admin/types/staff"
+import type { BusinessHoursItem } from "@/features/admin/api/adminSettingsApi"
+import { getBusinessHoursForJsDate } from "@/features/admin/lib/businessHours"
 import {
   ADMIN_CALENDAR_TIME_ZONE,
+  addDays,
   getDateKeyInTimeZone,
   getIsoDateKeyInTimeZone,
   getReservationsInRange,
@@ -11,6 +11,8 @@ import {
   formatTimeRange,
   isCompactReservationTimelineBlock,
 } from "@/features/admin/lib/calendarUtils"
+import type { Reservation } from "@/features/admin/types/reservation"
+import type { Staff } from "@/features/admin/types/staff"
 import { layoutOverlappingIntervals } from "@/features/admin/lib/calendarOverlapLayout"
 import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
 
@@ -28,6 +30,8 @@ interface CalendarWeekViewProps {
   reservations: Reservation[]
   staffList: Staff[]
   onSelectReservation: (r: Reservation) => void
+  holidayDateKeys?: ReadonlySet<string>
+  businessHoursItems?: BusinessHoursItem[]
 }
 
 function toMinutesFromDayStart(date: Date): number {
@@ -72,6 +76,8 @@ export function CalendarWeekView({
   reservations,
   staffList,
   onSelectReservation,
+  holidayDateKeys,
+  businessHoursItems,
 }: CalendarWeekViewProps) {
   const weekStart = startOfWeek(date)
   const weekEnd = endOfDay(addDays(weekStart, 6))
@@ -94,6 +100,13 @@ export function CalendarWeekView({
             const dayOfWeek = d.getDay()
             const isSun = dayOfWeek === 0
             const isSat = dayOfWeek === 6
+            const dateKey = getDateKeyInTimeZone(d, ADMIN_CALENDAR_TIME_ZONE)
+            const isHoliday = holidayDateKeys != null && holidayDateKeys.has(dateKey)
+            const biz =
+              businessHoursItems != null && businessHoursItems.length > 0
+                ? getBusinessHoursForJsDate(businessHoursItems, d)
+                : null
+            const isWeekdayClosed = biz?.isClosed === true
             return (
               <div
                 key={d.toISOString()}
@@ -105,8 +118,17 @@ export function CalendarWeekView({
                       : "bg-muted/30 text-muted-foreground"
                 }`}
               >
-                {d.getMonth() + 1}/{d.getDate()}{" "}
-                ({["日", "月", "火", "水", "木", "金", "土"][dayOfWeek]})
+                <span className="block">
+                  {d.getMonth() + 1}/{d.getDate()}{" "}
+                  ({["日", "月", "火", "水", "木", "金", "土"][dayOfWeek]})
+                </span>
+                {isHoliday ? (
+                  <span className="block text-[0.65rem] font-normal text-amber-900 dark:text-amber-100">
+                    定休
+                  </span>
+                ) : isWeekdayClosed ? (
+                  <span className="block text-[0.65rem] font-normal opacity-90">休業</span>
+                ) : null}
               </div>
             )
           })}

@@ -74,6 +74,19 @@ function AdminLayoutContent() {
           <Button asChild variant="ghost" size="sm" className="rounded-md">
             <NavLink to={ROUTES.adminCalendar}>予約カレンダー</NavLink>
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="rounded-md"
+            onClick={() =>
+              navigate(ROUTES.adminNewReservation, {
+                state: { bookingNotBeforeIso: new Date().toISOString() },
+              })
+            }
+          >
+            新規予約
+          </Button>
           <Button asChild variant="ghost" size="sm" className="rounded-md">
             <NavLink to={ROUTES.adminShiftCalendar}>シフトカレンダー</NavLink>
           </Button>

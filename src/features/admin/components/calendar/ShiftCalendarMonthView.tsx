@@ -13,6 +13,7 @@ import {
   type ShiftEditCommit,
 } from "@/features/admin/components/calendar/ShiftAvailabilityEditDialog"
 import {
+  ADMIN_CALENDAR_TIME_ZONE,
   startOfMonth,
   endOfMonth,
   addDays,
@@ -20,6 +21,7 @@ import {
   startOfWeek,
   toDateKey,
   WEEKDAY_LABELS,
+  getDateKeyInTimeZone,
 } from "@/features/admin/lib/calendarUtils"
 import { getBusinessHoursForJsDate } from "@/features/admin/lib/businessHours"
 import type { Reservation } from "@/features/admin/types/reservation"
@@ -31,6 +33,8 @@ interface ShiftCalendarMonthViewProps {
   date: Date
   staffList: Staff[]
   businessHoursItems: BusinessHoursItem[]
+  /** `GET /api/admin/settings` の `holidays`（YYYY-MM-DD） */
+  holidayDateKeys?: ReadonlySet<string>
   settingsLoading: boolean
   reservations: Reservation[]
   reservationsLoading: boolean
@@ -59,6 +63,7 @@ export function ShiftCalendarMonthView({
   date,
   staffList,
   businessHoursItems,
+  holidayDateKeys,
   settingsLoading,
   reservations,
   reservationsLoading,
@@ -140,13 +145,13 @@ export function ShiftCalendarMonthView({
       <div className="overflow-x-auto">
         <div className="min-w-[320px]">
           <div className="grid grid-cols-7 border border-border">
-            {WEEKDAY_LABELS.map((label) => (
+            {WEEKDAY_LABELS.map((label, i) => (
               <div
                 key={label}
                 className={`border-b border-border py-1.5 text-center text-xs font-medium ${
-                  label === "日"
+                  i === 6
                     ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
-                    : label === "土"
+                    : i === 5
                       ? "bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400"
                       : "bg-muted/50 text-muted-foreground"
                 }`}
@@ -157,11 +162,23 @@ export function ShiftCalendarMonthView({
             {weeks.flat().map((day) => {
               const inMonth = isCurrentMonth(day)
               const dayNorm = startOfDay(new Date(day.getTime()))
+              const dateKey = getDateKeyInTimeZone(day, ADMIN_CALENDAR_TIME_ZONE)
+              const isHoliday =
+                holidayDateKeys != null &&
+                holidayDateKeys.size > 0 &&
+                holidayDateKeys.has(dateKey)
+              const biz =
+                businessHoursItems.length > 0
+                  ? getBusinessHoursForJsDate(businessHoursItems, day)
+                  : null
+              const isWeekdayClosed = biz?.isClosed === true
               return (
                 <div
                   key={day.toISOString()}
                   className={`min-h-[120px] border-b border-r border-border p-1 last:border-r-0 ${
                     inMonth ? "bg-background" : "bg-muted/20"
+                  } ${isHoliday ? "bg-amber-50/90 dark:bg-amber-950/25" : ""} ${
+                    !isHoliday && isWeekdayClosed && inMonth ? "bg-muted/50" : ""
                   }`}
                 >
                   <span
@@ -171,6 +188,15 @@ export function ShiftCalendarMonthView({
                   >
                     {day.getDate()}
                   </span>
+                  {isHoliday ? (
+                    <span className="mt-0.5 block text-[0.65rem] leading-tight text-amber-800 dark:text-amber-200">
+                      定休
+                    </span>
+                  ) : isWeekdayClosed && inMonth ? (
+                    <span className="mt-0.5 block text-[0.65rem] leading-tight text-muted-foreground">
+                      休業
+                    </span>
+                  ) : null}
                   <div className="mt-0.5 space-y-0.5">
                     {sortedStaff.map((staff) => {
                       const resolved = resolveStaffDay(staff, dayNorm)

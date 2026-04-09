@@ -413,6 +413,42 @@ function mapStructStatusToReservationStatus(s: string): ReservationStatus {
   }
 }
 
+/** `PATCH …/reservations/{id}/status` のリクエストボディ `status` と一致 */
+export type AdminReservationApiStatus = "BOOKED" | "DONE" | "NOSHOW" | "CANCELED"
+
+/** フロントの `ReservationStatus` を API のステータス文字列に変換 */
+export function mapReservationStatusToApiStatus(
+  s: ReservationStatus,
+): AdminReservationApiStatus {
+  switch (s) {
+    case "CONFIRMED":
+      return "BOOKED"
+    case "COMPLETED":
+      return "DONE"
+    case "NO_SHOW":
+      return "NOSHOW"
+    case "CANCELLED":
+      return "CANCELED"
+    default:
+      return "BOOKED"
+  }
+}
+
+export function adminReservationApiStatusLabel(
+  status: AdminReservationApiStatus,
+): string {
+  switch (status) {
+    case "BOOKED":
+      return "予約確定"
+    case "DONE":
+      return "完了"
+    case "NOSHOW":
+      return "ノーショー（無断キャンセル）"
+    case "CANCELED":
+      return "キャンセル"
+  }
+}
+
 export function mapApiReservationRowToReservation(
   row: AdminReservationOut,
   staffList: Staff[],
@@ -643,4 +679,145 @@ export async function putAdminReservationNotes(
   if (!res.ok) {
     throw new Error("FETCH_FAILED")
   }
+}
+
+/**
+ * `PATCH /api/admin/reservations/{reservation_id}/status` — ステータスのみ更新（要ログイン Cookie）
+ */
+export async function patchAdminReservationStatus(
+  reservationId: string,
+  status: AdminReservationApiStatus,
+): Promise<void> {
+  const url = `${ADMIN_RESERVATIONS_LIST_PATH}/${encodeURIComponent(reservationId)}/status`
+  const res = await apiFetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  })
+  if (res.status === 401) {
+    throw new Error("UNAUTHORIZED")
+  }
+  if (!res.ok) {
+    throw new Error("FETCH_FAILED")
+  }
+}
+
+/**
+ * 管理者 API のエラーレスポンスから、画面上にそのまま出せる説明文を組み立てる。
+ * FastAPI: `detail` が文字列 / `ValidationError` の配列（`loc` + `msg`）などに対応。
+ */
+export async function parseAdminApiErrorDetail(res: Response): Promise<string | null> {
+  const text = await res.text()
+  if (!text.trim()) return null
+  try {
+    const j = JSON.parse(text) as unknown
+    if (!j || typeof j !== "object") return text.trim().slice(0, 2000)
+    const o = j as Record<string, unknown>
+    if (typeof o.message === "string" && o.message.trim()) return o.message.trim()
+
+    const err = o.error
+    if (typeof err === "string" && err.trim()) return err.trim()
+
+    const d = o.detail
+    if (typeof d === "string") return d
+    if (Array.isArray(d)) {
+      const parts = d.map((item) => formatFastApiDetailItem(item))
+      const s = parts.filter(Boolean).join(" ")
+      return s || null
+    }
+    if (d && typeof d === "object") {
+      return JSON.stringify(d).slice(0, 2000)
+    }
+  } catch {
+    return text.trim().slice(0, 2000)
+  }
+  return null
+}
+
+function formatFastApiDetailItem(item: unknown): string {
+  if (item == null) return ""
+  if (typeof item === "string") return item
+  if (typeof item !== "object") return String(item)
+  const it = item as {
+    msg?: unknown
+    loc?: unknown
+    type?: unknown
+  }
+  const msg = typeof it.msg === "string" ? it.msg : ""
+  const loc = Array.isArray(it.loc)
+    ? it.loc.map((x) => (typeof x === "string" || typeof x === "number" ? String(x) : "")).filter(Boolean)
+    : []
+  const locStr = loc.length ? loc.join(" → ") : ""
+  if (locStr && msg) return `${locStr}: ${msg}`
+  if (msg) return msg
+  try {
+    return JSON.stringify(item)
+  } catch {
+    return String(item)
+  }
+}
+
+/** `POST /api/admin/reservations` のリクエストボディ（snake_case） */
+export interface AdminCreateReservationRequestBody {
+  menu_id: string
+  start_at: string
+  /** メニュー所要時間から算出した終了時刻（ISO 8601）。多くのバックエンドで必須 */
+  end_at: string
+  customer_name: string
+  customer_email: string
+  trainer_id?: string | null
+  customer_id?: string | null
+  customer_phone?: string | null
+  notes?: string | null
+}
+
+/**
+ * `POST /api/admin/reservations` — 管理者による代理予約作成（要ログイン Cookie）
+ */
+export async function postAdminReservationCreate(
+  body: AdminCreateReservationRequestBody,
+): Promise<{ reservation_id: string } | void> {
+  const payload: Record<string, unknown> = {
+    menu_id: body.menu_id,
+    start_at: body.start_at,
+    end_at: body.end_at,
+    customer_name: body.customer_name.trim(),
+    customer_email: body.customer_email.trim(),
+  }
+  const tid = body.trainer_id?.trim()
+  if (tid) payload.trainer_id = normalizeTrainerIdForApi(tid)
+  const cid = body.customer_id?.trim()
+  if (cid) payload.customer_id = cid
+  const phone = body.customer_phone?.trim()
+  if (phone) payload.customer_phone = phone
+  const notes = body.notes?.trim()
+  if (notes) payload.notes = notes
+
+  const res = await apiFetch(ADMIN_RESERVATIONS_LIST_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  if (res.status === 401) {
+    throw new Error("UNAUTHORIZED")
+  }
+  if (!res.ok) {
+    const detail = await parseAdminApiErrorDetail(res)
+    throw new Error(detail ?? `FETCH_FAILED:${res.status}`)
+  }
+  const text = await res.text()
+  if (!text.trim()) return
+  try {
+    const raw = JSON.parse(text) as unknown
+    if (raw && typeof raw === "object") {
+      const o = raw as Record<string, unknown>
+      const idRaw = o.reservation_id ?? o.reservationId ?? o.id
+      if (idRaw != null && String(idRaw).trim()) {
+        return { reservation_id: String(idRaw).trim() }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return
 }

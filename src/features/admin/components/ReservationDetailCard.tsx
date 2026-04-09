@@ -18,6 +18,11 @@ import {
 } from "@/features/admin/api/staffApi"
 import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
 import { hasConfirmedOverlapForAssignee } from "@/features/admin/lib/reservationOverlap"
+import {
+  type AdminReservationApiStatus,
+  adminReservationApiStatusLabel,
+  mapReservationStatusToApiStatus,
+} from "@/features/admin/api/reservationsApi"
 import { X } from "lucide-react"
 
 interface ReservationDetailCardProps {
@@ -28,12 +33,17 @@ interface ReservationDetailCardProps {
   onClose: () => void
   /** 指定時はメモを管理者が編集可能（非同期可・失敗時は編集を閉じない） */
   onUpdateMemo?: (memo: string | undefined) => void | Promise<void>
-  /** 指定時はステータスを編集可能（変更時は確認後に呼ぶ） */
-  onUpdateStatus?: (status: "CONFIRMED" | "CANCELLED") => void
+  /**
+   * 指定時はステータスを編集可能（変更時は確認後に呼ぶ）。
+   * `PATCH /api/admin/reservations/{id}/status` 用の値（BOOKED / DONE / NOSHOW / CANCELED）
+   */
+  onUpdateStatus?: (status: AdminReservationApiStatus) => void | Promise<void>
   /** 指定時は担当者を編集可能（非同期可・失敗時は確認を閉じない） */
   onUpdateAssignee?: (assigneeId: string) => void | Promise<void>
   /** メモ保存 API 実行中 */
   memoSaving?: boolean
+  /** ステータス変更 API 実行中 */
+  statusSaving?: boolean
   /** 担当者変更 API 実行中 */
   assigneeSaving?: boolean
   /**
@@ -56,14 +66,14 @@ export function ReservationDetailCard({
   onUpdateStatus,
   onUpdateAssignee,
   memoSaving = false,
+  statusSaving = false,
   assigneeSaving = false,
   shiftCoverageByStaffId,
   shiftCoverageLoading = false,
   shiftCoverageError = false,
 }: ReservationDetailCardProps) {
   const startDate = new Date(reservation.startAt)
-  const effectiveStatus: "CONFIRMED" | "CANCELLED" =
-    reservation.status === "CANCELLED" ? "CANCELLED" : "CONFIRMED"
+  const currentApiStatus = mapReservationStatusToApiStatus(reservation.status)
 
   /** この時間帯にほかの確定予約がなければ選択可。現在の担当は常に可。 */
   const canSelectStaffForSlot = (staffId: string) =>
@@ -114,8 +124,10 @@ export function ReservationDetailCard({
   const [editingMemo, setEditingMemo] = useState(false)
   const [memoDraft, setMemoDraft] = useState(reservation.memo ?? "")
   const [editingStatus, setEditingStatus] = useState(false)
-  const [statusDraft, setStatusDraft] = useState<"CONFIRMED" | "CANCELLED">(effectiveStatus)
-  const [statusConfirm, setStatusConfirm] = useState<"CONFIRMED" | "CANCELLED" | null>(null)
+  const [statusDraft, setStatusDraft] = useState<AdminReservationApiStatus>(() =>
+    mapReservationStatusToApiStatus(reservation.status),
+  )
+  const [statusConfirm, setStatusConfirm] = useState<AdminReservationApiStatus | null>(null)
   const [editingAssignee, setEditingAssignee] = useState(false)
   const [assigneeDraft, setAssigneeDraft] = useState(() =>
     resolveReservationStaffIdForUi(reservation, staffList),
@@ -131,9 +143,9 @@ export function ReservationDetailCard({
 
   useEffect(() => {
     if (!editingStatus) {
-      setStatusDraft(effectiveStatus)
+      setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
     }
-  }, [reservation.status, reservation.id, editingStatus, effectiveStatus])
+  }, [reservation.status, reservation.id, editingStatus])
 
   useEffect(() => {
     if (!editingAssignee) {
@@ -380,7 +392,7 @@ export function ReservationDetailCard({
                 size="sm"
                 className="h-7 rounded-md px-2 text-xs"
                 onClick={() => {
-                  setStatusDraft(effectiveStatus)
+                  setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
                   setEditingStatus(true)
                 }}
               >
@@ -398,11 +410,13 @@ export function ReservationDetailCard({
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={statusDraft}
                 onChange={(e) =>
-                  setStatusDraft(e.target.value as "CONFIRMED" | "CANCELLED")
+                  setStatusDraft(e.target.value as AdminReservationApiStatus)
                 }
               >
-                <option value="CONFIRMED">確定</option>
-                <option value="CANCELLED">キャンセル</option>
+                <option value="BOOKED">予約確定</option>
+                <option value="DONE">完了</option>
+                <option value="NOSHOW">ノーショー（無断キャンセル）</option>
+                <option value="CANCELED">キャンセル</option>
               </select>
               <p className="text-xs text-muted-foreground">
                 「キャンセル」にするとカレンダーから非表示になり、キャンセル一覧に表示されます。
@@ -412,8 +426,9 @@ export function ReservationDetailCard({
                   type="button"
                   size="sm"
                   className="rounded-md"
+                  disabled={statusSaving}
                   onClick={() => {
-                    if (statusDraft === effectiveStatus) {
+                    if (statusDraft === currentApiStatus) {
                       setEditingStatus(false)
                       return
                     }
@@ -428,7 +443,7 @@ export function ReservationDetailCard({
                   size="sm"
                   className="rounded-md"
                   onClick={() => {
-                    setStatusDraft(effectiveStatus)
+                    setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
                     setEditingStatus(false)
                   }}
                 >
@@ -437,9 +452,7 @@ export function ReservationDetailCard({
               </div>
             </div>
           ) : (
-            <p>
-              {effectiveStatus === "CANCELLED" ? "キャンセル" : "確定"}
-            </p>
+            <p>{adminReservationApiStatusLabel(currentApiStatus)}</p>
           )}
         </div>
         <div>
@@ -537,9 +550,11 @@ export function ReservationDetailCard({
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm">
-                {statusConfirm === "CANCELLED"
-                  ? "この予約を「キャンセル」に変更しますか？"
-                  : "この予約を「確定」に変更しますか？"}
+                この予約のステータスを「
+                <strong>
+                  {statusConfirm ? adminReservationApiStatusLabel(statusConfirm) : ""}
+                </strong>
+                」に変更しますか？
               </p>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
@@ -553,13 +568,19 @@ export function ReservationDetailCard({
                 <Button
                   type="button"
                   className="rounded-md"
-                  onClick={() => {
-                    onUpdateStatus(statusConfirm)
-                    setStatusConfirm(null)
-                    setEditingStatus(false)
+                  disabled={statusSaving}
+                  onClick={async () => {
+                    if (!statusConfirm || !onUpdateStatus) return
+                    try {
+                      await Promise.resolve(onUpdateStatus(statusConfirm))
+                      setStatusConfirm(null)
+                      setEditingStatus(false)
+                    } catch {
+                      /* 親がエラー表示 */
+                    }
                   }}
                 >
-                  はい
+                  {statusSaving ? "保存中…" : "はい"}
                 </Button>
               </div>
             </CardContent>

@@ -116,6 +116,66 @@ export function isoToMinutesInAdminCalendarTz(iso: string): number {
   return isoToMinutesInTimeZone(iso, ADMIN_CALENDAR_TIME_ZONE)
 }
 
+/**
+ * `YYYY-MM-DD` と `HH:mm`（または `HH:mm:ss`）を組み合わせ、管理カレンダー TZ（JST）の瞬間を表す ISO 8601（UTC）に変換。
+ */
+export function combineDateAndTimeToAdminTzIso(
+  dateYmd: string,
+  timeHm: string,
+): string {
+  const t = timeHm.length === 5 ? `${timeHm}:00` : timeHm
+  return new Date(`${dateYmd}T${t}+09:00`).toISOString()
+}
+
+/** ISO 開始時刻から指定分後の終了時刻（UTC ISO） */
+export function addMinutesToIso(startIso: string, minutes: number): string {
+  return new Date(new Date(startIso).getTime() + minutes * 60_000).toISOString()
+}
+
+/** 管理カレンダー TZ での時刻を `HH:mm` で返す（`input type="time"` の min 等に使用） */
+export function formatTimeHmInAdminTz(iso: string): string {
+  const d = new Date(iso)
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: ADMIN_CALENDAR_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d)
+  const h = parts.find((p) => p.type === "hour")?.value ?? "00"
+  const m = parts.find((p) => p.type === "minute")?.value ?? "00"
+  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`
+}
+
+/**
+ * 基準時刻 `notBeforeIso` より前にならないよう `{ dateYmd, timeHm }` を調整（壁時計は JST）。
+ */
+export function ensureSlotNotBeforeAdminTz(
+  dateYmd: string,
+  timeHm: string,
+  notBeforeIso: string,
+): { dateYmd: string; timeHm: string } {
+  const slotIso = combineDateAndTimeToAdminTzIso(dateYmd, timeHm)
+  if (new Date(slotIso).getTime() >= new Date(notBeforeIso).getTime()) {
+    return { dateYmd, timeHm }
+  }
+  const minYmd = getDateKeyInTimeZone(new Date(notBeforeIso), ADMIN_CALENDAR_TIME_ZONE)
+  const minTime = formatTimeHmInAdminTz(notBeforeIso)
+  return { dateYmd: minYmd, timeHm: minTime }
+}
+
+/** 基準時刻の直後を 15 分単位に切り上げた日付・時刻（新規予約の初期値用） */
+export function defaultNextReservationSlotAdminTz(
+  notBeforeIso: string,
+): { dateYmd: string; timeHm: string } {
+  const stepMs = 15 * 60_000
+  const t = Math.ceil(new Date(notBeforeIso).getTime() / stepMs) * stepMs
+  const d = new Date(t)
+  return {
+    dateYmd: getDateKeyInTimeZone(d, ADMIN_CALENDAR_TIME_ZONE),
+    timeHm: formatTimeHmInAdminTz(d.toISOString()),
+  }
+}
+
 /** 予約の startAt を指定 TZ の暦日 YYYY-MM-DD に変換（UTC の `...T23:00:00Z` は JST では翌日になるなど） */
 function getReservationDateKey(startAt: string): string {
   return getIsoDateKeyInTimeZone(startAt, ADMIN_CALENDAR_TIME_ZONE)
@@ -206,4 +266,8 @@ export function formatDateJaInTimeZone(d: Date, timeZone: string): string {
   })
 }
 
-export const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"]
+/**
+ * `startOfWeek`（月曜始まり）の列順と一致させる（0=月 … 6=日）。
+ * `business_hours.day_of_week`（0=月…6=日）とも同じ並び。
+ */
+export const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"]

@@ -26,3 +26,6 @@ export const ADMIN_RESERVATIONS_LIST_PATH = "/api/admin/reservations" as const
 
 /** Struct `app/api/admin/settings.py` — `GET /settings`（`business_hours` 等） */
 export const ADMIN_SETTINGS_PATH = "/api/admin/settings" as const
+
+/** メニュー一覧（`menu_id` 取得用）。バックエンドの `GET /menus` 等に合わせる */
+export const ADMIN_MENUS_LIST_PATH = "/api/admin/menus" as const
