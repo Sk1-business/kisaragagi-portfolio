@@ -7,6 +7,8 @@ export interface UserReservation {
   id: string
   date: string
   time: string
+  /** 施術終了（API の service_end_at）。想定時間帯表示用 */
+  serviceEndAt?: string | null
   mode: string
   trainerId: string | null
   trainerName: string | null
@@ -15,6 +17,9 @@ export interface UserReservation {
   confirmationToken?: string
   menuId?: string
   menuName?: string
+  customerName?: string
+  customerEmail?: string
+  customerPhone?: string | null
   /** 予約時に保存した希望決済手段（credit / paypay 等） */
   paymentMethod?: string | null
   /** reservations.payment_status（概略） */
@@ -108,6 +113,10 @@ interface ReservationDetailResponse {
   reservation_id: string
   menu_name: string
   start_at: string
+  service_end_at?: string | null
+  customer_name?: string
+  customer_email?: string
+  customer_phone?: string | null
   notes: string | null
   status: string
   can_cancel: boolean
@@ -251,12 +260,28 @@ function modeFromBookingTypeCode(code: "SHIMEI" | "OMAKASE"): "nomination" | "om
   return code === "SHIMEI" ? "nomination" : "omakase"
 }
 
+/** 予約入力・詳細・一覧の「想定時間」表示（開始〜service_end_at） */
+export function formatReservationExpectedTimeRange(
+  time: string,
+  serviceEndAtIso: string | null | undefined,
+): string {
+  if (!time) return "未選択"
+  if (!serviceEndAtIso?.trim()) return time
+  const parsed = new Date(serviceEndAtIso)
+  if (Number.isNaN(parsed.getTime())) return time
+  const hours = String(parsed.getHours()).padStart(2, "0")
+  const minutes = String(parsed.getMinutes()).padStart(2, "0")
+  const end = `${hours}:${minutes}`
+  return end && end !== time ? `${time}〜${end}` : time
+}
+
 /** 予約詳細・マイページで決済手段ラベル表示用 */
 export function formatReservationPaymentMethod(method: string | null | undefined): string {
   if (!method?.trim()) return "—"
   const m = method.trim().toLowerCase()
   if (m === "credit") return "クレジットカード"
   if (m === "paypay") return "PayPay"
+  if (m === "free") return "現地で決済"
   return method
 }
 
@@ -286,6 +311,7 @@ function toReservation(
     id: detail.reservation_id,
     date,
     time,
+    serviceEndAt: detail.service_end_at ?? null,
     mode: modeFromApi ?? meta?.mode ?? "omakase",
     trainerId: detail.trainer_id ?? meta?.trainerId ?? null,
     trainerName: detail.trainer_name ?? meta?.trainerName ?? null,
@@ -294,6 +320,9 @@ function toReservation(
     confirmationToken: meta?.confirmationToken,
     menuId: meta?.menuId,
     menuName: detail.menu_name || fallbackMenuName,
+    customerName: detail.customer_name,
+    customerEmail: detail.customer_email,
+    customerPhone: detail.customer_phone ?? null,
     paymentMethod: detail.payment_method ?? detail.paymentMethod ?? null,
     paymentStatus: detail.payment_status ?? detail.paymentStatus ?? null,
     paymentAmountYen:
@@ -325,7 +354,7 @@ function toReservationStartIso(date: string, time: string) {
   return `${date}T${time}:00+09:00`
 }
 
-async function resolveDefaultMenu(shopSlug?: string) {
+async function resolveDefaultMenu(shopSlug?: string): Promise<MenuResponse> {
   const resolvedShopSlug = resolveShopSlug(shopSlug)
   if (!resolvedShopSlug) {
     throw new Error("店舗情報が見つかりませんでした。")
@@ -336,6 +365,56 @@ async function resolveDefaultMenu(shopSlug?: string) {
     throw new Error("予約可能なメニューが見つかりませんでした。")
   }
   return firstMenu
+}
+
+/** 新規予約作成・決済 intent で同じメニュー解決ルールに揃える */
+async function resolveMenuForNewReservation(
+  resolvedShopSlug: string,
+  opts: { preferredMenuId?: string; mode: string; trainerId: string | null },
+): Promise<MenuResponse> {
+  let menuId = opts.preferredMenuId?.trim() || ""
+  if (!menuId && opts.mode === "nomination" && opts.trainerId?.trim()) {
+    const trainerMenus = await fetchReservationMenus(resolvedShopSlug, opts.trainerId)
+    menuId = trainerMenus[0]?.id ?? ""
+  }
+  if (menuId) {
+    const allMenus = await apiRequest<MenuResponse[]>(buildSalonApiPath(resolvedShopSlug, "/menus"))
+    const hit = allMenus.find((m) => m.menu_id === menuId)
+    if (hit) return hit
+    throw new Error("選択したメニューが見つかりませんでした。")
+  }
+  return resolveDefaultMenu(resolvedShopSlug)
+}
+
+export interface ReservationCheckoutMenu {
+  menu_id: string
+  name: string
+  duration_minutes: number
+  price: number
+}
+
+/** 入力・確認画面で表示する予約対象メニュー（料金・所要時間の解決） */
+export async function fetchMenuForReservationCheckout(payload: {
+  shopSlug?: string
+  preferredMenuId?: string
+  mode: string
+  trainerId: string | null
+}): Promise<ReservationCheckoutMenu> {
+  const resolved = resolveShopSlug(payload.shopSlug)
+  if (!resolved) {
+    throw new Error("店舗情報が見つかりませんでした。")
+  }
+  const m = await resolveMenuForNewReservation(resolved, {
+    preferredMenuId: payload.preferredMenuId,
+    mode: payload.mode,
+    trainerId: payload.trainerId,
+  })
+  return {
+    menu_id: m.menu_id,
+    name: m.name,
+    duration_minutes: m.duration_minutes,
+    price: m.price,
+  }
 }
 
 export async function fetchReservationMenus(
@@ -649,14 +728,11 @@ export async function createUserReservation(
     return { ok: false, error: "指名予約ではトレーナーを選択してください。" }
   }
   try {
-    let menuIdForCreate = payload.preferredMenuId
-    if (!menuIdForCreate && payload.mode === "nomination" && payload.trainerId) {
-      const trainerMenus = await fetchReservationMenus(resolvedShopSlug, payload.trainerId)
-      menuIdForCreate = trainerMenus[0]?.id
-    }
-    const menu = menuIdForCreate
-      ? { menu_id: menuIdForCreate, name: "" }
-      : await resolveDefaultMenu(resolvedShopSlug)
+    const menu = await resolveMenuForNewReservation(resolvedShopSlug, {
+      preferredMenuId: payload.preferredMenuId,
+      mode: payload.mode,
+      trainerId: payload.trainerId,
+    })
 
     const bookingType = payload.mode === "nomination" ? "SHIMEI" : "OMAKASE"
     const data = await apiRequest<ReservationOutResponse>(buildSalonApiPath(resolvedShopSlug, "/reservations"), {
@@ -709,6 +785,153 @@ export async function createUserReservation(
       return { ok: false, error: error.message }
     }
     return { ok: false, error: "予約作成に失敗しました。" }
+  }
+}
+
+interface ReservationPaymentIntentResponse {
+  payment_intent_id: string
+  client_secret: string
+  publishable_key: string
+  amount_yen: number
+  currency: string
+}
+
+interface ReservationFinalizeResponse {
+  reservation_id: string
+  confirmation_token: string | null
+  payment_id: string
+  payment_status: string
+  payment_method: string | null
+}
+
+export async function createReservationPaymentIntent(
+  payload: {
+    shopSlug?: string
+    menuId?: string
+    mode: string
+    trainerId: string | null
+    date: string
+    time: string
+  },
+): Promise<
+  | {
+      ok: true
+      skipPayment: true
+      amountYen: 0
+    }
+  | {
+      ok: true
+      skipPayment?: false
+      paymentIntentId: string
+      clientSecret: string
+      publishableKey: string
+      amountYen: number
+      currency: string
+    }
+  | { ok: false; error: string }
+> {
+  const resolvedShopSlug = resolveShopSlug(payload.shopSlug)
+  if (!resolvedShopSlug) return { ok: false, error: "店舗情報が見つかりません。" }
+  try {
+    const menu = await resolveMenuForNewReservation(resolvedShopSlug, {
+      preferredMenuId: payload.menuId,
+      mode: payload.mode,
+      trainerId: payload.trainerId,
+    })
+    if (menu.price <= 0) {
+      return { ok: true, skipPayment: true, amountYen: 0 }
+    }
+    const response = await apiRequest<ReservationPaymentIntentResponse>("/api/payments/reservation-intent", {
+      method: "POST",
+      body: {
+        shop_slug: resolvedShopSlug,
+        menu_id: menu.menu_id,
+        start_at: toReservationStartIso(payload.date, payload.time),
+      },
+    })
+    return {
+      ok: true,
+      paymentIntentId: response.payment_intent_id,
+      clientSecret: response.client_secret,
+      publishableKey: response.publishable_key,
+      amountYen: response.amount_yen,
+      currency: response.currency,
+    }
+  } catch (error) {
+    if (error instanceof ApiClientError) return { ok: false, error: error.message }
+    if (error instanceof Error) return { ok: false, error: error.message }
+    return { ok: false, error: "決済の初期化に失敗しました。" }
+  }
+}
+
+export async function finalizePaidUserReservation(
+  payload: CreateReservationPayload & {
+    paymentIntentId: string
+  },
+): Promise<{ ok: true; reservation: UserReservation } | { ok: false; error: string }> {
+  const resolvedShopSlug = resolveShopSlug(payload.shopSlug)
+  if (!resolvedShopSlug) {
+    return { ok: false, error: "店舗情報が見つかりません。" }
+  }
+  try {
+    const menu = await resolveMenuForNewReservation(resolvedShopSlug, {
+      preferredMenuId: payload.preferredMenuId,
+      mode: payload.mode,
+      trainerId: payload.trainerId,
+    })
+    const bookingType = payload.mode === "nomination" ? "SHIMEI" : "OMAKASE"
+
+    const finalized = await apiRequest<ReservationFinalizeResponse>("/api/payments/reservation-finalize", {
+      method: "POST",
+      body: {
+        shop_slug: resolvedShopSlug,
+        menu_id: menu.menu_id,
+        start_at: toReservationStartIso(payload.date, payload.time),
+        payment_intent_id: payload.paymentIntentId,
+        customer_name: payload.fullName || undefined,
+        customer_email: payload.email || undefined,
+        customer_phone: payload.phone || undefined,
+        notes: payload.note || undefined,
+        booking_type: bookingType,
+        trainer_id:
+          payload.mode === "nomination" && payload.trainerId ? payload.trainerId : undefined,
+        payment_method: payload.paymentMethod?.trim() || "credit",
+      },
+    })
+
+    const meta = loadReservationMeta()
+    const nextMeta: StoredReservationMeta[] = [
+      {
+        id: finalized.reservation_id,
+        confirmationToken: finalized.confirmation_token ?? undefined,
+        mode: payload.mode,
+        trainerId: payload.trainerId,
+        trainerName: payload.trainerName,
+        note: payload.note,
+        menuId: menu.menu_id,
+      },
+      ...meta.filter((item) => item.id !== finalized.reservation_id),
+    ]
+    saveReservationMeta(nextMeta)
+
+    let detail: ReservationDetailResponse
+    try {
+      detail = await apiRequest<ReservationDetailResponse>(`/api/my/reservations/${finalized.reservation_id}`)
+    } catch {
+      if (!finalized.confirmation_token) {
+        return { ok: false, error: "予約詳細の取得に失敗しました。" }
+      }
+      detail = await apiRequest<ReservationDetailResponse>(
+        buildSalonApiPath(resolvedShopSlug, `/reservations/${finalized.confirmation_token}`),
+      )
+    }
+    return {
+      ok: true,
+      reservation: toReservation(detail, nextMeta[0]),
+    }
+  } catch (error) {
+    if (error instanceof ApiClientError) return { ok: false, error: error.message }
+    return { ok: false, error: "予約確定に失敗しました。" }
   }
 }
 

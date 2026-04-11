@@ -1,44 +1,50 @@
-import { type FormEvent, useEffect, useState } from "react"
-import { CheckCircle2, CreditCard, Pencil, Plus, Trash2 } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { CheckCircle2, CreditCard, Plus, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import {
-  addPaymentCard,
+  createCardSetupIntent,
   deletePaymentCard,
+  describePaymentSetupFailure,
   fetchPaymentCards,
+  finalizeCardSetup,
   type PaymentCard,
 } from "@/features/user/api/userPaymentApi"
 import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
+import {
+  UserPaymentCardStripeForm,
+  type UserPaymentCardStripeFormHandle,
+} from "@/features/user/components/UserPaymentCardStripeForm"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
-import { formatCardNumber, formatExpiry, MAJOR_BRANDS, validateExpiry } from "@/lib/paymentCard"
 
 export function UserPaymentPage() {
   const shopId = useShopId()
   const [cards, setCards] = useState<PaymentCard[]>([])
-  const [isAdding, setIsAdding] = useState(false)
   const [saveMessage, setSaveMessage] = useState("")
   const [isLoading, setIsLoading] = useState(true)
-  const [newCardNumber, setNewCardNumber] = useState("")
-  const [newCardBrand, setNewCardBrand] = useState<string>("Visa")
-  const [newCardHolderName, setNewCardHolderName] = useState("")
-  const [newCardExpiry, setNewCardExpiry] = useState("")
-  const [newCardCvc, setNewCardCvc] = useState("")
-  const [newCardError, setNewCardError] = useState("")
-  const [newCardExpiryError, setNewCardExpiryError] = useState("")
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleteTargetCardId, setDeleteTargetCardId] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
+
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addError, setAddError] = useState("")
+  const [isPreparingSetup, setIsPreparingSetup] = useState(false)
+  const [isAdding, setIsAdding] = useState(false)
+  const [isStripeReady, setIsStripeReady] = useState(false)
+  const [setupClientSecret, setSetupClientSecret] = useState("")
+  const [setupPublishableKey, setSetupPublishableKey] = useState("")
+  const stripeSetupRef = useRef<UserPaymentCardStripeFormHandle>(null)
+  const setupRequestGenRef = useRef(0)
+
   const deleteTargetCard = cards.find((card) => card.id === deleteTargetCardId) ?? null
 
   useEffect(() => {
     let isMounted = true
-    fetchPaymentCards()
+    fetchPaymentCards(shopId)
       .then((result) => {
         if (!isMounted) return
         setCards(result)
@@ -50,7 +56,7 @@ export function UserPaymentPage() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [shopId])
 
   async function handleDelete(cardId: string) {
     setDeleteTargetCardId(cardId)
@@ -61,9 +67,9 @@ export function UserPaymentPage() {
   async function confirmDelete() {
     if (!deleteTargetCardId) return
     setIsDeleting(true)
-    const result = await deletePaymentCard(deleteTargetCardId)
+    const result = await deletePaymentCard(deleteTargetCardId, shopId)
     if (!result.ok) {
-      setDeleteError("カード情報の削除に失敗しました。")
+      setDeleteError("カードの削除に失敗しました。")
       setIsDeleting(false)
       return
     }
@@ -73,52 +79,69 @@ export function UserPaymentPage() {
     setIsDeleting(false)
   }
 
-  async function handleAdd(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const cardDigits = newCardNumber.replace(/\s/g, "")
-    if (cardDigits.length !== 16) {
-      setNewCardError("カード番号は16桁で入力してください。")
+  function closeAddForm() {
+    setupRequestGenRef.current += 1
+    setShowAddForm(false)
+    setAddError("")
+    setSetupClientSecret("")
+    setSetupPublishableKey("")
+    setIsStripeReady(false)
+    setIsPreparingSetup(false)
+  }
+
+  async function openAddForm() {
+    const gen = ++setupRequestGenRef.current
+    setAddError("")
+    setSetupClientSecret("")
+    setSetupPublishableKey("")
+    setIsStripeReady(false)
+    setShowAddForm(true)
+    setIsPreparingSetup(true)
+    try {
+      const setup = await createCardSetupIntent(shopId)
+      if (gen !== setupRequestGenRef.current) return
+      setSetupClientSecret(setup.clientSecret)
+      setSetupPublishableKey(setup.publishableKey)
+    } catch (error: unknown) {
+      if (gen !== setupRequestGenRef.current) return
+      setAddError(describePaymentSetupFailure(error))
+    } finally {
+      if (gen === setupRequestGenRef.current) {
+        setIsPreparingSetup(false)
+      }
+    }
+  }
+
+  async function handleAddCard() {
+    if (!stripeSetupRef.current) {
+      setAddError("カードフォームの準備ができていません。")
       return
     }
-    if (newCardCvc.length < 3 || newCardCvc.length > 4) {
-      setNewCardError("セキュリティコードは3〜4桁で入力してください。")
-      return
+    setIsAdding(true)
+    setAddError("")
+    try {
+      const setupIntentId = await stripeSetupRef.current.submit()
+      const result = await finalizeCardSetup(setupIntentId, undefined, shopId)
+      if (!result.ok) {
+        setAddError(result.error)
+        setIsAdding(false)
+        return
+      }
+      setCards((prev) => [result.card, ...prev.filter((card) => card.id !== result.card.id)])
+      closeAddForm()
+      setSaveMessage("カードを登録しました")
+      setTimeout(() => setSaveMessage(""), 2000)
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "カード登録に失敗しました。"
+      setAddError(message)
+    } finally {
+      setIsAdding(false)
     }
-    const expiryError = validateExpiry(newCardExpiry)
-    if (expiryError) {
-      setNewCardExpiryError(expiryError)
-      return
-    }
-    setNewCardError("")
-    setNewCardExpiryError("")
-    const addResult = await addPaymentCard({
-      brand: newCardBrand,
-      cardNumber: newCardNumber,
-      expiry: newCardExpiry,
-      cvc: newCardCvc,
-      holderName: newCardHolderName,
-    })
-    if (!addResult.ok) {
-      setNewCardError(addResult.error)
-      return
-    }
-    setCards((prev) => [...prev, addResult.card])
-    setNewCardBrand("Visa")
-    setNewCardNumber("")
-    setNewCardHolderName("")
-    setNewCardExpiry("")
-    setNewCardCvc("")
-    setIsAdding(false)
-    setSaveMessage("カードを追加しました")
-    setTimeout(() => setSaveMessage(""), 2000)
   }
 
   return (
     <section className="space-y-5">
-      <UserSectionCard
-        title="決済情報管理"
-        subtitle="登録済みのクレジットカード情報を確認・変更できます。"
-      >
+      <UserSectionCard title="決済情報管理" subtitle="保存済みカードの追加・削除を行えます。">
         <div className="space-y-3 p-5">
           {saveMessage ? (
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">
@@ -142,32 +165,17 @@ export function UserPaymentPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">
-                    {`${card.brand} •••• ${card.cardNumber.replace(/\s/g, "").slice(-4)}`}
+                    {`${card.brand} ${card.maskedNumber}`}
                   </p>
                   <p className="text-xs text-muted-foreground">{`有効期限: ${card.expiry}`}</p>
                 </div>
-                <Button
-                  asChild
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="rounded-full"
-                  aria-label={`${card.brand}カードを編集`}
-                >
-                  <Link
-                    to={buildPathWithShopId(ROUTES.userMypagePaymentDetail, shopId)}
-                    state={{ cardId: card.id }}
-                  >
-                    <Pencil className="size-4" />
-                  </Link>
-                </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-sm"
                   className="ml-auto rounded-full text-red-500 hover:bg-red-50 hover:text-red-600"
                   onClick={() => handleDelete(card.id)}
-                  aria-label={`${card.brand}カードを削除`}
+                  aria-label="カードを削除"
                 >
                   <Trash2 className="size-4" />
                 </Button>
@@ -176,128 +184,67 @@ export function UserPaymentPage() {
           ) : (
             <div className="py-8 text-center">
               <CreditCard className="mx-auto mb-2 size-8 text-slate-300" />
-              <p className="text-sm text-muted-foreground">登録済みのカードがありません。</p>
+              <p className="text-sm text-muted-foreground">保存済みのカードがありません。</p>
             </div>
           )}
 
-          {isAdding ? (
-            <form onSubmit={handleAdd} className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+          {showAddForm ? (
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
               <p className="text-sm font-semibold text-foreground">新しいカードを追加</p>
-              {newCardError ? (
+              {addError ? (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
-                  {newCardError}
+                  {addError}
                 </div>
               ) : null}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="newCardBrand">ブランド</Label>
-                  <select
-                    id="newCardBrand"
-                    name="newCardBrand"
-                    value={newCardBrand}
-                    onChange={(event) => setNewCardBrand(event.target.value)}
-                    required
-                    className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none transition focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              {isPreparingSetup ? (
+                <p className="text-sm text-muted-foreground">登録フォームを準備しています...</p>
+              ) : setupClientSecret && setupPublishableKey ? (
+                <UserPaymentCardStripeForm
+                  ref={stripeSetupRef}
+                  clientSecret={setupClientSecret}
+                  publishableKey={setupPublishableKey}
+                  onReadyChange={setIsStripeReady}
+                />
+              ) : addError ? (
+                <p className="text-sm text-muted-foreground">
+                  上記をご確認のうえ、必要なら「キャンセル」後に再度「カードを追加」してください。
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                {setupClientSecret && setupPublishableKey ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-lg"
+                    onClick={() => {
+                      void handleAddCard()
+                    }}
+                    disabled={isAdding || !isStripeReady || isPreparingSetup}
                   >
-                    {MAJOR_BRANDS.map((brand) => (
-                      <option key={brand} value={brand}>
-                        {brand}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="newCardNumber">カード番号</Label>
-                  <Input
-                    id="newCardNumber"
-                    name="newCardNumber"
-                    value={newCardNumber}
-                    onChange={(event) => {
-                      setNewCardNumber(formatCardNumber(event.target.value))
-                      setNewCardError("")
-                    }}
-                    inputMode="numeric"
-                    autoComplete="cc-number"
-                    placeholder="0000 0000 0000 0000"
-                    required
-                    className="rounded-lg"
-                  />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="newCardHolderName">カード名義</Label>
-                  <Input
-                    id="newCardHolderName"
-                    name="newCardHolderName"
-                    value={newCardHolderName}
-                    onChange={(event) => setNewCardHolderName(event.target.value.toUpperCase())}
-                    placeholder="TARO YAMADA"
-                    required
-                    className="rounded-lg"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="newCardExpiry">有効期限</Label>
-                  <Input
-                    id="newCardExpiry"
-                    name="newCardExpiry"
-                    value={newCardExpiry}
-                    onChange={(event) => {
-                      const formatted = formatExpiry(event.target.value)
-                      setNewCardExpiry(formatted)
-                      setNewCardError("")
-                      if (formatted.length < 5) {
-                        setNewCardExpiryError("")
-                        return
-                      }
-                      setNewCardExpiryError(validateExpiry(formatted))
-                    }}
-                    inputMode="numeric"
-                    autoComplete="cc-exp"
-                    placeholder="MM/YY"
-                    required
-                    className="rounded-lg"
-                  />
-                  {newCardExpiryError ? <p className="text-xs text-destructive">{newCardExpiryError}</p> : null}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="newCardCvc">セキュリティコード</Label>
-                  <Input
-                    id="newCardCvc"
-                    name="newCardCvc"
-                    value={newCardCvc}
-                    onChange={(event) => {
-                      setNewCardCvc(event.target.value.replace(/\D/g, "").slice(0, 4))
-                      setNewCardError("")
-                    }}
-                    inputMode="numeric"
-                    autoComplete="cc-csc"
-                    placeholder="123"
-                    required
-                    className="rounded-lg"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button type="submit" size="sm" className="rounded-lg">
-                  追加する
-                </Button>
+                    {isAdding ? "登録中..." : "登録する"}
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   className="rounded-lg"
-                  onClick={() => setIsAdding(false)}
+                  onClick={closeAddForm}
+                  disabled={isAdding}
                 >
                   キャンセル
                 </Button>
               </div>
-            </form>
+            </div>
           ) : (
             <Button
               type="button"
               variant="outline"
               className="w-full rounded-xl"
-              onClick={() => setIsAdding(true)}
+              onClick={() => {
+                void openAddForm()
+              }}
+              disabled={isPreparingSetup}
             >
               <Plus className="size-4" />
               カードを追加
@@ -308,24 +255,16 @@ export function UserPaymentPage() {
 
       <UserConfirmDialog
         open={showDeleteDialog}
-        title="カード情報を削除しますか？"
+        title="カードを削除しますか？"
         content={
           deleteTargetCard ? (
             <div className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-sm font-semibold text-foreground">{deleteTargetCard.brand}</p>
-              <p className="text-xs text-muted-foreground">
-                {`カード番号: •••• •••• •••• ${deleteTargetCard.cardNumber.replace(/\D/g, "").slice(-4)}`}
-              </p>
+              <p className="text-xs text-muted-foreground">{deleteTargetCard.maskedNumber}</p>
             </div>
           ) : null
         }
-        description={
-          <>
-            この操作は取り消せません。
-            <br />
-            本当に削除してもよろしいですか？
-          </>
-        }
+        description={<>この操作は取り消せません。</>}
         onCancel={() => setShowDeleteDialog(false)}
         onConfirm={confirmDelete}
         confirmLabel="削除する"

@@ -1,11 +1,36 @@
 import { apiRequest } from "@/lib/apiClient"
+import { buildSalonApiPath, resolveShopSlug } from "@/lib/shopSlug"
+
+function cardsApiBase(shopSlug?: string): string {
+  const slug = resolveShopSlug(shopSlug)
+  if (!slug) {
+    throw new Error(
+      "店舗情報が必要です。サロンの予約ページからログインし、マイページを開き直してください。",
+    )
+  }
+  return buildSalonApiPath(slug, "/payments/cards")
+}
+
+/** SetupIntent 取得失敗時のユーザー向け文言 */
+export function describePaymentSetupFailure(error: unknown): string {
+  if (error instanceof TypeError && error.message === "Failed to fetch") {
+    return (
+      "サーバーに接続できません。(1) バックエンドが http://127.0.0.1:8000 で起動しているか確認してください。 " +
+      "(2) `.env.development` の `VITE_API_BASE_URL=http://localhost:8000` はやめて、変数を未設定のまま Vite の /api プロキシを使うか、`http://127.0.0.1:8000` にしてください（Windows で localhost→IPv6 かつ API が 127.0.0.1 のみだと接続できません）。 " +
+      "(3) `npm run dev` / `npm run preview` でフロントを開いているか確認してください。"
+    )
+  }
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  return "カード登録の初期化に失敗しました。"
+}
 
 export interface PaymentCard {
   id: string
   brand: string
-  cardNumber: string
+  maskedNumber: string
   expiry: string
-  cvc: string
   holderName: string
 }
 
@@ -17,122 +42,115 @@ interface CustomerPaymentCardResponse {
   holder_name: string
 }
 
-interface CustomerPaymentCardDetailResponse {
-  card_id: string
-  brand: string
-  card_number: string
-  expiry: string
-  cvc: string
-  holder_name: string
+interface StripeSetupIntentResponse {
+  setup_intent_id: string
+  client_secret: string
+  publishable_key: string
 }
 
-interface CustomerPaymentCardCreateRequest {
-  brand: string
-  card_number: string
-  expiry: string
-  cvc: string
-  holder_name: string
+export interface StripeCardSetupIntent {
+  setupIntentId: string
+  clientSecret: string
+  publishableKey: string
 }
 
-export async function fetchPaymentCards(): Promise<PaymentCard[]> {
-  const cards = await apiRequest<CustomerPaymentCardResponse[]>("/api/payments/cards")
+export async function fetchPaymentCards(shopSlug?: string): Promise<PaymentCard[]> {
+  const cards = await apiRequest<CustomerPaymentCardResponse[]>(cardsApiBase(shopSlug))
   return cards.map((card) => ({
     id: card.card_id,
     brand: card.brand,
-    cardNumber: card.masked_number,
+    maskedNumber: card.masked_number,
     expiry: card.expiry,
-    cvc: "",
     holderName: card.holder_name,
   }))
 }
 
-export async function fetchPaymentCardById(cardId: string): Promise<PaymentCard | null> {
-  try {
-    const card = await apiRequest<CustomerPaymentCardDetailResponse>(`/api/payments/cards/${cardId}`)
-    return {
-      id: card.card_id,
-      brand: card.brand,
-      cardNumber: card.card_number,
-      expiry: card.expiry,
-      cvc: card.cvc,
-      holderName: card.holder_name,
-    }
-  } catch {
-    return Promise.resolve(null)
+interface CustomerPaymentCardDetailResponse {
+  card_id: string
+  brand: string
+  masked_number: string
+  expiry: string
+  holder_name: string
+  stripe_payment_method_id: string | null
+}
+
+/** 予約フローで登録カード決済に使う Stripe payment method id を取得 */
+export async function fetchPaymentCardDetail(
+  cardId: string,
+  shopSlug?: string,
+): Promise<{
+  card: PaymentCard
+  stripePaymentMethodId: string | null
+}> {
+  const response = await apiRequest<CustomerPaymentCardDetailResponse>(
+    `${cardsApiBase(shopSlug)}/${encodeURIComponent(cardId)}`,
+  )
+  return {
+    card: {
+      id: response.card_id,
+      brand: response.brand,
+      maskedNumber: response.masked_number,
+      expiry: response.expiry,
+      holderName: response.holder_name,
+    },
+    stripePaymentMethodId: response.stripe_payment_method_id,
   }
 }
 
-export async function addPaymentCard(
-  payload: Omit<PaymentCard, "id">,
+export async function createCardSetupIntent(shopSlug?: string): Promise<StripeCardSetupIntent> {
+  const response = await apiRequest<StripeSetupIntentResponse>(
+    `${cardsApiBase(shopSlug)}/setup-intent`,
+    {
+      method: "POST",
+      body: {},
+    },
+  )
+  return {
+    setupIntentId: response.setup_intent_id,
+    clientSecret: response.client_secret,
+    publishableKey: response.publishable_key,
+  }
+}
+
+export async function finalizeCardSetup(
+  setupIntentId: string,
+  replaceCardId?: string,
+  shopSlug?: string,
 ): Promise<{ ok: true; card: PaymentCard } | { ok: false; error: string }> {
   try {
-    const created = await apiRequest<CustomerPaymentCardResponse>("/api/payments/cards", {
+    const response = await apiRequest<CustomerPaymentCardResponse>(`${cardsApiBase(shopSlug)}/finalize`, {
       method: "POST",
       body: {
-        brand: payload.brand,
-        card_number: payload.cardNumber,
-        expiry: payload.expiry,
-        cvc: payload.cvc,
-        holder_name: payload.holderName,
-      } satisfies CustomerPaymentCardCreateRequest,
+        setup_intent_id: setupIntentId,
+        replace_card_id: replaceCardId || undefined,
+      },
     })
     return {
       ok: true,
       card: {
-        id: created.card_id,
-        brand: created.brand,
-        cardNumber: created.masked_number,
-        expiry: created.expiry,
-        cvc: "",
-        holderName: created.holder_name,
+        id: response.card_id,
+        brand: response.brand,
+        maskedNumber: response.masked_number,
+        expiry: response.expiry,
+        holderName: response.holder_name,
       },
     }
   } catch (error) {
-    if (error instanceof Error && error.message) {
-      return { ok: false, error: error.message }
-    }
-    return { ok: false, error: "カード情報の登録に失敗しました。" }
+    if (error instanceof Error && error.message) return { ok: false, error: error.message }
+    return { ok: false, error: "カード登録に失敗しました。" }
   }
 }
 
-export async function deletePaymentCard(cardId: string): Promise<{ ok: true } | { ok: false }> {
+export async function deletePaymentCard(
+  cardId: string,
+  shopSlug?: string,
+): Promise<{ ok: true } | { ok: false }> {
   try {
-    await apiRequest<{ message: string }>(`/api/payments/cards/${cardId}`, { method: "DELETE" })
+    await apiRequest<{ message: string }>(`${cardsApiBase(shopSlug)}/${encodeURIComponent(cardId)}`, {
+      method: "DELETE",
+    })
     return { ok: true }
   } catch {
     return { ok: false }
-  }
-}
-
-export async function updatePaymentCard(
-  payload: PaymentCard,
-): Promise<{ ok: true; card: PaymentCard } | { ok: false; error: string }> {
-  try {
-    const updated = await apiRequest<CustomerPaymentCardResponse>(`/api/payments/cards/${payload.id}`, {
-      method: "PUT",
-      body: {
-        brand: payload.brand,
-        card_number: payload.cardNumber,
-        expiry: payload.expiry,
-        cvc: payload.cvc,
-        holder_name: payload.holderName,
-      } satisfies CustomerPaymentCardCreateRequest,
-    })
-    return {
-      ok: true,
-      card: {
-        id: updated.card_id,
-        brand: updated.brand,
-        cardNumber: updated.masked_number,
-        expiry: updated.expiry,
-        cvc: "",
-        holderName: updated.holder_name,
-      },
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message) {
-      return { ok: false, error: error.message }
-    }
-    return { ok: false, error: "カード情報の更新に失敗しました。" }
   }
 }

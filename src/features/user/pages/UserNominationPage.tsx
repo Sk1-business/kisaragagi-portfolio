@@ -116,25 +116,6 @@ export function UserNominationPage() {
                     {trainer.specialty}
                   </p>
                 </div>
-
-                <div
-                  className={`grid grid-cols-2 gap-px border-t text-center text-xs ${
-                    "border-slate-100 bg-slate-100"
-                  }`}
-                >
-                  <div className="bg-white py-2.5">
-                    <p className="text-muted-foreground">経験</p>
-                    <p className="font-semibold text-foreground">
-                      {`${trainer.experienceYears}年`}
-                    </p>
-                  </div>
-                  <div className="bg-white py-2.5">
-                    <p className="text-muted-foreground">指名料</p>
-                    <p className="font-semibold text-foreground">
-                      {`¥${trainer.nominationFee.toLocaleString()}`}
-                    </p>
-                  </div>
-                </div>
               </button>
               )
             })}
@@ -166,9 +147,14 @@ export function UserNominationPage() {
                           }`}
                         >
                           <p className="font-semibold text-foreground">{menu.name}</p>
-                          <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Clock className="size-3.5 shrink-0" aria-hidden />
-                            <span>所要時間 {menu.durationMinutes}分</span>
+                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                            <span className="font-semibold tabular-nums text-foreground">
+                              ¥{menu.price.toLocaleString()}
+                            </span>
+                            <span className="flex items-center gap-1.5 text-muted-foreground">
+                              <Clock className="size-3.5 shrink-0" aria-hidden />
+                              <span>所要時間 {menu.durationMinutes}分</span>
+                            </span>
                           </div>
                         </button>
                       )

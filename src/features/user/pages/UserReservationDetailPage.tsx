@@ -4,7 +4,9 @@ import {
   CalendarDays,
   Clock,
   CreditCard,
+  Mail,
   MessageSquare,
+  Phone,
   Store,
   UserRound,
 } from "lucide-react"
@@ -18,6 +20,7 @@ import {
   evaluateReservationUpdate,
   fetchReservationPolicies,
   formatPaymentStatusLabel,
+  formatReservationExpectedTimeRange,
   formatReservationPaymentMethod,
   type CancellationPolicy,
   type ReservationChangePolicy,
@@ -29,6 +32,16 @@ import { useSalonName } from "@/features/user/hooks/useSalonName"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 import { useUserReservation } from "@/features/user/hooks/useUserReservation"
 import { formatDateLongWithWeekday } from "@/lib/dateFormat"
+
+function reservationPriceLabel(
+  paymentMethod: string | null | undefined,
+  paymentAmountYen: number | null | undefined,
+): string {
+  const pm = paymentMethod?.trim().toLowerCase()
+  if (pm === "free") return "現地で決済"
+  if (paymentAmountYen != null) return `¥${paymentAmountYen.toLocaleString()}`
+  return "未定"
+}
 
 export function UserReservationDetailPage() {
   const shopId = useShopId()
@@ -84,6 +97,13 @@ export function UserReservationDetailPage() {
     return { canUpdate: result.canUpdate, reason: result.reason ?? "" }
   }, [reservation, reservationChangePolicy])
 
+  const expectedTimeRange = useMemo(() => {
+    if (!reservation?.time) return "未選択"
+    return formatReservationExpectedTimeRange(reservation.time, reservation.serviceEndAt)
+  }, [reservation?.time, reservation?.serviceEndAt])
+
+  const displayMenuName = reservation?.menuName?.trim() || "未定"
+
   if (isReservationLoading || isPolicyLoading) {
     return (
       <section className="py-16 text-center">
@@ -134,123 +154,187 @@ export function UserReservationDetailPage() {
           </div>
         ) : null}
 
-        <div className="space-y-4 p-5">
-          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <Store className="size-4 shrink-0 text-muted-foreground" />
-            <div>
-              <p className="text-[11px] text-muted-foreground">店舗</p>
-              <p className="text-sm font-semibold text-foreground">{shopName}</p>
+        <div className="space-y-0">
+          <div className="space-y-1 border-b border-slate-100 px-6 py-4">
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <Store className="size-4 shrink-0 text-muted-foreground" />
+              <div>
+                <p className="text-[11px] text-muted-foreground">店舗</p>
+                <p className="text-sm font-semibold text-foreground">{shopName}</p>
+              </div>
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+          <div className="space-y-1 border-b border-slate-100 px-6 py-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">予約情報</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="text-[11px] text-muted-foreground">日付</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {formatDateLongWithWeekday(reservation.date)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <Clock className="size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="text-[11px] text-muted-foreground">想定時間</p>
+                  <p className="text-sm font-semibold text-foreground">{expectedTimeRange}</p>
+                </div>
+              </div>
+            </div>
+            {reservation.mode === "nomination" ? (
+              <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100">
+                  <UserRound className="size-5 text-slate-400" />
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">指名トレーナー</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {reservation.trainerName?.trim() || "—"}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="text-[11px] text-muted-foreground">予約モード</p>
+                  <p className="text-sm font-semibold text-foreground">おまかせ</p>
+                </div>
+              </div>
+            )}
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground">メニュー</p>
+                  <p className="truncate text-sm font-semibold text-foreground">{displayMenuName}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <CreditCard className="size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="text-[11px] text-muted-foreground">料金</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {reservationPriceLabel(reservation.paymentMethod, reservation.paymentAmountYen)}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div>
-                <p className="text-[11px] text-muted-foreground">日付</p>
+                <p className="text-[11px] text-muted-foreground">ステータス</p>
                 <p className="text-sm font-semibold text-foreground">
-                  {formatDateLongWithWeekday(reservation.date)}
+                  {isCancelled
+                    ? "キャンセル済み"
+                    : reservation.status === "upcoming"
+                      ? "予約確定"
+                      : "完了"}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <Clock className="size-4 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">時間</p>
-                <p className="text-sm font-semibold text-foreground">{reservation.time}</p>
+          </div>
+
+          <div className="space-y-5 border-b border-slate-100 px-6 py-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">予約者情報</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <UserRound className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground">お名前</p>
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {reservation.customerName?.trim() || "—"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <Mail className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground">メールアドレス</p>
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {reservation.customerEmail?.trim() || "—"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
+                <Phone className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground">電話番号</p>
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {reservation.customerPhone?.trim() || "—"}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100">
-              <UserRound className="size-5 text-slate-400" />
+          <div className="space-y-4 border-b border-slate-100 px-6 py-5">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="size-4 text-muted-foreground" />
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">ご要望・備考</p>
             </div>
-            <div>
-              <p className="text-[11px] text-muted-foreground">
-                {reservation.mode === "nomination" ? "指名トレーナー" : "予約モード"}
-              </p>
-              <p className="text-sm font-semibold text-foreground">
-                {reservation.mode === "nomination" ? reservation.trainerName : "おまかせ"}
-              </p>
+            <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm text-foreground">
+              {reservation.note?.trim() ? reservation.note : "（記入なし）"}
             </div>
           </div>
-
-          {reservation.note ? (
-            <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <MessageSquare className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">ご要望・備考</p>
-                <p className="text-sm text-foreground">{reservation.note}</p>
-              </div>
-            </div>
-          ) : null}
 
           {reservation.paymentMethod ||
           reservation.paymentStatus ||
           reservation.paymentAmountYen != null ||
           reservation.paymentRecordStatus ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                <CreditCard className="size-4" />
-                決済情報
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="text-[11px] text-muted-foreground">決済方法</p>
-                  <p className="text-sm font-semibold text-foreground">
-                    {formatReservationPaymentMethod(reservation.paymentMethod)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground">予約の決済状況</p>
-                  <p className="text-sm font-semibold text-foreground">
-                    {formatPaymentStatusLabel(reservation.paymentStatus)}
-                  </p>
-                </div>
-                {reservation.paymentAmountYen != null ? (
+            <div className="space-y-4 px-6 py-5">
+              <div className="flex items-center gap-2">
+                <CreditCard className="size-4 text-muted-foreground" />
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">決済情報</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <p className="text-[11px] text-muted-foreground">決済金額</p>
+                    <p className="text-[11px] text-muted-foreground">決済方法</p>
                     <p className="text-sm font-semibold text-foreground">
-                      ¥{reservation.paymentAmountYen.toLocaleString()}
-                      {reservation.paymentCurrency && reservation.paymentCurrency !== "jpy"
-                        ? ` (${reservation.paymentCurrency})`
-                        : ""}
+                      {formatReservationPaymentMethod(reservation.paymentMethod)}
                     </p>
                   </div>
-                ) : null}
-                {reservation.paymentRecordStatus ? (
                   <div>
-                    <p className="text-[11px] text-muted-foreground">決済レコード状態</p>
+                    <p className="text-[11px] text-muted-foreground">予約の決済状況</p>
                     <p className="text-sm font-semibold text-foreground">
-                      {formatPaymentStatusLabel(reservation.paymentRecordStatus)}
+                      {formatPaymentStatusLabel(reservation.paymentStatus)}
                     </p>
                   </div>
-                ) : null}
-                {reservation.paymentPaidAt ? (
-                  <div className="sm:col-span-2">
-                    <p className="text-[11px] text-muted-foreground">支払完了日時</p>
-                    <p className="text-sm font-semibold text-foreground">
-                      {new Date(reservation.paymentPaidAt).toLocaleString("ja-JP")}
-                    </p>
-                  </div>
-                ) : null}
+                  {reservation.paymentAmountYen != null ? (
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">決済金額</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        ¥{reservation.paymentAmountYen.toLocaleString()}
+                        {reservation.paymentCurrency && reservation.paymentCurrency !== "jpy"
+                          ? ` (${reservation.paymentCurrency})`
+                          : ""}
+                      </p>
+                    </div>
+                  ) : null}
+                  {reservation.paymentRecordStatus ? (
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">決済レコード状態</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {formatPaymentStatusLabel(reservation.paymentRecordStatus)}
+                      </p>
+                    </div>
+                  ) : null}
+                  {reservation.paymentPaidAt ? (
+                    <div className="sm:col-span-2">
+                      <p className="text-[11px] text-muted-foreground">支払完了日時</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {new Date(reservation.paymentPaidAt).toLocaleString("ja-JP")}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : null}
-
-          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div>
-              <p className="text-[11px] text-muted-foreground">ステータス</p>
-              <p className="text-sm font-semibold text-foreground">
-                {isCancelled
-                  ? "キャンセル済み"
-                  : reservation.status === "upcoming"
-                    ? "予約確定"
-                    : "完了"}
-              </p>
-            </div>
-          </div>
         </div>
 
         {isUpcoming ? (

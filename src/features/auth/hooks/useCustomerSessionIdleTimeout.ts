@@ -24,13 +24,12 @@ export function useCustomerSessionIdleTimeout(enabled: boolean) {
   useEffect(() => {
     if (!enabled || idleMs <= 0) return
 
-    const events: (keyof WindowEventMap)[] = [
+    const windowEvents: (keyof WindowEventMap)[] = [
       "mousemove",
       "mousedown",
       "keydown",
       "touchstart",
       "scroll",
-      "visibilitychange",
     ]
 
     const clearTimer = () => {
@@ -62,22 +61,18 @@ export function useCustomerSessionIdleTimeout(enabled: boolean) {
       }
     }
 
-    events
-      .filter((e) => e !== "visibilitychange")
-      .forEach((eventName) => {
-        window.addEventListener(eventName, onActivity, { passive: true })
-      })
+    windowEvents.forEach((eventName) => {
+      window.addEventListener(eventName, onActivity, { passive: true })
+    })
     document.addEventListener("visibilitychange", onVisibility)
 
     schedule()
 
     return () => {
       clearTimer()
-      events
-        .filter((e) => e !== "visibilitychange")
-        .forEach((eventName) => {
-          window.removeEventListener(eventName, onActivity)
-        })
+      windowEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, onActivity)
+      })
       document.removeEventListener("visibilitychange", onVisibility)
     }
   }, [enabled, idleMs])
