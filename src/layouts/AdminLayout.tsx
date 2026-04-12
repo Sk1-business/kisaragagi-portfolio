@@ -91,9 +91,6 @@ function AdminLayoutContent() {
             <NavLink to={ROUTES.adminShiftCalendar}>シフトカレンダー</NavLink>
           </Button>
           <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminCancelled}>キャンセル一覧</NavLink>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
             <NavLink to={ROUTES.adminStaff}>スタッフ管理</NavLink>
           </Button>
           <Button

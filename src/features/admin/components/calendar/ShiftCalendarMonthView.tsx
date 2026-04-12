@@ -79,14 +79,14 @@ export function ShiftCalendarMonthView({
   const calendarStart = startOfWeek(monthStart)
   const weeks: Date[][] = []
   let current = calendarStart
-  while (current <= monthEnd || weeks.length < 6) {
+  /** 対象月の末日をまたぐまでの週だけ（6週固定にしない。翌月の週が余分に出ないようにする） */
+  while (current <= monthEnd) {
     const week: Date[] = []
     for (let i = 0; i < 7; i++) {
       week.push(current)
       current = addDays(current, 1)
     }
     weeks.push(week)
-    if (weeks.length >= 6) break
   }
 
   const isCurrentMonth = (d: Date) => d.getMonth() === date.getMonth()
@@ -172,6 +172,9 @@ export function ShiftCalendarMonthView({
                   ? getBusinessHoursForJsDate(businessHoursItems, day)
                   : null
               const isWeekdayClosed = biz?.isClosed === true
+              /** 定休（holidays）・休業曜日はシフト編集不可（休日と同様） */
+              const disableShiftEdit =
+                isHoliday || (inMonth && isWeekdayClosed)
               return (
                 <div
                   key={day.toISOString()}
@@ -205,9 +208,12 @@ export function ShiftCalendarMonthView({
                         <button
                           key={staff.id}
                           type="button"
+                          disabled={disableShiftEdit}
                           className={cn(
                             "block w-full truncate rounded border px-1 py-0.5 text-left text-[10px] leading-tight transition-opacity hover:opacity-90",
                             !work && "border-dashed opacity-90",
+                            disableShiftEdit &&
+                              "cursor-not-allowed opacity-50 hover:opacity-50",
                           )}
                           style={
                             work
@@ -220,7 +226,13 @@ export function ShiftCalendarMonthView({
                                   backgroundColor: `${staff.color}08`,
                                 }
                           }
-                          title={`${rowLabel(resolved, staff)}（クリックで編集）`}
+                          title={
+                            disableShiftEdit
+                              ? isHoliday
+                                ? "定休日のためシフトを編集できません"
+                                : "休業日のためシフトを編集できません"
+                              : `${rowLabel(resolved, staff)}（クリックで編集）`
+                          }
                           onClick={() => setEditing({ staff, day: dayNorm })}
                         >
                           <span className="font-medium">{staff.name}</span>

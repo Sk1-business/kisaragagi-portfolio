@@ -57,6 +57,28 @@ function newReservationStaffOptionSuffix(
   return "（選択不可）"
 }
 
+/** 時・分の文字列から `HH:mm` を組み立てる（どちらか空なら null） */
+function tryBuildTimeHm(hourStr: string, minuteStr: string): string | null {
+  const hs = hourStr.trim()
+  const ms = minuteStr.trim()
+  if (hs === "" || ms === "") return null
+  const hNum = Number(hs)
+  const mNum = Number(ms)
+  if (!Number.isFinite(hNum) || !Number.isFinite(mNum)) return null
+  if (hNum < 0 || hNum > 23 || mNum < 0 || mNum > 59) return null
+  return `${String(hNum).padStart(2, "0")}:${String(mNum).padStart(2, "0")}`
+}
+
+function splitTimeHm(timeHm: string): { hour: string; minute: string } {
+  const m = /^(\d{2}):(\d{2})$/.exec(timeHm.trim())
+  if (!m) return { hour: "", minute: "" }
+  return { hour: String(Number(m[1])), minute: m[2] }
+}
+
+function filterDigitsMax2(raw: string): string {
+  return raw.replace(/\D/g, "").slice(0, 2)
+}
+
 export function AdminNewReservationPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -101,7 +123,8 @@ export function AdminNewReservationPage() {
 
   const [menuId, setMenuId] = useState(() => initialDraft?.menuId ?? "")
   const [dateYmd, setDateYmd] = useState(() => initialSlot.dateYmd)
-  const [timeHm, setTimeHm] = useState(() => initialSlot.timeHm)
+  const [hourStr, setHourStr] = useState(() => splitTimeHm(initialSlot.timeHm).hour)
+  const [minuteStr, setMinuteStr] = useState(() => splitTimeHm(initialSlot.timeHm).minute)
   const [trainerId, setTrainerId] = useState(() => initialDraft?.trainerId ?? "")
   const [customerName, setCustomerName] = useState(() => initialDraft?.customerName ?? "")
   const [customerEmail, setCustomerEmail] = useState(() => initialDraft?.customerEmail ?? "")
@@ -122,6 +145,33 @@ export function AdminNewReservationPage() {
     [menus, menuId],
   )
   const durationMinutes = selectedMenu?.duration_minutes
+
+  const timeHm = useMemo(() => tryBuildTimeHm(hourStr, minuteStr), [hourStr, minuteStr])
+
+  /**
+   * `bookingNotBeforeIso` 未満にならないよう日付・時刻を補正する。
+   * 時・分の入力中は呼ばない（キー入力のたびに走ると「1」が「08」などに化けるため）。
+   */
+  function commitSlotToBookingMin(
+    date: string,
+    hour: string,
+    minute: string,
+  ): void {
+    const hm = tryBuildTimeHm(hour, minute)
+    if (!hm) return
+    const s = ensureSlotNotBeforeAdminTz(date, hm, bookingNotBeforeIso)
+    setDateYmd(s.dateYmd)
+    const { hour: h, minute: m } = splitTimeHm(s.timeHm)
+    setHourStr(h)
+    setMinuteStr(m)
+  }
+
+  /** カレンダーで開始日を変えたときだけ、時刻を下限に合わせて補正 */
+  useEffect(() => {
+    commitSlotToBookingMin(dateYmd, hourStr, minuteStr)
+    // hourStr / minuteStr は依存に含めない（入力中に再実行しない）
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dateYmd（開始日）の変更時のみ
+  }, [dateYmd, bookingNotBeforeIso])
 
   const startAtIso = useMemo(() => {
     if (!menuId.trim() || !dateYmd || !timeHm) return null
@@ -176,7 +226,9 @@ export function AdminNewReservationPage() {
       )
       setMenuId(draft.menuId)
       setDateYmd(s.dateYmd)
-      setTimeHm(s.timeHm)
+      const parts = splitTimeHm(s.timeHm)
+      setHourStr(parts.hour)
+      setMinuteStr(parts.minute)
       setTrainerId(draft.trainerId)
       setCustomerName(draft.customerName)
       setCustomerEmail(draft.customerEmail)
@@ -188,7 +240,9 @@ export function AdminNewReservationPage() {
 
     const slot = defaultNextReservationSlotAdminTz(bookingIso)
     setDateYmd(slot.dateYmd)
-    setTimeHm(slot.timeHm)
+    const slotParts = splitTimeHm(slot.timeHm)
+    setHourStr(slotParts.hour)
+    setMinuteStr(slotParts.minute)
     setMenuId("")
     setTrainerId("")
     setCustomerName("")
@@ -269,15 +323,44 @@ export function AdminNewReservationPage() {
   }, [eligibleByStaffId, trainerId, staffEligibilityLoading])
 
   function applyDateChange(nextDateYmd: string) {
-    const s = ensureSlotNotBeforeAdminTz(nextDateYmd, timeHm, bookingNotBeforeIso)
-    setDateYmd(s.dateYmd)
-    setTimeHm(s.timeHm)
+    setDateYmd(nextDateYmd)
   }
 
-  function applyTimeChange(nextTimeHm: string) {
-    const s = ensureSlotNotBeforeAdminTz(dateYmd, nextTimeHm, bookingNotBeforeIso)
-    setDateYmd(s.dateYmd)
-    setTimeHm(s.timeHm)
+  function handleHourDigitsInput(raw: string) {
+    const d = filterDigitsMax2(raw)
+    let next = d
+    if (d.length === 2) {
+      const n = Number(d)
+      if (n > 23) next = "23"
+    }
+    setHourStr(next)
+  }
+
+  function handleMinuteDigitsInput(raw: string) {
+    const d = filterDigitsMax2(raw)
+    let next = d
+    if (d.length === 2) {
+      const n = Number(d)
+      if (n > 59) next = "59"
+    }
+    setMinuteStr(next)
+  }
+
+  function handleHourBlur() {
+    commitSlotToBookingMin(dateYmd, hourStr, minuteStr)
+  }
+
+  function handleMinuteBlur() {
+    const d = minuteStr.replace(/\D/g, "")
+    let nextMin = minuteStr
+    if (d !== "") {
+      const n = Math.min(59, Math.max(0, Number(d)))
+      if (Number.isFinite(n)) nextMin = String(n).padStart(2, "0")
+    } else {
+      nextMin = ""
+    }
+    setMinuteStr(nextMin)
+    commitSlotToBookingMin(dateYmd, hourStr, nextMin)
   }
 
   function handleConfirmClick() {
@@ -290,21 +373,17 @@ export function AdminNewReservationPage() {
       setFormError("メニューに所要時間（分）が含まれていません。API のメニュー定義を確認してください。")
       return
     }
-    if (!dateYmd || !timeHm) {
+    const ensuredSlot = (() => {
+      const hm = tryBuildTimeHm(hourStr, minuteStr)
+      if (!hm) return null
+      return ensureSlotNotBeforeAdminTz(dateYmd, hm, bookingNotBeforeIso)
+    })()
+    if (!ensuredSlot) {
       setFormError("日付と時刻を入力してください。")
       return
     }
-    const slotIso = combineDateAndTimeToAdminTzIso(dateYmd, timeHm)
-    if (new Date(slotIso).getTime() < new Date(bookingNotBeforeIso).getTime()) {
-      setFormError(
-        "開始日時は、新規予約画面に入った時刻（または直前に新規予約を開いた時刻）以降にしてください。",
-      )
-      return
-    }
-    if (!startAtIso || !endAtIso) {
-      setFormError("終了時刻を算出できません。メニューと開始時刻を確認してください。")
-      return
-    }
+    const finalDateYmd = ensuredSlot.dateYmd
+    const finalTimeHm = ensuredSlot.timeHm
     if (!staffLoading && staffList.length > 0) {
       if (staffEligibilityLoading) {
         setFormError("担当者の可否を確認しています。しばらく待ってから再度お試しください。")
@@ -337,8 +416,8 @@ export function AdminNewReservationPage() {
       bookingNotBeforeIso,
       menuId: menuId.trim(),
       menuName,
-      dateYmd,
-      timeHm,
+      dateYmd: finalDateYmd,
+      timeHm: finalTimeHm,
       durationMinutes,
       trainerId: trainerId.trim(),
       trainerName,
@@ -350,9 +429,6 @@ export function AdminNewReservationPage() {
     }
     navigate(ROUTES.adminNewReservationConfirm, { state: draft })
   }
-
-  const timeMin =
-    dateYmd === minDateYmd ? minTimeHmOnMinDate : undefined
 
   const confirmDisabled =
     staffLoading ||
@@ -438,20 +514,47 @@ export function AdminNewReservationPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="admin-new-time">開始時刻</Label>
-              <Input
-                id="admin-new-time"
-                type="time"
-                min={timeMin}
-                value={timeHm}
-                onChange={(e) => {
-                  applyTimeChange(e.target.value)
-                  setTrainerId("")
-                }}
-              />
+              <Label htmlFor="admin-new-hour">開始時刻</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  id="admin-new-hour"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  className="w-14 tabular-nums"
+                  maxLength={2}
+                  value={hourStr}
+                  placeholder="0-23"
+                  onChange={(e) => {
+                    handleHourDigitsInput(e.target.value)
+                    setTrainerId("")
+                  }}
+                  onBlur={handleHourBlur}
+                  aria-label="時（0〜23、数字のみ）"
+                />
+                <span className="select-none text-muted-foreground" aria-hidden>
+                  :
+                </span>
+                <Input
+                  id="admin-new-minute"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  className="w-14 tabular-nums"
+                  maxLength={2}
+                  value={minuteStr}
+                  placeholder="00-59"
+                  onChange={(e) => {
+                    handleMinuteDigitsInput(e.target.value)
+                    setTrainerId("")
+                  }}
+                  onBlur={handleMinuteBlur}
+                  aria-label="分（00〜59、数字のみ）"
+                />
+              </div>
               {dateYmd === minDateYmd ? (
                 <p className="text-xs text-muted-foreground">
-                  この日は {minTimeHmOnMinDate} 以降のみ選択できます。
+                  この日は {minTimeHmOnMinDate} 以降のみ選択できます（入力後に自動で調整される場合があります）。
                 </p>
               ) : null}
             </div>
