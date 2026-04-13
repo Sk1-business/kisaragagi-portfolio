@@ -16,6 +16,7 @@ import { AdminNewReservationConfirmPage } from "@/features/admin/pages/AdminNewR
 import { AdminNewReservationPage } from "@/features/admin/pages/AdminNewReservationPage"
 import { AdminReservationDetailPage } from "@/features/admin/pages/AdminReservationDetailPage"
 import { AdminShiftCalendarPage } from "@/features/admin/pages/AdminShiftCalendarPage"
+import { AdminMenusPage } from "@/features/admin/pages/AdminMenusPage"
 import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { AdminLayout } from "./layouts/AdminLayout"
@@ -103,6 +104,7 @@ function App() {
             element={<Navigate to={ROUTES.adminHome} replace />}
           />
           <Route path={ROUTES.adminStaff} element={<AdminStaffPage />} />
+          <Route path={ROUTES.adminMenus} element={<AdminMenusPage />} />
           <Route
             path={ROUTES.adminNewReservationConfirm}
             element={<AdminNewReservationConfirmPage />}

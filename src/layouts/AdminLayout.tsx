@@ -93,6 +93,9 @@ function AdminLayoutContent() {
           <Button asChild variant="ghost" size="sm" className="rounded-md">
             <NavLink to={ROUTES.adminStaff}>スタッフ管理</NavLink>
           </Button>
+          <Button asChild variant="ghost" size="sm" className="rounded-md">
+            <NavLink to={ROUTES.adminMenus}>メニュー管理</NavLink>
+          </Button>
           <Button
             type="button"
             variant="outline"

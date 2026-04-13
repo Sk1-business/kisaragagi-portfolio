@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
-import { fetchAdminMenus } from "@/features/admin/api/menusApi"
+import { fetchAdminMenus, filterBookableMenus } from "@/features/admin/api/menusApi"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import {
   fetchTrainerShifts,
@@ -195,7 +195,7 @@ export function AdminNewReservationPage() {
       try {
         const list = await fetchAdminMenus()
         if (cancelled) return
-        setMenus(list)
+        setMenus(filterBookableMenus(list))
       } catch (e) {
         if (cancelled) return
         if (e instanceof Error && e.message === "UNAUTHORIZED") {
@@ -212,6 +212,14 @@ export function AdminNewReservationPage() {
       cancelled = true
     }
   }, [navigate])
+
+  useEffect(() => {
+    if (menusLoading || menusError) return
+    if (!menuId.trim()) return
+    if (!menus.some((m) => m.menu_id === menuId)) {
+      setMenuId("")
+    }
+  }, [menus, menusLoading, menusError, menuId])
 
   useEffect(() => {
     const st = location.state

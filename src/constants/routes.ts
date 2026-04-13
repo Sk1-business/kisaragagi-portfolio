@@ -10,6 +10,7 @@ export const ROUTES = {
   adminShiftCalendar: "/admin/shifts",
   adminCancelled: "/admin/cancelled",
   adminStaff: "/admin/staff",
+  adminMenus: "/admin/menus",
   /** 管理者による代理予約（入力） */
   adminNewReservation: "/admin/reservations/new",
   /** 代理予約の確認・確定 */

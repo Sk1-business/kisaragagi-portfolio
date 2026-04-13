@@ -22,6 +22,24 @@ function parseTrainerIsActive(o: Record<string, unknown>): boolean {
   return Boolean(v)
 }
 
+function parseTrainerMenuIds(o: Record<string, unknown>): string[] | undefined {
+  const raw = o.menu_ids ?? o.menuIds ?? o.menus
+  if (!Array.isArray(raw)) return undefined
+  const ids: string[] = []
+  for (const x of raw) {
+    if (typeof x === "string" && x.trim()) {
+      ids.push(x.trim())
+      continue
+    }
+    if (x && typeof x === "object") {
+      const r = x as Record<string, unknown>
+      const id = String(r.menu_id ?? r.id ?? "").trim()
+      if (id) ids.push(id)
+    }
+  }
+  return ids.length > 0 ? ids : undefined
+}
+
 /** `GET /api/admin/trainers` の各行を `Staff` に（`trainer_id` / `id`・`name`・`color` 等） */
 export function mapTrainerRowToStaff(row: unknown): Staff | null {
   if (!row || typeof row !== "object") return null
@@ -39,7 +57,56 @@ export function mapTrainerRowToStaff(row: unknown): Staff | null {
     typeof descRaw === "string" && descRaw.trim()
       ? descRaw.trim()
       : undefined
-  return { id, name, color, description }
+  const imgRaw = o.image_url ?? o.imageUrl
+  const image_url =
+    typeof imgRaw === "string" && imgRaw.trim() ? imgRaw.trim() : undefined
+  const doRaw = o.display_order ?? o.displayOrder
+  let display_order: number | undefined
+  if (typeof doRaw === "number" && Number.isFinite(doRaw)) {
+    display_order = Math.round(doRaw)
+  } else if (typeof doRaw === "string" && /^\d+$/.test(doRaw.trim())) {
+    display_order = Math.round(Number(doRaw.trim()))
+  }
+  const menuIds = parseTrainerMenuIds(o)
+  const staff: Staff = { id, name, color, description }
+  if (image_url) staff.image_url = image_url
+  if (display_order !== undefined) staff.display_order = display_order
+  if (menuIds) staff.menuIds = menuIds
+  return staff
+}
+
+/** `GET …/trainers/{id}` 用。`is_active` による除外はしない */
+export function mapTrainerDetailRowToStaff(row: unknown): Staff | null {
+  if (!row || typeof row !== "object") return null
+  const o = row as Record<string, unknown>
+  const idRaw = o.trainer_id ?? o.id
+  const id = idRaw != null ? String(idRaw) : ""
+  const name = typeof o.name === "string" ? o.name.trim() : ""
+  if (!id || !name) return null
+  const color = normalizeTrainerColor(
+    o.color ?? o.display_color ?? o.calendar_color,
+  )
+  const descRaw = o.description
+  const description =
+    typeof descRaw === "string" && descRaw.trim()
+      ? descRaw.trim()
+      : undefined
+  const imgRaw = o.image_url ?? o.imageUrl
+  const image_url =
+    typeof imgRaw === "string" && imgRaw.trim() ? imgRaw.trim() : undefined
+  const doRaw = o.display_order ?? o.displayOrder
+  let display_order: number | undefined
+  if (typeof doRaw === "number" && Number.isFinite(doRaw)) {
+    display_order = Math.round(doRaw)
+  } else if (typeof doRaw === "string" && /^\d+$/.test(doRaw.trim())) {
+    display_order = Math.round(Number(doRaw.trim()))
+  }
+  const menuIds = parseTrainerMenuIds(o)
+  const staff: Staff = { id, name, color, description }
+  if (image_url) staff.image_url = image_url
+  if (display_order !== undefined) staff.display_order = display_order
+  if (menuIds) staff.menuIds = menuIds
+  return staff
 }
 
 function extractTrainerRows(data: unknown): unknown[] {
@@ -102,19 +169,63 @@ function trainerDetailUrl(trainerId: string): string {
 }
 
 /**
- * `PUT /api/admin/trainers/{trainer_id}` — `name`・表示色（`color`）を更新。
+ * `GET /api/admin/trainers/{trainer_id}` — 1件（対応メニュー等の詳細用）。
+ * 未実装のサーバーでは 404 となり得る。
+ */
+export async function fetchAdminTrainerById(trainerId: string): Promise<Staff | null> {
+  const res = await apiFetch(trainerDetailUrl(trainerId), { method: "GET" })
+  if (res.status === 401) throw new Error("UNAUTHORIZED")
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error("FETCH_FAILED")
+  let data: unknown
+  try {
+    data = await res.json()
+  } catch {
+    data = null
+  }
+  return mapTrainerDetailRowToStaff(data)
+}
+
+/**
+ * `PUT /api/admin/trainers/{trainer_id}` — プロフィール・表示色・対応メニュー等を更新。
  */
 export async function putAdminTrainer(
   trainerId: string,
-  input: { name: string; color: string },
+  input: {
+    name: string
+    color: string
+    description?: string
+    image_url?: string
+    display_order?: number
+    /** 省略時は送らない（サーバーが据え置き）。空配列で全解除する用途は配列を明示 */
+    menu_ids?: string[]
+  },
 ): Promise<void> {
+  const body: Record<string, unknown> = {
+    name: input.name.trim(),
+    color: input.color.trim(),
+  }
+  if (input.description !== undefined) {
+    const t = input.description.trim()
+    body.description = t.length > 0 ? t : null
+  }
+  if (input.image_url !== undefined) {
+    const t = input.image_url.trim()
+    body.image_url = t.length > 0 ? t : null
+  }
+  if (
+    input.display_order !== undefined &&
+    Number.isFinite(input.display_order)
+  ) {
+    body.display_order = Math.round(input.display_order)
+  }
+  if (input.menu_ids !== undefined) {
+    body.menu_ids = input.menu_ids.map((id) => String(id).trim()).filter(Boolean)
+  }
   const res = await apiFetch(trainerDetailUrl(trainerId), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: input.name.trim(),
-      color: input.color.trim(),
-    }),
+    body: JSON.stringify(body),
   })
   if (res.status === 401) {
     throw new Error("UNAUTHORIZED")
@@ -126,7 +237,9 @@ export async function putAdminTrainer(
 
 /**
  * `POST /api/admin/trainers` — トレーナー登録。
- * `display_order` はサーバーが当サロンの `trainers.display_order` 最大値+1で採番する。
+ * 対応メニューは `trainer_menus` に1行ずつ入る想定のため、複数メニューは呼び出し側で
+ * メニューIDごとに本関数を複数回呼ぶ（各リクエストの `menu_ids` は1件）。
+ * `display_order` を省略した場合はサーバーが当サロンの最大値+1で採番する想定。
  * `is_active: true` はサーバー側デフォルト。
  */
 export async function postAdminTrainer(input: {
@@ -134,6 +247,10 @@ export async function postAdminTrainer(input: {
   color: string
   /** 未入力のときは送らない（NULL 相当） */
   description?: string
+  image_url?: string
+  display_order?: number
+  /** 送る場合は通常1件（複数メニューは複数回 POST） */
+  menu_ids?: string[]
 }): Promise<Staff> {
   const payload: Record<string, unknown> = {
     name: input.name.trim(),
@@ -142,6 +259,22 @@ export async function postAdminTrainer(input: {
   const d = input.description?.trim()
   if (d) {
     payload.description = d
+  }
+  const img = input.image_url?.trim()
+  if (img) {
+    payload.image_url = img
+  }
+  if (
+    input.display_order !== undefined &&
+    Number.isFinite(input.display_order)
+  ) {
+    payload.display_order = Math.round(input.display_order)
+  }
+  const mids = (input.menu_ids ?? [])
+    .map((id) => String(id).trim())
+    .filter(Boolean)
+  if (mids.length > 0) {
+    payload.menu_ids = mids
   }
 
   const res = await apiFetch(ADMIN_TRAINERS_LIST_PATH, {

@@ -36,8 +36,22 @@ type AdminStaffContextValue = {
     name: string
     color: string
     description?: string
+    image_url?: string
+    display_order?: number
+    /** サロンメニューID。1件ごとに POST /api/admin/trainers が走る */
+    menuIds: string[]
   }) => Promise<Staff | null>
-  updateStaff: (id: string, input: { name: string; color: string }) => Promise<boolean>
+  updateStaff: (
+    id: string,
+    input: {
+      name: string
+      color: string
+      description: string
+      image_url: string
+      display_order?: number
+      menuIds: string[]
+    },
+  ) => Promise<boolean>
   deleteStaff: (staff: Staff) => Promise<void>
 }
 
@@ -71,23 +85,53 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
       name: string
       color: string
       description?: string
+      image_url?: string
+      display_order?: number
+      menuIds: string[]
     }): Promise<Staff | null> => {
       const name = input.name.trim()
       const color = input.color.trim()
       if (!name || !isValidHexColor(color)) return null
       const normalized = normalizeColorInput(color)
+      const menuIds = input.menuIds
+        .map((id) => String(id).trim())
+        .filter(Boolean)
+      const base: Parameters<typeof postAdminTrainer>[0] = {
+        name,
+        color: normalized,
+        description: input.description?.trim() || undefined,
+        image_url: input.image_url?.trim() || undefined,
+      }
+      if (
+        input.display_order !== undefined &&
+        Number.isFinite(input.display_order)
+      ) {
+        base.display_order = Math.round(input.display_order)
+      }
       try {
-        const created = await postAdminTrainer({
-          name,
-          color: normalized,
-          description: input.description?.trim() || undefined,
-        })
+        let created: Staff | null = null
+        if (menuIds.length === 0) {
+          created = await postAdminTrainer(base)
+        } else {
+          for (const menuId of menuIds) {
+            const row = await postAdminTrainer({
+              ...base,
+              menu_ids: [menuId],
+            })
+            if (!created) created = row
+          }
+        }
+        if (!created) return null
+        const withMenus: Staff = {
+          ...created,
+          menuIds: menuIds.length > 0 ? [...menuIds] : created.menuIds,
+        }
         setStaffList((prev) =>
-          [...prev.filter((s) => s.id !== created.id), created].sort((a, b) =>
+          [...prev.filter((s) => s.id !== withMenus.id), withMenus].sort((a, b) =>
             a.name.localeCompare(b.name, "ja"),
           ),
         )
-        return created
+        return withMenus
       } catch (e) {
         if (e instanceof Error && e.message === "UNAUTHORIZED") throw e
         return null
@@ -97,18 +141,49 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
   )
 
   const updateStaff = useCallback(
-    async (id: string, input: { name: string; color: string }): Promise<boolean> => {
+    async (
+      id: string,
+      input: {
+        name: string
+        color: string
+        description: string
+        image_url: string
+        display_order?: number
+        menuIds: string[]
+      },
+    ): Promise<boolean> => {
       const name = input.name.trim()
       const color = input.color.trim()
       if (!name || !isValidHexColor(color)) return false
       const normalized = normalizeColorInput(color)
+      const menuIds = input.menuIds
+        .map((mid) => String(mid).trim())
+        .filter(Boolean)
       try {
-        await putAdminTrainer(id, { name, color: normalized })
+        await putAdminTrainer(id, {
+          name,
+          color: normalized,
+          description: input.description,
+          image_url: input.image_url,
+          display_order: input.display_order,
+          menu_ids: menuIds,
+        })
+        const descTrim = input.description.trim()
+        const imgTrim = input.image_url.trim()
         setStaffList((prev) => {
           const idx = prev.findIndex((s) => s.id === id)
           if (idx < 0) return prev
           const next = [...prev]
-          next[idx] = { ...next[idx], name, color: normalized }
+          const cur = next[idx]
+          next[idx] = {
+            ...cur,
+            name,
+            color: normalized,
+            description: descTrim || undefined,
+            image_url: imgTrim || undefined,
+            display_order: input.display_order,
+            menuIds: [...menuIds],
+          }
           return next.sort((a, b) => a.name.localeCompare(b.name, "ja"))
         })
         return true

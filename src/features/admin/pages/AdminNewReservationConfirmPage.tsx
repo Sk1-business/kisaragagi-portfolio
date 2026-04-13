@@ -132,7 +132,7 @@ export function AdminNewReservationConfirmPage() {
         <CardContent className="space-y-3 text-sm">
           <div className="grid grid-cols-[8rem_1fr] gap-1">
             <dt className="text-muted-foreground">メニュー</dt>
-            <dd>{draft.menuName ?? draft.menuId}</dd>
+            <dd>{draft.menuName?.trim() || "—"}</dd>
             <dt className="text-muted-foreground">所要時間</dt>
             <dd>{draft.durationMinutes} 分</dd>
             <dt className="text-muted-foreground">開始</dt>
