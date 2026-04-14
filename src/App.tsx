@@ -27,6 +27,7 @@ import { UserReservationConfirmPage } from "@/features/user/pages/UserReservatio
 import { UserReservationChangeModePage } from "@/features/user/pages/UserReservationChangeModePage"
 import { UserReservationInputPage } from "@/features/user/pages/UserReservationInputPage"
 import { UserReservationDetailPage } from "@/features/user/pages/UserReservationDetailPage"
+import { UserPayPayReturnPage } from "@/features/user/pages/UserPayPayReturnPage"
 import { UserSchedulePage } from "@/features/user/pages/UserSchedulePage"
 import { AdminLayout } from "./layouts/AdminLayout"
 import { UserLayout } from "./layouts/UserLayout"
@@ -108,6 +109,7 @@ function App() {
           <Route path={ROUTES.userReservationSchedule} element={<UserSchedulePage />} />
           <Route path={ROUTES.userReservationInput} element={<UserReservationInputPage />} />
           <Route path={ROUTES.userReservationConfirm} element={<UserReservationConfirmPage />} />
+          <Route path={ROUTES.userReservationPaypayReturn} element={<UserPayPayReturnPage />} />
           <Route path={ROUTES.userMypage} element={<UserMypagePage />} />
           <Route path={ROUTES.userMypageReservationDetail} element={<UserReservationDetailPage />} />
           <Route path={ROUTES.userMypageProfile} element={<UserProfilePage />} />

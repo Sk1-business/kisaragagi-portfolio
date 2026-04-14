@@ -804,6 +804,13 @@ interface ReservationFinalizeResponse {
   payment_method: string | null
 }
 
+interface PayPayCheckoutResponse {
+  payment_id: string
+  merchant_payment_id: string
+  redirect_url: string
+  payment_status: string
+}
+
 export async function createReservationPaymentIntent(
   payload: {
     shopSlug?: string
@@ -932,6 +939,113 @@ export async function finalizePaidUserReservation(
   } catch (error) {
     if (error instanceof ApiClientError) return { ok: false, error: error.message }
     return { ok: false, error: "予約確定に失敗しました。" }
+  }
+}
+
+export async function startPayPayCheckout(
+  payload: CreateReservationPayload,
+): Promise<
+  | { ok: true; paymentId: string; merchantPaymentId: string; redirectUrl: string }
+  | { ok: false; error: string }
+> {
+  const resolvedShopSlug = resolveShopSlug(payload.shopSlug)
+  if (!resolvedShopSlug) {
+    return { ok: false, error: "店舗情報が見つかりません。" }
+  }
+  try {
+    const menu = await resolveMenuForNewReservation(resolvedShopSlug, {
+      preferredMenuId: payload.preferredMenuId,
+      mode: payload.mode,
+      trainerId: payload.trainerId,
+    })
+    const bookingType = payload.mode === "nomination" ? "SHIMEI" : "OMAKASE"
+    const response = await apiRequest<PayPayCheckoutResponse>("/api/payments/paypay/checkout", {
+      method: "POST",
+      body: {
+        shop_slug: resolvedShopSlug,
+        menu_id: menu.menu_id,
+        start_at: toReservationStartIso(payload.date, payload.time),
+        customer_name: payload.fullName || undefined,
+        customer_email: payload.email || undefined,
+        customer_phone: payload.phone || undefined,
+        notes: payload.note || undefined,
+        booking_type: bookingType,
+        trainer_id:
+          payload.mode === "nomination" && payload.trainerId ? payload.trainerId : undefined,
+        payment_method: payload.paymentMethod?.trim() || "paypay",
+      },
+    })
+
+    return {
+      ok: true,
+      paymentId: response.payment_id,
+      merchantPaymentId: response.merchant_payment_id,
+      redirectUrl: response.redirect_url,
+    }
+  } catch (error) {
+    if (error instanceof ApiClientError) return { ok: false, error: error.message }
+    if (error instanceof Error) return { ok: false, error: error.message }
+    return { ok: false, error: "PayPay決済の開始に失敗しました。" }
+  }
+}
+
+export async function finalizePayPayReservation(
+  payload: {
+    merchantPaymentId: string
+    mode?: string
+    trainerId?: string | null
+    trainerName?: string | null
+    note?: string
+    menuId?: string
+    shopSlug?: string
+  },
+): Promise<{ ok: true; reservation: UserReservation } | { ok: false; error: string }> {
+  try {
+    const finalized = await apiRequest<ReservationFinalizeResponse>("/api/payments/paypay/finalize", {
+      method: "POST",
+      body: {
+        merchant_payment_id: payload.merchantPaymentId,
+      },
+    })
+
+    const meta = loadReservationMeta()
+    const nextMeta: StoredReservationMeta[] = [
+      {
+        id: finalized.reservation_id,
+        confirmationToken: finalized.confirmation_token ?? undefined,
+        mode: payload.mode ?? "omakase",
+        trainerId: payload.trainerId ?? null,
+        trainerName: payload.trainerName ?? null,
+        note: payload.note ?? "",
+        menuId: payload.menuId,
+      },
+      ...meta.filter((item) => item.id !== finalized.reservation_id),
+    ]
+    saveReservationMeta(nextMeta)
+
+    let detail: ReservationDetailResponse
+    try {
+      detail = await apiRequest<ReservationDetailResponse>(`/api/my/reservations/${finalized.reservation_id}`)
+    } catch {
+      if (!finalized.confirmation_token) {
+        return { ok: false, error: "予約詳細の取得に失敗しました。" }
+      }
+      const resolvedShopSlug = resolveShopSlug(payload.shopSlug)
+      if (!resolvedShopSlug) {
+        return { ok: false, error: "店舗情報が見つかりません。" }
+      }
+      detail = await apiRequest<ReservationDetailResponse>(
+        buildSalonApiPath(resolvedShopSlug, `/reservations/${finalized.confirmation_token}`),
+      )
+    }
+    return {
+      ok: true,
+      reservation: toReservation(detail, nextMeta[0]),
+    }
+  } catch (error) {
+    if (error instanceof ApiClientError) return { ok: false, error: error.message }
+    if (error instanceof Error) return { ok: false, error: error.message }
+    return { ok: false, error: "PayPay決済確定に失敗しました。" }
   }
 }
 

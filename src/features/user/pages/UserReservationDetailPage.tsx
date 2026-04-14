@@ -10,7 +10,7 @@ import {
   Store,
   UserRound,
 } from "lucide-react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
@@ -46,6 +46,7 @@ function reservationPriceLabel(
 export function UserReservationDetailPage() {
   const shopId = useShopId()
   const shopName = useSalonName(shopId)
+  const location = useLocation()
   const navigate = useNavigate()
   const reservationId = usePersistentReservationId()
   const { reservation, isLoading: isReservationLoading } = useUserReservation(reservationId, shopId)
@@ -103,6 +104,9 @@ export function UserReservationDetailPage() {
   }, [reservation?.time, reservation?.serviceEndAt])
 
   const displayMenuName = reservation?.menuName?.trim() || "未定"
+  const fromPastTab = Boolean(
+    (location.state as { fromPastTab?: boolean } | null)?.fromPastTab,
+  )
 
   if (isReservationLoading || isPolicyLoading) {
     return (
@@ -283,8 +287,7 @@ export function UserReservationDetailPage() {
 
           {reservation.paymentMethod ||
           reservation.paymentStatus ||
-          reservation.paymentAmountYen != null ||
-          reservation.paymentRecordStatus ? (
+          reservation.paymentAmountYen != null ? (
             <div className="space-y-4 px-6 py-5">
               <div className="flex items-center gap-2">
                 <CreditCard className="size-4 text-muted-foreground" />
@@ -298,12 +301,6 @@ export function UserReservationDetailPage() {
                       {formatReservationPaymentMethod(reservation.paymentMethod)}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-[11px] text-muted-foreground">予約の決済状況</p>
-                    <p className="text-sm font-semibold text-foreground">
-                      {formatPaymentStatusLabel(reservation.paymentStatus)}
-                    </p>
-                  </div>
                   {reservation.paymentAmountYen != null ? (
                     <div>
                       <p className="text-[11px] text-muted-foreground">決済金額</p>
@@ -315,16 +312,14 @@ export function UserReservationDetailPage() {
                       </p>
                     </div>
                   ) : null}
-                  {reservation.paymentRecordStatus ? (
-                    <div>
-                      <p className="text-[11px] text-muted-foreground">決済レコード状態</p>
-                      <p className="text-sm font-semibold text-foreground">
-                        {formatPaymentStatusLabel(reservation.paymentRecordStatus)}
-                      </p>
-                    </div>
-                  ) : null}
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">決済状況</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {formatPaymentStatusLabel(reservation.paymentStatus)}
+                    </p>
+                  </div>
                   {reservation.paymentPaidAt ? (
-                    <div className="sm:col-span-2">
+                    <div>
                       <p className="text-[11px] text-muted-foreground">支払完了日時</p>
                       <p className="text-sm font-semibold text-foreground">
                         {new Date(reservation.paymentPaidAt).toLocaleString("ja-JP")}
@@ -337,7 +332,7 @@ export function UserReservationDetailPage() {
           ) : null}
         </div>
 
-        {isUpcoming ? (
+        {isUpcoming && !fromPastTab ? (
           <div className="border-t border-slate-100 px-5 py-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <Button
@@ -422,36 +417,38 @@ export function UserReservationDetailPage() {
         variant="default"
       />
 
-      <div className="rounded-2xl bg-white shadow-lg">
-        <div className="border-b border-slate-100 px-6 py-4">
-          <h3 className="text-sm font-bold text-foreground">各種ポリシー</h3>
-        </div>
-        <div className="space-y-4 p-5">
-          {reservationChangePolicy ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-foreground">{reservationChangePolicy.title}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{reservationChangePolicy.summary}</p>
-              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
-                {reservationChangePolicy.detailLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+      {!fromPastTab ? (
+        <div className="rounded-2xl bg-white shadow-lg">
+          <div className="border-b border-slate-100 px-6 py-4">
+            <h3 className="text-sm font-bold text-foreground">各種ポリシー</h3>
+          </div>
+          <div className="space-y-4 p-5">
+            {reservationChangePolicy ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-foreground">{reservationChangePolicy.title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{reservationChangePolicy.summary}</p>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                  {reservationChangePolicy.detailLines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
-          {cancellationPolicy ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-foreground">{cancellationPolicy.title}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{cancellationPolicy.summary}</p>
-              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
-                {cancellationPolicy.detailLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+            {cancellationPolicy ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-foreground">{cancellationPolicy.title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{cancellationPolicy.summary}</p>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                  {cancellationPolicy.detailLines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <Button asChild variant="outline" size="lg" className="w-full rounded-xl">
         <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ戻る</Link>

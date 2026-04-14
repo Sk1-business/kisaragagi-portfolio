@@ -155,9 +155,9 @@ export function UserLayout() {
           </div>
           <div className="flex items-center gap-1">
             <Button asChild variant="ghost" size="sm" className="text-xs text-muted-foreground">
-              <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>
-                <UserRound className="mr-1 size-3.5" />
-                マイページ
+              <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)} aria-label="マイページ">
+                <UserRound className="size-3.5 min-[420px]:mr-1" />
+                <span className="max-[419px]:sr-only">マイページ</span>
               </Link>
             </Button>
             <Button
@@ -166,9 +166,10 @@ export function UserLayout() {
               size="sm"
               className="text-xs text-muted-foreground"
               onClick={handleLogout}
+              aria-label="ログアウト"
             >
-              <LogOut className="mr-1 size-3.5" />
-              ログアウト
+              <LogOut className="size-3.5 min-[420px]:mr-1" />
+              <span className="max-[419px]:sr-only">ログアウト</span>
             </Button>
           </div>
         </div>

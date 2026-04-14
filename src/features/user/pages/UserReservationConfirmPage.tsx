@@ -17,6 +17,7 @@ import {
   createReservationPaymentIntent,
   createUserReservation,
   finalizePaidUserReservation,
+  startPayPayCheckout,
   updateUserReservation,
 } from "@/features/user/api/userReservationApi"
 import {
@@ -253,6 +254,15 @@ export function UserReservationConfirmPage() {
           return
         }
       }
+    } else if (input.paymentMethod === "paypay") {
+      const checkout = await startPayPayCheckout(commonPayload)
+      if (!checkout.ok) {
+        setSubmitError(checkout.error)
+        setIsSubmitting(false)
+        return
+      }
+      window.location.assign(checkout.redirectUrl)
+      return
     } else {
       const result = await createUserReservation(commonPayload)
       if (!result.ok) {

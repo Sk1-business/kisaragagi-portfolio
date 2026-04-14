@@ -135,3 +135,81 @@ npm run dev
 - Tailwind CSS: `^4.2.1`
 - @tailwindcss/vite: `^4.2.1`
 - Lucide React: `^0.575.0`
+
+---
+
+## 決済機能（クレジット / PayPay）を動かす手順
+
+### 1. フロントの `.env` を設定
+
+`SaaS_frontend/.env`（または `.env.local`）に以下を設定してください。
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_xxx
+```
+
+### 2. Backend を先に起動
+
+このフロントは決済APIを Backend 経由で呼び出します。`Struct` 側で次を実行してください。
+
+- `uv run alembic upgrade head`
+- `uv run uvicorn app.main:app --reload --port 8000`
+- `stripe listen --forward-to http://localhost:8000/api/payments/webhook/stripe`（クレジット決済で必須）
+
+### 3. フロントを起動
+
+```bash
+npm install
+npm run dev
+```
+
+### 4. 動作確認
+
+- クレジット決済: `credit` を選択して Stripe テストカードで支払い
+- PayPay 決済: `paypay` を選択して支払いし、`/user/reservation/paypay-return` に戻る
+
+### 5. よくある確認ポイント
+
+- `VITE_API_BASE_URL` が `http://localhost:8000` になっているか
+- Stripe の公開鍵と秘密鍵が同じアカウントのものか
+- PayPay で 401 の場合、Backend の `PAYPAY_API_KEY` / `PAYPAY_API_SECRET` / `PAYPAY_MERCHANT_ID` の組み合わせを確認
+
+## Stripe / PayPay アカウント準備手順（追補）
+
+このフロントは Backend 側のキー設定が完了している前提で決済を呼び出します。
+
+### 1. Stripe の準備（Backend 側）
+
+- Stripe サインアップ: https://dashboard.stripe.com/register
+- テストモード ON
+- `Developers > API keys` からキー取得
+  - `Publishable key` -> `VITE_STRIPE_PUBLISHABLE_KEY`（Frontend）
+  - `Secret key` -> `STRIPE_SECRET_KEY`（Backend）
+- `stripe listen --forward-to http://localhost:8000/api/payments/webhook/stripe`
+  - 出力された `whsec_...` -> `STRIPE_WEBHOOK_SECRET`（Backend）
+
+### 2. PayPay for Developers の準備（Backend 側）
+
+- サインアップ: https://developer.paypay.ne.jp/
+- Sandbox アプリ作成（Web Payment）
+- 取得した値を Backend `.env` へ設定
+  - `PAYPAY_API_KEY`
+  - `PAYPAY_API_SECRET`
+  - `PAYPAY_MERCHANT_ID`
+  - `PAYPAY_MODE=sandbox`
+
+### 3. Frontend `.env` 設定
+
+`SaaS_frontend/.env`（または `.env.local`）:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_xxx
+```
+
+### 4. 反映手順
+
+- Backend 再起動
+- Frontend 再起動
+- 予約画面で `credit` / `paypay` を選んで動作確認

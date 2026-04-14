@@ -144,7 +144,7 @@ export function UserMypagePage() {
               <Link
                 key={reservation.id}
                 to={buildPathWithShopId(ROUTES.userMypageReservationDetail, shopId)}
-                state={{ reservationId: reservation.id }}
+                state={{ reservationId: reservation.id, fromPastTab: activeTab === "past" }}
                 className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:shadow-md"
               >
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100">
