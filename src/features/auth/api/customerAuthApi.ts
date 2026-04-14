@@ -21,54 +21,6 @@ interface RegisterResponse {
 interface ValidationErrorItem {
   loc: (string | number)[]
   msg: string
-  type: string
-}
-
-const FIELD_LABELS: Record<string, string> = {
-  email: "メールアドレス",
-  password: "パスワード",
-  name: "お名前",
-  phone: "電話番号",
-}
-
-const MSG_PATTERNS: [RegExp, string][] = [
-  [/string should have at least (\d+) characters/i, "$1文字以上で入力してください"],
-  [/value is not a valid email address/i, "正しい形式で入力してください"],
-  [/field required/i, "入力必須です"],
-  [/string type expected/i, "文字列で入力してください"],
-]
-
-function translateMsg(msg: string): string {
-  for (const [pattern, replacement] of MSG_PATTERNS) {
-    if (pattern.test(msg)) {
-      return msg.replace(pattern, replacement)
-    }
-  }
-  return msg
-}
-
-function parseErrorDetail(body: unknown): string {
-  if (!body || typeof body !== "object") return ""
-
-  const obj = body as Record<string, unknown>
-
-  if (typeof obj.detail === "string") {
-    return obj.detail
-  }
-
-  if (Array.isArray(obj.detail)) {
-    const items = obj.detail as ValidationErrorItem[]
-    return items
-      .map((item) => {
-        const rawField = item.loc.filter((s) => s !== "body").join(".")
-        const field = FIELD_LABELS[rawField] ?? rawField
-        const msg = translateMsg(item.msg)
-        return field ? `${field}: ${msg}` : msg
-      })
-      .join("\n")
-  }
-
-  return ""
 }
 
 interface LoginPayload {
@@ -83,32 +35,91 @@ interface LoginResponse {
   name: string
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  email: "Email",
+  password: "Password",
+  name: "Name",
+  phone: "Phone number",
+}
+
+const MESSAGE_PATTERNS: [RegExp, string][] = [
+  [/string should have at least (\d+) characters/i, "Must be at least $1 characters."],
+  [/value is not a valid email address/i, "Please enter a valid email address."],
+  [/field required/i, "This field is required."],
+  [/string type expected/i, "Please enter text."],
+]
+
+function translateValidationMessage(raw: string): string {
+  for (const [pattern, replacement] of MESSAGE_PATTERNS) {
+    if (pattern.test(raw)) return raw.replace(pattern, replacement)
+  }
+  return raw
+}
+
+function parseErrorDetail(body: unknown): string {
+  if (!body || typeof body !== "object") return ""
+
+  const obj = body as Record<string, unknown>
+  if (typeof obj.detail === "string") return obj.detail
+
+  if (Array.isArray(obj.detail)) {
+    const items = obj.detail as ValidationErrorItem[]
+    return items
+      .map((item) => {
+        const rawField = item.loc.filter((segment) => segment !== "body").join(".")
+        const fieldLabel = FIELD_LABELS[rawField] ?? rawField
+        const message = translateValidationMessage(item.msg)
+        return fieldLabel ? `${fieldLabel}: ${message}` : message
+      })
+      .join("\n")
+  }
+
+  return ""
+}
+
+function buildConnectionErrorMessage(cause: unknown): string {
+  const base = "API connection failed. Please make sure the backend server is running."
+  if (!import.meta.env.DEV) return base
+  const detail = cause instanceof Error ? cause.message : String(cause)
+  console.error("[customerAuthApi] request failed", cause)
+  return `${base} (${detail})`
+}
+
+function requireShopSlug(input?: string): { ok: true; shopSlug: string } | { ok: false; error: string } {
+  const shopSlug = resolveShopSlug(input)
+  if (!shopSlug) {
+    return {
+      ok: false,
+      error: "Shop ID is missing. Open the customer page from the correct salon link and try again.",
+    }
+  }
+  return { ok: true, shopSlug }
+}
+
 export async function loginCustomer(payload: LoginPayload): Promise<
   | { ok: true; data: LoginResponse }
   | { ok: false; error: string }
 > {
-  const shopSlug = resolveShopSlug(payload.shopSlug)
-  if (!shopSlug) {
-    return { ok: false, error: "店舗情報が見つかりません。店舗ページからアクセスしてください。" }
-  }
+  const slug = requireShopSlug(payload.shopSlug)
+  if (!slug.ok) return slug
+
   try {
-    const res = await fetch(`${API_BASE}${buildSalonApiPath(shopSlug, "/auth/login")}`, {
+    const response = await fetch(`${API_BASE}${buildSalonApiPath(slug.shopSlug, "/auth/login")}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ email: payload.email, password: payload.password }),
     })
 
-    if (res.ok) {
-      const data = (await res.json()) as LoginResponse
-      return { ok: true, data }
+    if (response.ok) {
+      return { ok: true, data: (await response.json()) as LoginResponse }
     }
 
-    const errorBody = await res.json().catch(() => null)
-    const message = parseErrorDetail(errorBody) || "ログインに失敗しました"
+    const errorBody = await response.json().catch(() => null)
+    const message = parseErrorDetail(errorBody) || "Login failed. Please check your credentials."
     return { ok: false, error: message }
-  } catch {
-    return { ok: false, error: "サーバーに接続できませんでした" }
+  } catch (cause) {
+    return { ok: false, error: buildConnectionErrorMessage(cause) }
   }
 }
 
@@ -116,12 +127,11 @@ export async function registerCustomer(payload: RegisterPayload): Promise<
   | { ok: true; data: RegisterResponse }
   | { ok: false; error: string }
 > {
-  const shopSlug = resolveShopSlug(payload.shopSlug)
-  if (!shopSlug) {
-    return { ok: false, error: "店舗情報が見つかりません。店舗ページからアクセスしてください。" }
-  }
+  const slug = requireShopSlug(payload.shopSlug)
+  if (!slug.ok) return slug
+
   try {
-    const res = await fetch(`${API_BASE}${buildSalonApiPath(shopSlug, "/auth/register")}`, {
+    const response = await fetch(`${API_BASE}${buildSalonApiPath(slug.shopSlug, "/auth/register")}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -135,27 +145,26 @@ export async function registerCustomer(payload: RegisterPayload): Promise<
       }),
     })
 
-    if (res.ok) {
-      const data = (await res.json()) as RegisterResponse
-      return { ok: true, data }
+    if (response.ok) {
+      return { ok: true, data: (await response.json()) as RegisterResponse }
     }
 
-    const errorBody = await res.json().catch(() => null)
-    const message = parseErrorDetail(errorBody) || `登録に失敗しました (${res.status})`
+    const errorBody = await response.json().catch(() => null)
+    const message =
+      parseErrorDetail(errorBody) || `Registration failed. Please try again. (HTTP ${response.status})`
     return { ok: false, error: message }
-  } catch {
-    return { ok: false, error: "サーバーに接続できませんでした" }
+  } catch (cause) {
+    return { ok: false, error: buildConnectionErrorMessage(cause) }
   }
 }
 
-/** Cookie ベースのセッションが有効か（apiRequest は使わず 401 時のグローバル処理と干渉しない） */
 export async function checkCustomerSessionAlive(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/api/auth/me`, {
+    const response = await fetch(`${API_BASE}/api/auth/me`, {
       method: "GET",
       credentials: "include",
     })
-    return res.ok
+    return response.ok
   } catch {
     return false
   }
@@ -168,7 +177,7 @@ export async function logoutCustomer(): Promise<void> {
       credentials: "include",
     })
   } catch {
-    // ログアウト失敗でもクライアント側は掃除する
+    // Ignore network errors on logout.
   } finally {
     clearCustomerPortalClientCaches()
   }
@@ -178,22 +187,22 @@ export async function getLineLoginUrl(inputShopSlug?: string): Promise<
   | { ok: true; url: string }
   | { ok: false; error: string }
 > {
-  const shopSlug = resolveShopSlug(inputShopSlug)
-  if (!shopSlug) {
-    return { ok: false, error: "店舗情報が見つかりません。店舗ページからアクセスしてください。" }
-  }
+  const slug = requireShopSlug(inputShopSlug)
+  if (!slug.ok) return slug
+
   try {
-    persistShopSlug(shopSlug)
-    const res = await fetch(`${API_BASE}${buildSalonApiPath(shopSlug, "/auth/line/url")}`, {
+    persistShopSlug(slug.shopSlug)
+    const response = await fetch(`${API_BASE}${buildSalonApiPath(slug.shopSlug, "/auth/line/url")}`, {
       credentials: "include",
     })
-    if (res.ok) {
-      const data = (await res.json()) as { url: string }
-      return { ok: true, url: data.url }
+
+    if (response.ok) {
+      return { ok: true, url: ((await response.json()) as { url: string }).url }
     }
-    return { ok: false, error: "LINE認証URLの取得に失敗しました" }
-  } catch {
-    return { ok: false, error: "サーバーに接続できませんでした" }
+
+    return { ok: false, error: "Failed to load LINE login URL." }
+  } catch (cause) {
+    return { ok: false, error: buildConnectionErrorMessage(cause) }
   }
 }
 
@@ -201,27 +210,26 @@ export async function lineCallback(code: string, state?: string): Promise<
   | { ok: true; data: { message: string; user_id: string; name: string } }
   | { ok: false; error: string }
 > {
-  const shopSlug = resolveShopSlug()
-  if (!shopSlug) {
-    return { ok: false, error: "店舗情報が見つかりません。再度ログインしてください。" }
-  }
+  const slug = requireShopSlug()
+  if (!slug.ok) return slug
+
   try {
-    const res = await fetch(`${API_BASE}${buildSalonApiPath(shopSlug, "/auth/line/callback")}`, {
+    const response = await fetch(`${API_BASE}${buildSalonApiPath(slug.shopSlug, "/auth/line/callback")}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ code, state }),
     })
 
-    if (res.ok) {
-      const data = (await res.json()) as { message: string; user_id: string; name: string }
+    if (response.ok) {
+      const data = (await response.json()) as { message: string; user_id: string; name: string }
       return { ok: true, data }
     }
 
-    const errorBody = await res.json().catch(() => null)
-    const message = parseErrorDetail(errorBody) || "LINE認証に失敗しました"
+    const errorBody = await response.json().catch(() => null)
+    const message = parseErrorDetail(errorBody) || "LINE login failed. Please try again."
     return { ok: false, error: message }
-  } catch {
-    return { ok: false, error: "サーバーに接続できませんでした" }
+  } catch (cause) {
+    return { ok: false, error: buildConnectionErrorMessage(cause) }
   }
 }

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   CalendarDays,
@@ -7,17 +7,24 @@ import {
   CreditCard,
   MessageSquare,
   Phone,
-  Star,
-  Store,
   UserRound,
 } from "lucide-react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
-import { createUserReservation, updateUserReservation } from "@/features/user/api/userReservationApi"
+import {
+  createReservationPaymentIntent,
+  createUserReservation,
+  finalizePaidUserReservation,
+  startPayPayCheckout,
+  updateUserReservation,
+} from "@/features/user/api/userReservationApi"
+import {
+  UserReservationStripePayment,
+  type UserReservationStripePaymentHandle,
+} from "@/features/user/components/UserReservationStripePayment"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
-import { useSalonName } from "@/features/user/hooks/useSalonName"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 import {
   clearReservationUpdateIntent,
@@ -25,101 +32,163 @@ import {
   usePersistentReservationId,
 } from "@/features/user/hooks/usePersistentReservationId"
 import type { ReservationInputData } from "@/features/user/pages/UserReservationInputPage"
-import { formatDateLongWithWeekday } from "@/lib/dateFormat"
-import { maskCardNumber } from "@/lib/paymentCard"
+import { addMinutesToTimeString, formatDateLongWithWeekday } from "@/lib/dateFormat"
+import { isCompletePhoneSegments, joinPhoneSegments, parsePhoneToSegments } from "@/lib/phone"
 
-function InfoRow({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <div className="flex size-8 shrink-0 items-center justify-center text-muted-foreground">
-        {icon}
-      </div>
-      <div>
-        <p className="text-[11px] text-muted-foreground">{label}</p>
-        <p className="text-sm font-semibold text-foreground">{value || "—"}</p>
-      </div>
-    </div>
-  )
+const PAYMENT_METHODS = [
+  { id: "credit", label: "クレジットカード", icon: CreditCard },
+  { id: "paypay", label: "PayPay", icon: Phone },
+] as const
+
+function splitFullName(fullName: string): { lastName: string; firstName: string } {
+  const trimmed = fullName.trim()
+  if (!trimmed) return { lastName: "", firstName: "" }
+  const [lastName, ...rest] = trimmed.split(/\s+/)
+  return { lastName: lastName ?? "", firstName: rest.join(" ") }
 }
 
 export function UserReservationConfirmPage() {
   const shopId = useShopId()
-  const shopName = useSalonName(shopId)
   const location = useLocation()
   const navigate = useNavigate()
   const persistentReservationId = usePersistentReservationId()
   const data = location.state as ReservationInputData | null
+
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [stripeClientSecret, setStripeClientSecret] = useState("")
+  const [stripePublishableKey, setStripePublishableKey] = useState("")
+  const [stripeAmountYen, setStripeAmountYen] = useState(0)
+  const [isStripeReady, setIsStripeReady] = useState(false)
+  /** 料金0円メニュー: Stripe を使わず予約 API のみ */
+  const [skipCardPayment, setSkipCardPayment] = useState(false)
+  const stripePaymentRef = useRef<UserReservationStripePaymentHandle>(null)
 
-  if (!data) {
-    return (
-      <section className="py-16 text-center">
-        <p className="text-sm text-muted-foreground">予約情報が見つかりませんでした。</p>
-        <Button asChild variant="outline" size="sm" className="mt-4 rounded-lg">
-          <Link to={buildPathWithShopId(ROUTES.userHome, shopId)}>店舗情報へ戻る</Link>
-        </Button>
-      </section>
-    )
-  }
+  const hasData = Boolean(data)
+  const input: ReservationInputData =
+    data ??
+    ({
+      mode: "omakase",
+      date: "",
+      time: "",
+      trainerId: "",
+      trainerName: "",
+      trainerRating: 0,
+      menuName: "",
+      fullName: "",
+      email: "",
+      phone: "",
+      note: "",
+      paymentMethod: "credit",
+      cardNumber: "",
+      cardExpiry: "",
+      cardCvc: "",
+      menuDurationMinutes: null,
+      menuPrice: null,
+      creditCardMode: undefined,
+      savedStripePaymentMethodId: null,
+      savedCardSummary: null,
+    } satisfies ReservationInputData)
 
-  /** state が欠けても session の変更意図で復元（明示的 false の新規予約は除外） */
   const treatAsReservationUpdateFlow =
-    data.isUpdatingExistingReservation === true ||
-    (data.isUpdatingExistingReservation !== false && readReservationUpdateIntent())
-
+    input.isUpdatingExistingReservation === true ||
+    (input.isUpdatingExistingReservation !== false && readReservationUpdateIntent())
   const effectiveReservationId = (
-    data.reservationId?.trim() ||
+    input.reservationId?.trim() ||
     (treatAsReservationUpdateFlow ? persistentReservationId : "")
   ).trim()
-
-  if (isSubmitted) {
-    const isReservationUpdate =
-      treatAsReservationUpdateFlow && Boolean(effectiveReservationId)
-    const successMessage = isReservationUpdate
-      ? "予約変更が完了しました。更新内容はマイページで確認できます。"
-      : "ご予約内容は登録メールアドレスへ送信されます。"
-    return (
-      <section className="flex flex-col items-center py-16 text-center">
-        <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-emerald-100">
-          <CheckCircle2 className="size-8 text-emerald-600" />
-        </div>
-        <h2 className="text-xl font-bold text-foreground">
-          {isReservationUpdate ? "予約変更が完了しました" : "予約が完了しました"}
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">{successMessage}</p>
-        <Button asChild size="lg" className="mt-6 rounded-xl">
-          <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ</Link>
-        </Button>
-      </section>
-    )
-  }
-
-  const paymentLabel = data.paymentMethod === "credit" ? "クレジットカード" : "PayPay"
-  const PaymentIcon = data.paymentMethod === "credit" ? CreditCard : Phone
-  const isChangeReservationFlow = treatAsReservationUpdateFlow
   const isReservationUpdate = treatAsReservationUpdateFlow && Boolean(effectiveReservationId)
+  const isCreditPayment = input.paymentMethod === "credit" && !isReservationUpdate
+  const useSavedStripeCard =
+    isCreditPayment &&
+    input.creditCardMode === "saved" &&
+    Boolean(input.savedStripePaymentMethodId?.trim())
+
+  const menuPrice = input.menuPrice ?? null
+  /** 入力画面で free 選択、または 0 円メニュー（API で skip 含む） */
+  const isPayAtVenue =
+    !isReservationUpdate &&
+    (input.paymentMethod === "free" ||
+      skipCardPayment ||
+      (menuPrice != null && menuPrice <= 0))
+
+  const displayMenuName = input.menuName?.trim() || "未定"
+  const menuDurationMinutes = input.menuDurationMinutes ?? null
+  const displayPriceYen =
+    skipCardPayment ? 0 : stripeAmountYen > 0 ? stripeAmountYen : menuPrice
+  const displayPriceText = isPayAtVenue
+    ? "現地で決済"
+    : displayPriceYen != null
+      ? `¥${displayPriceYen.toLocaleString()}`
+      : "未定"
+
+  const expectedTimeRange = useMemo(() => {
+    if (!input.time) return "未選択"
+    if (!menuDurationMinutes || menuDurationMinutes <= 0) return input.time
+    return `${input.time}〜${addMinutesToTimeString(input.time, menuDurationMinutes)}`
+  }, [input.time, menuDurationMinutes])
+
+  const phoneSegments = useMemo(() => parsePhoneToSegments(input.phone), [input.phone])
+  const { lastName, firstName } = splitFullName(input.fullName)
+
+  useEffect(() => {
+    if (!hasData) return
+    if (!isCreditPayment) return
+    let active = true
+    setSkipCardPayment(false)
+    setIsStripeReady(false)
+    setStripeClientSecret("")
+    setStripePublishableKey("")
+    setStripeAmountYen(0)
+    setSubmitError("")
+    void createReservationPaymentIntent({
+      shopSlug: shopId,
+      menuId: input.menuId,
+      mode: input.mode,
+      trainerId: input.mode === "nomination" ? input.trainerId || null : null,
+      date: input.date,
+      time: input.time,
+    }).then((result) => {
+      if (!active) return
+      if (!result.ok) {
+        setSubmitError(result.error)
+        return
+      }
+      if ("skipPayment" in result && result.skipPayment) {
+        setSkipCardPayment(true)
+        setIsStripeReady(true)
+        return
+      }
+      setStripeClientSecret(result.clientSecret)
+      setStripePublishableKey(result.publishableKey)
+      setStripeAmountYen(result.amountYen)
+    })
+    return () => {
+      active = false
+    }
+  }, [hasData, input.date, input.menuId, input.time, input.mode, input.trainerId, isCreditPayment, shopId])
 
   async function handleSubmit() {
-    if (!data) return
-
-    if (!isReservationUpdate) {
+    if (!hasData) return
+    if (isReservationUpdate) {
+      if (!effectiveReservationId) {
+        setSubmitError("予約IDが見つかりません。")
+        return
+      }
       setSubmitError("")
       setIsSubmitting(true)
-      const result = await createUserReservation({
-        date: data.date,
-        time: data.time,
-        mode: data.mode,
-        trainerId: data.mode === "nomination" ? data.trainerId || null : null,
-        trainerName: data.mode === "nomination" ? data.trainerName || null : null,
-        note: data.note,
-        fullName: data.fullName,
-        email: data.email,
-        phone: data.phone,
-        preferredMenuId: data.menuId,
-        shopSlug: shopId,
-        paymentMethod: data.paymentMethod,
+      const result = await updateUserReservation({
+        reservationId: effectiveReservationId,
+        date: input.date,
+        time: input.time,
+        mode: input.mode,
+        trainerId: input.mode === "nomination" ? input.trainerId || null : null,
+        trainerName: input.mode === "nomination" ? input.trainerName || null : null,
+        note: input.note,
+        fullName: input.fullName,
+        email: input.email,
+        phone: input.phone,
       })
       if (!result.ok) {
         setSubmitError(result.error)
@@ -132,29 +201,75 @@ export function UserReservationConfirmPage() {
       return
     }
 
-    if (!effectiveReservationId) {
-      setSubmitError("予約IDが見つかりません。やり直してください。")
-      return
+    const commonPayload = {
+      date: input.date,
+      time: input.time,
+      mode: input.mode,
+      trainerId: input.mode === "nomination" ? input.trainerId || null : null,
+      trainerName: input.mode === "nomination" ? input.trainerName || null : null,
+      note: input.note,
+      fullName: input.fullName,
+      email: input.email,
+      phone: input.phone,
+      preferredMenuId: input.menuId,
+      shopSlug: shopId,
+      paymentMethod: input.paymentMethod,
     }
+
     setSubmitError("")
     setIsSubmitting(true)
-    const result = await updateUserReservation({
-      reservationId: effectiveReservationId,
-      date: data.date,
-      time: data.time,
-      mode: data.mode,
-      trainerId: data.mode === "nomination" ? data.trainerId || null : null,
-      trainerName: data.mode === "nomination" ? data.trainerName || null : null,
-      note: data.note,
-      fullName: data.fullName,
-      email: data.email,
-      phone: data.phone,
-    })
 
-    if (!result.ok) {
-      setSubmitError(result.error)
-      setIsSubmitting(false)
+    if (input.paymentMethod === "credit") {
+      if (skipCardPayment) {
+        const result = await createUserReservation({
+          ...commonPayload,
+          paymentMethod: "free",
+        })
+        if (!result.ok) {
+          setSubmitError(result.error)
+          setIsSubmitting(false)
+          return
+        }
+      } else {
+        if (!stripePaymentRef.current) {
+          setSubmitError("お支払いフォームの準備ができていません。")
+          setIsSubmitting(false)
+          return
+        }
+        try {
+          const paymentIntentId = await stripePaymentRef.current.confirm()
+          const paid = await finalizePaidUserReservation({
+            ...commonPayload,
+            paymentIntentId,
+          })
+          if (!paid.ok) {
+            setSubmitError(paid.error)
+            setIsSubmitting(false)
+            return
+          }
+        } catch (error) {
+          const message = error instanceof Error && error.message ? error.message : "お支払いに失敗しました。"
+          setSubmitError(message)
+          setIsSubmitting(false)
+          return
+        }
+      }
+    } else if (input.paymentMethod === "paypay") {
+      const checkout = await startPayPayCheckout(commonPayload)
+      if (!checkout.ok) {
+        setSubmitError(checkout.error)
+        setIsSubmitting(false)
+        return
+      }
+      window.location.assign(checkout.redirectUrl)
       return
+    } else {
+      const result = await createUserReservation(commonPayload)
+      if (!result.ok) {
+        setSubmitError(result.error)
+        setIsSubmitting(false)
+        return
+      }
     }
 
     clearReservationUpdateIntent()
@@ -162,107 +277,204 @@ export function UserReservationConfirmPage() {
     setIsSubmitted(true)
   }
 
+  if (isSubmitted) {
+    return (
+      <section className="flex flex-col items-center py-16 text-center">
+        <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-emerald-100">
+          <CheckCircle2 className="size-8 text-emerald-600" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">予約が完了しました</h2>
+        <p className="mt-2 text-sm text-muted-foreground">マイページから内容をご確認いただけます。</p>
+        <Button asChild size="lg" className="mt-6 rounded-xl">
+          <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ</Link>
+        </Button>
+      </section>
+    )
+  }
+
+  if (!hasData) {
+    return (
+      <section className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">予約の入力情報が見つかりませんでした。</p>
+        <Button asChild variant="outline" size="sm" className="mt-4 rounded-lg">
+          <Link to={buildPathWithShopId(ROUTES.userHome, shopId)}>ホームへ戻る</Link>
+        </Button>
+      </section>
+    )
+  }
+
   return (
     <section className="space-y-5">
-      <UserSectionCard
-        title="予約確認"
-        subtitle={
-          isChangeReservationFlow
-            ? "入力内容をご確認のうえ、「予約変更を確定する」で更新してください。"
-            : "入力内容をご確認のうえ、「予約を確定する」で確定してください。"
-        }
-      >
-
-        <div className="space-y-5 p-6">
-          <div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              予約情報
-            </p>
-            <InfoRow label="店舗" value={shopName} icon={<Store className="size-4" />} />
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <InfoRow label="日付" value={data.date ? formatDateLongWithWeekday(data.date) : "未選択"} icon={<CalendarDays className="size-4" />} />
-              <InfoRow label="時間" value={data.time} icon={<Clock className="size-4" />} />
-            </div>
-            {data.mode === "nomination" ? (
-              <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100">
-                  <UserRound className="size-5 text-slate-400" />
-                </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground">指名トレーナー</p>
-                  <p className="text-sm font-semibold text-foreground">
-                    {data.trainerName?.trim() || "（トレーナー名の取得待ち）"}
-                  </p>
-                </div>
-                {data.trainerRating > 0 ? (
-                  <span className="ml-auto inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
-                    <Star className="size-3 fill-current" />
-                    {data.trainerRating.toFixed(1)}
-                  </span>
-                ) : null}
-              </div>
-            ) : (
-              <div className="mt-3">
-                <InfoRow label="予約モード" value="おまかせ" icon={<CalendarDays className="size-4" />} />
-              </div>
-            )}
-            <div className="mt-3">
-              <InfoRow label="メニュー" value={data.menuName || "未定"} icon={<MessageSquare className="size-4" />} />
-            </div>
-          </div>
-
-          <hr className="border-slate-100" />
-
-          <div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              予約者情報
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <InfoRow label="お名前" value={data.fullName} icon={<UserRound className="size-4" />} />
-              <InfoRow label="メールアドレス" value={data.email} icon={<MessageSquare className="size-4" />} />
-              <InfoRow label="電話番号" value={data.phone} icon={<Phone className="size-4" />} />
-            </div>
-          </div>
-
-          {data.note ? (
-            <>
-              <hr className="border-slate-100" />
+      <UserSectionCard title="予約内容の確認" subtitle="内容をご確認のうえ、確定してください。">
+        <div className="space-y-1 border-b border-slate-100 px-6 py-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{"予約情報"}</p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
               <div>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  ご要望・備考
+                <p className="text-[11px] text-muted-foreground">{"日付"}</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {input.date ? formatDateLongWithWeekday(input.date) : "未選択"}
                 </p>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-foreground">
-                  {data.note}
-                </div>
               </div>
-            </>
-          ) : null}
-
-          <hr className="border-slate-100" />
-
-          <div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              決済方法
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <InfoRow label="決済方法" value={paymentLabel} icon={<PaymentIcon className="size-4" />} />
-              {data.paymentMethod === "credit" && data.cardNumber ? (
-                <InfoRow label="カード番号" value={maskCardNumber(data.cardNumber)} icon={<CreditCard className="size-4" />} />
-              ) : null}
+            </div>
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <Clock className="size-4 shrink-0 text-muted-foreground" />
+              <div>
+                <p className="text-[11px] text-muted-foreground">{"想定時間"}</p>
+                <p className="text-sm font-semibold text-foreground">{expectedTimeRange}</p>
+              </div>
+            </div>
+          </div>
+          {input.mode === "nomination" ? (
+            <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100">
+                <UserRound className="size-5 text-slate-400" />
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">{"指名トレーナー"}</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {input.trainerName?.trim() || "未入力"}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+              <div>
+                <p className="text-[11px] text-muted-foreground">{"予約モード"}</p>
+                <p className="text-sm font-semibold text-foreground">{"おまかせ"}</p>
+              </div>
+            </div>
+          )}
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="text-[11px] text-muted-foreground">{"メニュー"}</p>
+                <p className="truncate text-sm font-semibold text-foreground">{displayMenuName}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <CreditCard className="size-4 shrink-0 text-muted-foreground" />
+              <div>
+                <p className="text-[11px] text-muted-foreground">{"料金"}</p>
+                <p className="text-sm font-semibold text-foreground">{displayPriceText}</p>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="flex gap-3 border-t border-slate-100 px-6 py-5">
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            className="rounded-xl"
-            onClick={() => navigate(-1)}
-          >
+        <div className="space-y-5 border-b border-slate-100 px-6 py-5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{"予約者情報"}</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium text-foreground">{"姓"}</p>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-foreground">
+                {lastName || "未入力"}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium text-foreground">{"名"}</p>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-foreground">
+                {firstName || "未入力"}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium text-foreground">{"メールアドレス"}</p>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-foreground">
+                {input.email || "未入力"}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium text-foreground">{"電話番号"}</p>
+              {isCompletePhoneSegments(phoneSegments) ? (
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm font-semibold text-foreground">
+                    {phoneSegments[0]}
+                  </div>
+                  <span className="text-muted-foreground">-</span>
+                  <div className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm font-semibold text-foreground">
+                    {phoneSegments[1]}
+                  </div>
+                  <span className="text-muted-foreground">-</span>
+                  <div className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm font-semibold text-foreground">
+                    {phoneSegments[2]}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-foreground">
+                  {joinPhoneSegments(phoneSegments) || "未入力"}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 border-b border-slate-100 px-6 py-5">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="size-4 text-muted-foreground" />
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              {"ご要望・備考"}
+            </p>
+          </div>
+          <div className="min-h-[4.5rem] w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-foreground">
+            {input.note?.trim() ? input.note : "（なし）"}
+          </div>
+        </div>
+
+        {!isPayAtVenue ? (
+          <div className="space-y-4 border-b border-slate-100 px-6 py-5">
+            <div className="flex items-center gap-2">
+              <CreditCard className="size-4 text-muted-foreground" />
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                {"決済方法"}
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {PAYMENT_METHODS.map((method) => {
+                const isActive = input.paymentMethod === method.id
+                const Icon = method.icon
+                return (
+                  <div
+                    key={method.id}
+                    className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${
+                      isActive
+                        ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                        : "border-slate-200 bg-white text-muted-foreground opacity-60"
+                    }`}
+                  >
+                    <Icon className="size-4" />
+                    {method.label}
+                  </div>
+                )
+              })}
+            </div>
+
+            {isCreditPayment && !skipCardPayment && input.savedCardSummary?.trim() ? (
+              <p className="text-sm text-foreground">
+                <span className="text-muted-foreground">お支払いカード: </span>
+                {input.savedCardSummary}
+              </p>
+            ) : null}
+
+            {isCreditPayment && !skipCardPayment && stripeClientSecret && stripePublishableKey ? (
+              <UserReservationStripePayment
+                ref={stripePaymentRef}
+                clientSecret={stripeClientSecret}
+                publishableKey={stripePublishableKey}
+                amountYen={stripeAmountYen}
+                onReadyChange={setIsStripeReady}
+                savedPaymentMethodId={useSavedStripeCard ? input.savedStripePaymentMethodId!.trim() : null}
+              />
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="flex gap-3 px-6 py-5">
+          <Button type="button" variant="outline" size="lg" className="rounded-xl" onClick={() => navigate(-1)}>
             <ArrowLeft className="mr-1 size-4" />
-            修正する
+            前の画面へ戻る
           </Button>
           <Button
             type="button"
@@ -271,13 +483,16 @@ export function UserReservationConfirmPage() {
             onClick={() => {
               void handleSubmit()
             }}
-            disabled={isSubmitting}
+            disabled={
+              isSubmitting ||
+              (isCreditPayment &&
+                menuPrice != null &&
+                menuPrice <= 0 &&
+                !skipCardPayment) ||
+              (isCreditPayment && !isPayAtVenue && !isStripeReady)
+            }
           >
-            {isSubmitting
-              ? "処理中..."
-              : isChangeReservationFlow
-                ? "予約変更を確定する"
-                : "予約を確定する"}
+            {isSubmitting ? "送信中..." : "予約を確定する"}
           </Button>
         </div>
         {submitError ? (

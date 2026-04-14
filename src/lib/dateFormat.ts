@@ -26,3 +26,14 @@ export function formatSlashDateTimeWithWeekday(date: string, time: string) {
   const weekday = resolveWeekdayLabel(date)
   return `${date.replaceAll("-", "/")}${weekday ? `(${weekday})` : ""} ${time}`
 }
+
+/** HH:mm に分を加算（予約の想定終了時刻用） */
+export function addMinutesToTimeString(time: string, minutes: number): string {
+  const [h, m] = time.split(":").map((v) => Number.parseInt(v, 10))
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return time
+  const base = new Date(2000, 0, 1, h, m, 0, 0)
+  base.setMinutes(base.getMinutes() + minutes)
+  const hh = String(base.getHours()).padStart(2, "0")
+  const mm = String(base.getMinutes()).padStart(2, "0")
+  return `${hh}:${mm}`
+}

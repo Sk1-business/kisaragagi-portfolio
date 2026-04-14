@@ -5,9 +5,7 @@ export interface UserTrainer {
   id: string
   name: string
   specialty: string
-  experienceYears: number
   rating: number
-  nominationFee: number
   photoUrl: string
   availableDates: string[]
 }
@@ -29,9 +27,7 @@ export async function fetchUserTrainers(shopSlug?: string): Promise<UserTrainer[
     id: trainer.trainer_id,
     name: trainer.name,
     specialty: trainer.description ?? "",
-    experienceYears: 0,
     rating: 0,
-    nominationFee: 0,
     photoUrl: trainer.image_url ?? "",
     availableDates: [],
   }))

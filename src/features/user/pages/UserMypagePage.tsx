@@ -12,14 +12,45 @@ import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
-import { fetchUserReservations, type UserReservation } from "@/features/user/api/userReservationApi"
+import {
+  fetchUserReservations,
+  formatReservationExpectedTimeRange,
+  type UserReservation,
+} from "@/features/user/api/userReservationApi"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
-import { formatDateShortWithWeekday } from "@/lib/dateFormat"
+import { formatDateLongWithWeekday } from "@/lib/dateFormat"
 
 function getReservationTimestamp(reservation: UserReservation) {
   const parsed = new Date(`${reservation.date}T${reservation.time}:00`)
   return Number.isNaN(parsed.getTime()) ? new Date(`${reservation.date}T00:00:00`).getTime() : parsed.getTime()
+}
+
+/** 日本時間の今日を YYYY-MM-DD */
+function todayYmdJst(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date())
+}
+
+function addCalendarDaysToYmd(ymd: string, deltaDays: number): string {
+  const [y, m, d] = ymd.split("-").map(Number)
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return ymd
+  const t = Date.UTC(y, m - 1, d) + deltaDays * 86_400_000
+  const dt = new Date(t)
+  const yy = dt.getUTCFullYear()
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0")
+  const dd = String(dt.getUTCDate()).padStart(2, "0")
+  return `${yy}-${mm}-${dd}`
+}
+
+/** 予約日が日本時間で「昨日以前」なら過去扱い（当日・明日以降は現在の予約に残す） */
+function isReservationDateOnOrBeforeYesterdayJst(reservationDate: string): boolean {
+  const yesterday = addCalendarDaysToYmd(todayYmdJst(), -1)
+  return reservationDate <= yesterday
 }
 
 type TabType = "upcoming" | "past"
@@ -58,11 +89,17 @@ export function UserMypagePage() {
   }, [shopId])
 
   const filteredReservations = reservations
-    .filter((reservation) =>
-      activeTab === "upcoming"
-        ? reservation.status === "upcoming"
-        : reservation.status === "past" || reservation.status === "cancelled",
-    )
+    .filter((reservation) => {
+      const dateIsPast = isReservationDateOnOrBeforeYesterdayJst(reservation.date)
+      if (activeTab === "upcoming") {
+        return reservation.status === "upcoming" && !dateIsPast
+      }
+      return (
+        reservation.status === "past" ||
+        reservation.status === "cancelled" ||
+        (reservation.status === "upcoming" && dateIsPast)
+      )
+    })
     .sort((a, b) =>
       activeTab === "upcoming"
         ? getReservationTimestamp(a) - getReservationTimestamp(b)
@@ -107,7 +144,7 @@ export function UserMypagePage() {
               <Link
                 key={reservation.id}
                 to={buildPathWithShopId(ROUTES.userMypageReservationDetail, shopId)}
-                state={{ reservationId: reservation.id }}
+                state={{ reservationId: reservation.id, fromPastTab: activeTab === "past" }}
                 className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:shadow-md"
               >
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100">
@@ -118,16 +155,24 @@ export function UserMypagePage() {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <CalendarDays className="size-3.5 text-muted-foreground" />
-                    {formatDateShortWithWeekday(reservation.date)}
-                    <Clock className="ml-1 size-3.5 text-muted-foreground" />
-                    {reservation.time}
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+                    <CalendarDays className="size-3.5 shrink-0 text-muted-foreground" />
+                    {formatDateLongWithWeekday(reservation.date)}
                   </div>
+                  <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Clock className="size-3.5 shrink-0" />
+                    <span>
+                      想定時間{" "}
+                      {formatReservationExpectedTimeRange(reservation.time, reservation.serviceEndAt)}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    メニュー: {reservation.menuName?.trim() || "未定"}
+                  </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {reservation.mode === "nomination"
-                      ? `指名: ${reservation.trainerName}`
-                      : "おまかせ"}
+                      ? `指名トレーナー: ${reservation.trainerName ?? "—"}`
+                      : "予約モード: おまかせ"}
                   </p>
                   {reservation.status === "cancelled" ? (
                     <p className="mt-0.5 text-xs font-semibold text-red-600">キャンセル済み</p>

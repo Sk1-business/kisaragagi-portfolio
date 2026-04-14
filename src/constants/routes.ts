@@ -11,6 +11,7 @@ export const ROUTES = {
   userReservationSchedule: "/user/reservation/schedule",
   userReservationInput: "/user/reservation/input",
   userReservationConfirm: "/user/reservation/confirm",
+  userReservationPaypayReturn: "/user/reservation/paypay-return",
   userMypage: "/user/mypage",
   userMypageReservationDetail: "/user/mypage/reservation",
   userMypageProfile: "/user/mypage/profile",

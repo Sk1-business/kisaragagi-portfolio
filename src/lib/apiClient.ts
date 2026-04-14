@@ -8,8 +8,9 @@ interface RequestOptions {
 }
 
 interface ErrorResponse {
-  detail?: string | { msg?: string }[]
+  detail?: string | Array<{ msg?: string; message?: string }>
   message?: string
+  error?: string
 }
 
 export class ApiClientError extends Error {
@@ -22,20 +23,60 @@ export class ApiClientError extends Error {
   }
 }
 
+function messageFromErrorPayload(data: ErrorResponse): string | null {
+  if (typeof data.detail === "string" && data.detail.trim()) return data.detail
+  if (Array.isArray(data.detail) && data.detail.length > 0) {
+    const first = data.detail[0]
+    const m = first?.msg ?? first?.message
+    if (typeof m === "string" && m.trim()) return m
+  }
+  if (typeof data.message === "string" && data.message.trim()) return data.message
+  if (typeof data.error === "string" && data.error.trim()) return data.error
+  return null
+}
+
+function fallbackMessageForStatus(status: number): string {
+  if (status === 401) return "再ログインが必要です。"
+  if (status === 403) return "この操作は許可されていません。"
+  if (status === 404) return "要求された情報が見つかりません。"
+  if (status === 409) return "予約枠が競合しました。別の時間を選択してください。"
+  if (status === 422) return "入力内容に不備があります。"
+  if (status === 400) {
+    return "リクエストを処理できませんでした。Stripe の設定やログイン状態を確認するか、開発者ツールの Network でレスポンス本文を確認してください。"
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return "API サーバーに接続できませんでした。バックエンドが起動しているか確認してください。"
+  }
+  if (status >= 500) return "サーバーでエラーが発生しました。しばらくしてから再度お試しください。"
+  return `通信に失敗しました（HTTP ${status}）。しばらくしてから再度お試しください。`
+}
+
 async function parseErrorMessage(response: Response): Promise<string> {
+  let raw = ""
   try {
-    const data = (await response.json()) as ErrorResponse
-    if (typeof data.detail === "string") return data.detail
-    if (Array.isArray(data.detail) && data.detail[0]?.msg) return data.detail[0].msg
-    if (data.message) return data.message
+    raw = await response.text()
   } catch {
-    // Ignore parse errors and fallback to default message.
+    return fallbackMessageForStatus(response.status)
   }
 
-  if (response.status === 401) return "再ログインが必要です。"
-  if (response.status === 409) return "予約枠が競合しました。別の時間を選択してください。"
-  if (response.status === 422) return "入力内容に不備があります。"
-  return "通信に失敗しました。しばらくしてから再度お試しください。"
+  const trimmed = raw.trim()
+  if (trimmed) {
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const data = JSON.parse(trimmed) as ErrorResponse
+        const fromPayload = messageFromErrorPayload(data)
+        if (fromPayload) return fromPayload
+      } catch {
+        // 本文が JSON 風だがパースできない
+      }
+    }
+    const lower = trimmed.slice(0, 64).toLowerCase()
+    if (!lower.startsWith("<!doctype") && !lower.startsWith("<html")) {
+      if (trimmed.length <= 500) return trimmed
+    }
+  }
+
+  return fallbackMessageForStatus(response.status)
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
