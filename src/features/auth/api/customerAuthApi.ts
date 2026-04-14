@@ -8,6 +8,8 @@ interface RegisterPayload {
   name: string
   phone?: string
   shopSlug?: string
+  gender?: string
+  birthDate?: string
 }
 
 interface RegisterResponse {
@@ -128,6 +130,8 @@ export async function registerCustomer(payload: RegisterPayload): Promise<
         password: payload.password,
         name: payload.name,
         phone: payload.phone,
+        gender: payload.gender,
+        birth_date: payload.birthDate,
       }),
     })
 

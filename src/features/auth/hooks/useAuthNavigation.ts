@@ -34,6 +34,8 @@ export function useAuthNavigation(audience: AuthAudience, mode: AuthMode) {
         name,
         phone: values.phone,
         shopSlug: values.shopSlug,
+        gender: values.gender,
+        birthDate: values.birthDate,
       })
 
       if (!result.ok) {
