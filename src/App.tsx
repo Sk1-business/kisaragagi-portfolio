@@ -19,6 +19,17 @@ import { AdminShiftCalendarPage } from "@/features/admin/pages/AdminShiftCalenda
 import { AdminMenusPage } from "@/features/admin/pages/AdminMenusPage"
 import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
+import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
+import { UserMypagePage } from "@/features/user/pages/UserMypagePage"
+import { UserPaymentPage } from "@/features/user/pages/UserPaymentPage"
+import { UserPaymentDetailPage } from "@/features/user/pages/UserPaymentDetailPage"
+import { UserProfilePage } from "@/features/user/pages/UserProfilePage"
+import { UserReservationConfirmPage } from "@/features/user/pages/UserReservationConfirmPage"
+import { UserReservationChangeModePage } from "@/features/user/pages/UserReservationChangeModePage"
+import { UserReservationInputPage } from "@/features/user/pages/UserReservationInputPage"
+import { UserReservationDetailPage } from "@/features/user/pages/UserReservationDetailPage"
+import { UserPayPayReturnPage } from "@/features/user/pages/UserPayPayReturnPage"
+import { UserSchedulePage } from "@/features/user/pages/UserSchedulePage"
 import { AdminLayout } from "./layouts/AdminLayout"
 import { UserLayout } from "./layouts/UserLayout"
 
@@ -50,11 +61,18 @@ function LandingPage() {
             <CardDescription>開発用: 予約者向け認証ページに遷移します</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
+
             <Button asChild className="w-full rounded-md">
               <Link to={ROUTES.customerLogin}>予約者ログインへ</Link>
             </Button>
             <Button asChild variant="outline" className="w-full rounded-md">
               <Link to={ROUTES.customerSignup}>予約者新規登録へ</Link>
+            </Button>
+            <Button asChild className="w-full rounded-xl">
+              <Link to={`${ROUTES.customerLogin}?shopId=sample-salon-2026`}>予約者ログインへ</Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full rounded-xl">
+              <Link to={`${ROUTES.customerSignup}?shopId=sample-salon-2026`}>予約者新規登録へ</Link>
             </Button>
           </CardContent>
         </Card>
@@ -93,6 +111,17 @@ function App() {
         <Route path={ROUTES.backofficeSignup} element={<BackofficeSignupPage />} />
         <Route element={<UserLayout />}>
           <Route path={ROUTES.userHome} element={<UserDashboardPage />} />
+          <Route path={ROUTES.userReservationNomination} element={<UserNominationPage />} />
+          <Route path={ROUTES.userReservationChangeMode} element={<UserReservationChangeModePage />} />
+          <Route path={ROUTES.userReservationSchedule} element={<UserSchedulePage />} />
+          <Route path={ROUTES.userReservationInput} element={<UserReservationInputPage />} />
+          <Route path={ROUTES.userReservationConfirm} element={<UserReservationConfirmPage />} />
+          <Route path={ROUTES.userReservationPaypayReturn} element={<UserPayPayReturnPage />} />
+          <Route path={ROUTES.userMypage} element={<UserMypagePage />} />
+          <Route path={ROUTES.userMypageReservationDetail} element={<UserReservationDetailPage />} />
+          <Route path={ROUTES.userMypageProfile} element={<UserProfilePage />} />
+          <Route path={ROUTES.userMypagePayment} element={<UserPaymentPage />} />
+          <Route path={ROUTES.userMypagePaymentDetail} element={<UserPaymentDetailPage />} />
         </Route>
 
         <Route element={<AdminLayout />}>

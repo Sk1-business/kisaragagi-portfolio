@@ -90,15 +90,6 @@ export function AdminShiftAvailabilityProvider({ children }: { children: ReactNo
     setOverrides(normalizeOverrides(loadInitial()))
   }, [])
 
-  const persist = useCallback((next: OverridesMap) => {
-    setOverrides(next)
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-    } catch {
-      /* ignore */
-    }
-  }, [])
-
   const resolveStaffDay = useCallback(
     (staff: Staff, day: Date): ResolvedShiftDay => {
       const dateKey = toDateKey(day)
@@ -120,8 +111,8 @@ export function AdminShiftAvailabilityProvider({ children }: { children: ReactNo
 
   const setOverride = useCallback(
     (staffId: string, dateKey: string, value: ShiftOverrideValue | null) => {
-      persist((prev) => {
-        const next = { ...prev }
+      setOverrides((prev) => {
+        const next: OverridesMap = { ...prev }
         const dayMap = { ...(next[dateKey] ?? {}) }
         if (value === null) {
           delete dayMap[staffId]
@@ -130,10 +121,15 @@ export function AdminShiftAvailabilityProvider({ children }: { children: ReactNo
         } else {
           next[dateKey] = { ...dayMap, [staffId]: value }
         }
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+        } catch {
+          /* ignore */
+        }
         return next
       })
     },
-    [persist],
+    [],
   )
 
   const value = useMemo(

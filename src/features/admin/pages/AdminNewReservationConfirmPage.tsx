@@ -67,6 +67,7 @@ export function AdminNewReservationConfirmPage() {
   const endLabelTime = endIso ? formatTimeInAdminCalendarTz(endIso) : "—"
 
   async function handleFinalize() {
+    if (!draft) return
     setSubmitError(null)
     if (!startIso || !endIso) {
       setSubmitError("開始・終了時刻が無効です。入力画面に戻って確認してください。")
@@ -109,6 +110,7 @@ export function AdminNewReservationConfirmPage() {
   }
 
   function handleBackToEdit() {
+    if (!draft) return
     navigate(ROUTES.adminNewReservation, { state: draft })
   }
 
