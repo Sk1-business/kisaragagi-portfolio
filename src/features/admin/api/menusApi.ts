@@ -171,6 +171,8 @@ function buildCreatePayload(input: AdminMenuCreateInput): Record<string, unknown
     duration_minutes: Math.round(input.duration_minutes),
     price: Math.round(input.price),
   }
+  if (input.is_public !== undefined) body.is_public = input.is_public
+  if (input.is_archived !== undefined) body.is_archived = input.is_archived
   return body
 }
 
@@ -215,6 +217,8 @@ export async function putAdminMenu(
 ): Promise<void> {
   const body: Record<string, unknown> = {}
   if (input.name !== undefined) body.name = input.name.trim()
+  if (input.is_public !== undefined) body.is_public = input.is_public
+  if (input.is_archived !== undefined) body.is_archived = input.is_archived
   if (
     input.duration_minutes !== undefined &&
     Number.isFinite(input.duration_minutes) &&
@@ -229,22 +233,16 @@ export async function putAdminMenu(
   ) {
     body.price = Math.round(input.price)
   }
-  if (input.is_public !== undefined) body.is_public = input.is_public
-  if (input.is_archived !== undefined) body.is_archived = input.is_archived
   const res = await apiFetch(adminMenuDetailPath(menuId), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   })
   if (res.status === 401) throw new Error("UNAUTHORIZED")
-  if (!res.ok) throw new Error("FETCH_FAILED")
-}
-
-/**
- * `DELETE /api/admin/menus/{menu_id}` — メニュー削除。
- */
-export async function deleteAdminMenu(menuId: string): Promise<void> {
-  const res = await apiFetch(adminMenuDetailPath(menuId), { method: "DELETE" })
-  if (res.status === 401) throw new Error("UNAUTHORIZED")
-  if (!res.ok) throw new Error("FETCH_FAILED")
+  if (!res.ok) {
+    const detail = await readErrorDetail(res)
+    throw new Error(
+      detail ? `FETCH_FAILED_${res.status}:${detail}` : `FETCH_FAILED_${res.status}`,
+    )
+  }
 }
