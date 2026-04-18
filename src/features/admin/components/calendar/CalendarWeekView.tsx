@@ -1,13 +1,20 @@
-import { addDays } from "@/features/admin/lib/calendarUtils"
-import type { Reservation } from "@/features/admin/types/reservation"
-import type { Staff } from "@/features/admin/types/staff"
+import type { BusinessHoursItem } from "@/features/admin/api/adminSettingsApi"
+import { getBusinessHoursForJsDate } from "@/features/admin/lib/businessHours"
 import {
+  ADMIN_CALENDAR_TIME_ZONE,
+  addDays,
+  getDateKeyInTimeZone,
+  getIsoDateKeyInTimeZone,
   getReservationsInRange,
   startOfWeek,
   endOfDay,
   formatTimeRange,
+  isCompactReservationTimelineBlock,
 } from "@/features/admin/lib/calendarUtils"
-import { getAssigneeColor } from "@/features/admin/hooks/useStaff"
+import type { Reservation } from "@/features/admin/types/reservation"
+import type { Staff } from "@/features/admin/types/staff"
+import { layoutOverlappingIntervals } from "@/features/admin/lib/calendarOverlapLayout"
+import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
 
 // 8:00〜22:00 を表示対象（14時間）
 const START_HOUR = 8
@@ -23,10 +30,45 @@ interface CalendarWeekViewProps {
   reservations: Reservation[]
   staffList: Staff[]
   onSelectReservation: (r: Reservation) => void
+  holidayDateKeys?: ReadonlySet<string>
+  businessHoursItems?: BusinessHoursItem[]
 }
 
 function toMinutesFromDayStart(date: Date): number {
   return date.getHours() * 60 + date.getMinutes() - START_HOUR * 60
+}
+
+/** 週タイムラインのブロック高さ・幅に応じた表示段階（メニューは最優先で省略） */
+type WeekBlockDisplayMode =
+  | "threeLines"
+  | "twoLinesNoMenu"
+  | "oneLine"
+  | "oneLineSmallTime"
+
+function getWeekReservationBlockDisplayMode(
+  durationMinutes: number,
+  heightPercent: number,
+  widthPercent: number,
+): WeekBlockDisplayMode {
+  const compact = isCompactReservationTimelineBlock(durationMinutes, heightPercent)
+
+  if (compact) {
+    if (heightPercent < 3.2 || widthPercent < 28) {
+      return "oneLineSmallTime"
+    }
+    return "oneLine"
+  }
+
+  const canShowMenu =
+    widthPercent >= 22 &&
+    heightPercent >= 4.5 &&
+    durationMinutes >= 45
+
+  if (!canShowMenu) {
+    return "twoLinesNoMenu"
+  }
+
+  return "threeLines"
 }
 
 export function CalendarWeekView({
@@ -34,6 +76,8 @@ export function CalendarWeekView({
   reservations,
   staffList,
   onSelectReservation,
+  holidayDateKeys,
+  businessHoursItems,
 }: CalendarWeekViewProps) {
   const weekStart = startOfWeek(date)
   const weekEnd = endOfDay(addDays(weekStart, 6))
@@ -56,6 +100,13 @@ export function CalendarWeekView({
             const dayOfWeek = d.getDay()
             const isSun = dayOfWeek === 0
             const isSat = dayOfWeek === 6
+            const dateKey = getDateKeyInTimeZone(d, ADMIN_CALENDAR_TIME_ZONE)
+            const isHoliday = holidayDateKeys != null && holidayDateKeys.has(dateKey)
+            const biz =
+              businessHoursItems != null && businessHoursItems.length > 0
+                ? getBusinessHoursForJsDate(businessHoursItems, d)
+                : null
+            const isWeekdayClosed = biz?.isClosed === true
             return (
               <div
                 key={d.toISOString()}
@@ -67,8 +118,17 @@ export function CalendarWeekView({
                       : "bg-muted/30 text-muted-foreground"
                 }`}
               >
-                {d.getMonth() + 1}/{d.getDate()}{" "}
-                ({["日", "月", "火", "水", "木", "金", "土"][dayOfWeek]})
+                <span className="block">
+                  {d.getMonth() + 1}/{d.getDate()}{" "}
+                  ({["日", "月", "火", "水", "木", "金", "土"][dayOfWeek]})
+                </span>
+                {isHoliday ? (
+                  <span className="block text-[0.65rem] font-normal text-amber-900 dark:text-amber-100">
+                    定休
+                  </span>
+                ) : isWeekdayClosed ? (
+                  <span className="block text-[0.65rem] font-normal opacity-90">休業</span>
+                ) : null}
               </div>
             )
           })}
@@ -115,14 +175,12 @@ export function CalendarWeekView({
 
           {/* 各日の列 */}
           {days.map((day) => {
-            const dayReservations = weekReservations.filter((r) => {
-              const start = new Date(r.startAt)
-              return (
-                start.getFullYear() === day.getFullYear() &&
-                start.getMonth() === day.getMonth() &&
-                start.getDate() === day.getDate()
-              )
-            })
+            const dayKey = getDateKeyInTimeZone(day, ADMIN_CALENDAR_TIME_ZONE)
+            const dayReservations = weekReservations.filter(
+              (r) =>
+                getIsoDateKeyInTimeZone(r.startAt, ADMIN_CALENDAR_TIME_ZONE) ===
+                dayKey,
+            )
 
             return (
               <div
@@ -150,7 +208,7 @@ export function CalendarWeekView({
                   )),
                 )}
 
-                {/* 予約ブロック（同一時間帯は横並び） */}
+                {/* 予約ブロック（重なる時間帯は列を分割） */}
                 {(() => {
                   const withPos = dayReservations
                     .map((r) => {
@@ -163,37 +221,52 @@ export function CalendarWeekView({
                       const clampedStart = Math.max(0, startMinutes)
                       const clampedEnd = Math.min(TOTAL_MINUTES, endMinutes)
                       if (clampedEnd <= clampedStart) return null
+                      const durationMinutes = clampedEnd - clampedStart
                       return {
                         r,
-                        key: `${clampedStart}-${clampedEnd}`,
+                        durationMinutes,
                         topPercent: (clampedStart / TOTAL_MINUTES) * 100,
                         heightPercent:
                           ((clampedEnd - clampedStart) / TOTAL_MINUTES) * 100,
+                        interval: {
+                          id: r.id,
+                          start: clampedStart,
+                          end: clampedEnd,
+                        },
                       }
                     })
                     .filter((x): x is NonNullable<typeof x> => x != null)
-                  const keyToCount: Record<string, number> = {}
-                  withPos.forEach(({ key }) => {
-                    keyToCount[key] = (keyToCount[key] ?? 0) + 1
-                  })
-                  const keyToIndex: Record<string, number> = {}
+                  const layout = layoutOverlappingIntervals(
+                    withPos.map((w) => w.interval),
+                  )
+                  const layoutById = new Map(layout.map((l) => [l.id, l]))
+
                   return withPos.map(
-                    ({ r, key, topPercent, heightPercent }) => {
-                      const idx = keyToIndex[key] ?? 0
-                      keyToIndex[key] = idx + 1
-                      const n = keyToCount[key]
-                      const leftPercent = (idx / n) * 100
-                      const widthPercent = 100 / n
-                      const bgColor = getAssigneeColor(r.assigneeId, staffList)
+                    ({ r, topPercent, heightPercent, durationMinutes }) => {
+                      const l = layoutById.get(r.id)!
+                      const leftPercent = (l.column / l.columnCount) * 100
+                      const widthPercent = 100 / l.columnCount
+                      const bgColor = getReservationTrainerColor(r, staffList)
+                      const displayMode = getWeekReservationBlockDisplayMode(
+                        durationMinutes,
+                        heightPercent,
+                        widthPercent,
+                      )
+                      const range = formatTimeRange(r.startAt, r.endAt)
+                      const menu = r.menuName?.trim()
+                      const title = [r.customerName, range, menu, r.memo?.trim()]
+                        .filter(Boolean)
+                        .join(" · ")
                       return (
                         <button
                           key={r.id}
                           type="button"
-                          className="absolute flex flex-col gap-0.5 rounded-md border px-1 py-1 text-left text-[10px] shadow-sm transition-opacity hover:opacity-90"
+                          title={title}
+                          className="absolute flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border text-left text-[10px] shadow-sm transition-opacity hover:opacity-90"
                           style={{
                             top: `${topPercent}%`,
                             left: `${leftPercent}%`,
-                            width: `${widthPercent}%`,
+                            width: `calc(${widthPercent}% - 2px)`,
                             height: `${heightPercent}%`,
                             boxSizing: "border-box",
                             marginRight: "1px",
@@ -202,16 +275,43 @@ export function CalendarWeekView({
                           }}
                           onClick={() => onSelectReservation(r)}
                         >
-                          <span className="truncate text-xs font-semibold text-foreground">
-                            {r.customerName}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            {formatTimeRange(r.startAt, r.endAt)}
-                          </span>
+                          <div
+                            className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-1 py-0.5 [scrollbar-width:thin]"
+                          >
+                            {displayMode === "threeLines" ? (
+                              <div className="flex flex-col gap-0.5 break-words [overflow-wrap:anywhere]">
+                                <span className="text-xs font-semibold text-foreground">{r.customerName}</span>
+                                <span className="tabular-nums text-[10px] text-muted-foreground">{range}</span>
+                                {menu ? (
+                                  <span className="text-[10px] leading-tight text-muted-foreground">{menu}</span>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            {displayMode === "twoLinesNoMenu" ? (
+                              <div className="flex flex-col gap-0.5 break-words [overflow-wrap:anywhere]">
+                                <span className="text-xs font-semibold text-foreground">{r.customerName}</span>
+                                <span className="tabular-nums text-[10px] text-muted-foreground">{range}</span>
+                              </div>
+                            ) : null}
+                            {displayMode === "oneLine" ? (
+                              <span className="block break-words leading-tight [overflow-wrap:anywhere]">
+                                <span className="font-semibold text-foreground">{r.customerName}</span>
+                                <span className="tabular-nums text-muted-foreground"> {range}</span>
+                              </span>
+                            ) : null}
+                            {displayMode === "oneLineSmallTime" ? (
+                              <span className="block break-words leading-tight [overflow-wrap:anywhere]">
+                                <span className="font-semibold text-foreground">{r.customerName}</span>
+                                <span className="tabular-nums text-[9px] leading-none text-muted-foreground">
+                                  {" "}
+                                  {range}
+                                </span>
+                              </span>
+                            ) : null}
+                          </div>
                         </button>
                       )
-                    },
-                  )
+                    })
                 })()}
               </div>
             )

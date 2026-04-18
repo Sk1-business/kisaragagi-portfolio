@@ -2,30 +2,28 @@ import { useEffect, useState } from "react"
 
 import { fetchSalonPage } from "@/features/user/api/userSalonApi"
 
-export function useSalonName(shopId?: string) {
-  const [salonName, setSalonName] = useState("店舗")
+export function useSalonName(shopId: string | undefined): string {
+  const [name, setName] = useState("サロン")
 
   useEffect(() => {
     if (!shopId) {
-      setSalonName("店舗")
+      queueMicrotask(() => {
+        setName("サロン")
+      })
       return
     }
-
     let mounted = true
     void fetchSalonPage(shopId)
-      .then((page) => {
-        if (!mounted) return
-        setSalonName(page.salon_name || "店舗")
+      .then((s) => {
+        if (mounted) setName(s.salon_name || "サロン")
       })
       .catch(() => {
-        if (!mounted) return
-        setSalonName("店舗")
+        if (mounted) setName("サロン")
       })
-
     return () => {
       mounted = false
     }
   }, [shopId])
 
-  return salonName
+  return name
 }

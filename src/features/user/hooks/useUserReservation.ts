@@ -5,37 +5,37 @@ import {
   type UserReservation,
 } from "@/features/user/api/userReservationApi"
 
-export function useUserReservation(reservationId: string, shopSlug?: string) {
+export function useUserReservation(reservationId: string, shopId: string | undefined) {
   const [reservation, setReservation] = useState<UserReservation | null>(null)
   const [isLoading, setIsLoading] = useState(Boolean(reservationId))
 
   useEffect(() => {
-    if (!reservationId) {
-      setReservation(null)
-      setIsLoading(false)
-      return
-    }
-
-    let mounted = true
-    setIsLoading(true)
-    fetchUserReservationById(reservationId, shopSlug)
-      .then((data) => {
-        if (!mounted) return
-        setReservation(data)
-      })
-      .catch(() => {
-        if (!mounted) return
+    if (!reservationId.trim()) {
+      queueMicrotask(() => {
         setReservation(null)
-      })
-      .finally(() => {
-        if (!mounted) return
         setIsLoading(false)
       })
-
+      return
+    }
+    let mounted = true
+    queueMicrotask(() => {
+      setIsLoading(true)
+      void fetchUserReservationById(reservationId, shopId)
+        .then((row) => {
+          if (!mounted) return
+          setReservation(row)
+          setIsLoading(false)
+        })
+        .catch(() => {
+          if (!mounted) return
+          setReservation(null)
+          setIsLoading(false)
+        })
+    })
     return () => {
       mounted = false
     }
-  }, [reservationId, shopSlug])
+  }, [reservationId, shopId])
 
   return { reservation, isLoading }
 }

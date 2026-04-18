@@ -1,24 +1,148 @@
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { ROUTES } from "@/constants/routes"
+import {
+  fetchTrainerShifts,
+  groupTrainerShiftRowsByDate,
+} from "@/features/admin/api/trainerShiftsApi"
+import {
+  type AdminReservationApiStatus,
+  fetchAdminReservationById,
+  patchAdminReservationStatus,
+  putAdminReservationNotes,
+  putAdminReservationTrainerId,
+} from "@/features/admin/api/reservationsApi"
 import { ReservationDetailCard } from "@/features/admin/components/ReservationDetailCard"
+import {
+  ADMIN_CALENDAR_TIME_ZONE,
+  getIsoDateKeyInTimeZone,
+} from "@/features/admin/lib/calendarUtils"
+import { reservationFullyWithinTrainerShifts } from "@/features/admin/lib/reservationShiftCoverage"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { useStaff } from "@/features/admin/hooks/useStaff"
+import type { Reservation } from "@/features/admin/types/reservation"
 
 export function AdminReservationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const {
-    reservations,
-    loading,
-    updateReservationStatus,
-    updateReservationMemo,
-    updateReservationAssignee,
-  } = useAdminReservations()
-  const { staffList } = useStaff()
+  const { reservations, replaceReservations } = useAdminReservations()
+  const reservationsRef = useRef(reservations)
+  reservationsRef.current = reservations
+  const { staffList, loading: staffLoading } = useStaff()
 
-  const reservation = id ? reservations.find((r) => r.id === id) : undefined
+  const [detail, setDetail] = useState<Reservation | null>(null)
+  const [detailLoading, setDetailLoading] = useState(true)
+  const [detailError, setDetailError] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [memoSaving, setMemoSaving] = useState(false)
+  const [statusSaving, setStatusSaving] = useState(false)
+  const [assigneeSaving, setAssigneeSaving] = useState(false)
+  const [shiftCoverageByStaffId, setShiftCoverageByStaffId] = useState<
+    Record<string, boolean>
+  >({})
+  const [shiftCoverageLoading, setShiftCoverageLoading] = useState(true)
+  const [shiftCoverageError, setShiftCoverageError] = useState(false)
+
+  const mergeReservationIntoList = (fresh: Reservation) => {
+    const prev = reservationsRef.current
+    replaceReservations(
+      prev.some((r) => r.id === fresh.id)
+        ? prev.map((r) => (r.id === fresh.id ? fresh : r))
+        : [...prev, fresh],
+    )
+  }
+
+  useEffect(() => {
+    if (!id || staffLoading) return
+    let cancelled = false
+    void (async () => {
+      setDetailLoading(true)
+      setDetailError(false)
+      try {
+        const r = await fetchAdminReservationById(id, staffList)
+        if (cancelled) return
+        setDetail(r)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setDetailError(true)
+        setDetail(null)
+      } finally {
+        if (!cancelled) setDetailLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [id, staffList, staffLoading, navigate])
+
+  useEffect(() => {
+    if (!detail || staffLoading) {
+      if (!detail) {
+        setShiftCoverageByStaffId({})
+        setShiftCoverageLoading(false)
+        setShiftCoverageError(false)
+      }
+      return
+    }
+    if (staffList.length === 0) {
+      setShiftCoverageLoading(false)
+      setShiftCoverageByStaffId({})
+      return
+    }
+    let cancelled = false
+    const dateKey = getIsoDateKeyInTimeZone(detail.startAt, ADMIN_CALENDAR_TIME_ZONE)
+
+    void (async () => {
+      setShiftCoverageLoading(true)
+      setShiftCoverageError(false)
+      try {
+        const results = await Promise.all(
+          staffList.map((s) =>
+            fetchTrainerShifts(s.id, { dateFrom: dateKey, dateTo: dateKey }),
+          ),
+        )
+        if (cancelled) return
+        const next: Record<string, boolean> = {}
+        staffList.forEach((s, i) => {
+          const byDate = groupTrainerShiftRowsByDate(results[i], s.id)
+          const dayRows = byDate[dateKey] ?? []
+          next[s.id] = reservationFullyWithinTrainerShifts(
+            detail.startAt,
+            detail.endAt,
+            dayRows,
+          )
+        })
+        setShiftCoverageByStaffId(next)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setShiftCoverageError(true)
+        setShiftCoverageByStaffId({})
+      } finally {
+        if (!cancelled) setShiftCoverageLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [detail, staffList, staffLoading, navigate])
+
+  const reservationsForOverlap = useMemo(() => {
+    if (!detail) return reservations
+    if (reservations.some((r) => r.id === detail.id)) return reservations
+    return [...reservations, detail]
+  }, [reservations, detail])
 
   if (!id) {
     return (
@@ -28,7 +152,7 @@ export function AdminReservationDetailPage() {
     )
   }
 
-  if (loading) {
+  if (staffLoading || detailLoading) {
     return (
       <p className="text-sm text-muted-foreground">
         予約詳細を読み込み中です...
@@ -36,7 +160,17 @@ export function AdminReservationDetailPage() {
     )
   }
 
-  if (!reservation) {
+  if (detailError) {
+    return (
+      <Card className="border-border shadow-xs">
+        <CardContent className="py-6 text-sm text-muted-foreground">
+          予約詳細の取得に失敗しました。ネットワークまたはサーバーを確認してください。
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!detail) {
     return (
       <Card className="border-border shadow-xs">
         <CardContent className="py-6 text-sm text-muted-foreground">
@@ -44,6 +178,83 @@ export function AdminReservationDetailPage() {
         </CardContent>
       </Card>
     )
+  }
+
+  const handleUpdateMemo = async (memo: string | undefined) => {
+    setSaveError(null)
+    setMemoSaving(true)
+    try {
+      await putAdminReservationNotes(
+        detail.id,
+        memo?.trim() ? memo.trim() : null,
+      )
+      const fresh = await fetchAdminReservationById(id, staffList)
+      if (!fresh) {
+        throw new Error("FETCH_FAILED")
+      }
+      setDetail(fresh)
+      mergeReservationIntoList(fresh)
+    } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
+      setSaveError("メモの保存に失敗しました。通信またはサーバーを確認してください。")
+      throw e
+    } finally {
+      setMemoSaving(false)
+    }
+  }
+
+  const handleUpdateStatus = async (apiStatus: AdminReservationApiStatus) => {
+    if (!detail || !id) return
+    setSaveError(null)
+    setStatusSaving(true)
+    try {
+      await patchAdminReservationStatus(detail.id, apiStatus)
+      const fresh = await fetchAdminReservationById(id, staffList)
+      if (!fresh) {
+        throw new Error("FETCH_FAILED")
+      }
+      setDetail(fresh)
+      mergeReservationIntoList(fresh)
+    } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
+      setSaveError(
+        "ステータスの変更に失敗しました。通信またはサーバーを確認してください。",
+      )
+      throw e
+    } finally {
+      setStatusSaving(false)
+    }
+  }
+
+  const handleUpdateAssignee = async (assigneeId: string) => {
+    setSaveError(null)
+    setAssigneeSaving(true)
+    try {
+      await putAdminReservationTrainerId(detail.id, assigneeId)
+      const fresh = await fetchAdminReservationById(id, staffList)
+      if (!fresh) {
+        throw new Error("FETCH_FAILED")
+      }
+      setDetail(fresh)
+      mergeReservationIntoList(fresh)
+    } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
+      setSaveError(
+        "担当者の変更に失敗しました。通信またはサーバーを確認してください。",
+      )
+      throw e
+    } finally {
+      setAssigneeSaving(false)
+    }
   }
 
   return (
@@ -57,16 +268,26 @@ export function AdminReservationDetailPage() {
         戻る
       </Button>
 
+      {saveError ? (
+        <p className="text-sm text-destructive" role="alert">
+          {saveError}
+        </p>
+      ) : null}
+
       <ReservationDetailCard
-        reservation={reservation}
+        reservation={detail}
         staffList={staffList}
-        reservations={reservations}
+        reservations={reservationsForOverlap}
         onClose={() => navigate(-1)}
-        onUpdateMemo={(memo) => updateReservationMemo(reservation.id, memo)}
-        onUpdateStatus={(status) => updateReservationStatus(reservation.id, status)}
-        onUpdateAssignee={(assigneeId) =>
-          updateReservationAssignee(reservation.id, assigneeId)
-        }
+        onUpdateMemo={handleUpdateMemo}
+        onUpdateStatus={handleUpdateStatus}
+        onUpdateAssignee={handleUpdateAssignee}
+        memoSaving={memoSaving}
+        statusSaving={statusSaving}
+        assigneeSaving={assigneeSaving}
+        shiftCoverageByStaffId={shiftCoverageByStaffId}
+        shiftCoverageLoading={shiftCoverageLoading}
+        shiftCoverageError={shiftCoverageError}
       />
     </div>
   )

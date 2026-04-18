@@ -18,6 +18,10 @@ export interface AuthFormCardProps {
   mode: AuthMode
 }
 
+export type AuthSubmitResult =
+  | { ok: true }
+  | { ok: false; reason?: "unauthorized" | "generic" }
+
 export interface MockUser {
   id: string
   email: string

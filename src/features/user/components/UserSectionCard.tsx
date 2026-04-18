@@ -1,40 +1,27 @@
 import type { ReactNode } from "react"
 
-interface UserSectionCardProps {
-  title: string
-  subtitle?: string
-  children: ReactNode
-  headerTone?: "gradient" | "plain"
-  className?: string
-  bodyClassName?: string
+type HeaderTone = "plain" | "muted"
+
+const toneClass: Record<HeaderTone, string> = {
+  plain: "border-slate-100 bg-white",
+  muted: "border-slate-100 bg-slate-50/80",
 }
 
-export function UserSectionCard({
-  title,
-  subtitle,
-  children,
-  headerTone = "gradient",
-  className = "",
-  bodyClassName = "",
-}: UserSectionCardProps) {
-  const headerClassName =
-    headerTone === "gradient"
-      ? "border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 text-white"
-      : "border-b border-slate-100 px-6 py-4"
+type Props = {
+  title: string
+  subtitle?: string
+  headerTone?: HeaderTone
+  children: ReactNode
+}
 
+export function UserSectionCard({ title, subtitle, headerTone = "muted", children }: Props) {
   return (
-    <div className={`rounded-2xl bg-white shadow-lg ${className}`.trim()}>
-      <div className={headerClassName}>
-        <h2 className={headerTone === "gradient" ? "font-bold" : "text-sm font-bold text-foreground"}>
-          {title}
-        </h2>
-        {subtitle ? (
-          <p className={headerTone === "gradient" ? "mt-0.5 text-xs text-slate-300" : "mt-0.5 text-xs text-muted-foreground"}>
-            {subtitle}
-          </p>
-        ) : null}
+    <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+      <div className={`border-b px-6 py-4 ${toneClass[headerTone]}`}>
+        <h2 className="text-base font-bold text-foreground">{title}</h2>
+        {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
       </div>
-      <div className={bodyClassName}>{children}</div>
+      {children}
     </div>
   )
 }

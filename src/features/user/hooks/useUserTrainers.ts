@@ -2,29 +2,28 @@ import { useEffect, useState } from "react"
 
 import { fetchUserTrainers, type UserTrainer } from "@/features/user/api/userTrainerApi"
 
-export function useUserTrainers(shopSlug?: string) {
+export function useUserTrainers(shopId: string | undefined) {
   const [trainers, setTrainers] = useState<UserTrainer[]>([])
-  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    let mounted = true
-    fetchUserTrainers(shopSlug)
-      .then((data) => {
-        if (!mounted) return
-        setTrainers(data)
-      })
-      .catch(() => {
-        if (!mounted) return
+    if (!shopId) {
+      queueMicrotask(() => {
         setTrainers([])
       })
-      .finally(() => {
-        if (!mounted) return
-        setIsLoading(false)
+      return
+    }
+    let mounted = true
+    void fetchUserTrainers(shopId)
+      .then((rows) => {
+        if (mounted) setTrainers(rows)
+      })
+      .catch(() => {
+        if (mounted) setTrainers([])
       })
     return () => {
       mounted = false
     }
-  }, [shopSlug])
+  }, [shopId])
 
-  return { trainers, isLoading }
+  return { trainers }
 }

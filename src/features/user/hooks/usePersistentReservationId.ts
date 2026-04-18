@@ -1,77 +1,62 @@
-import { useEffect } from "react"
-import { useLocation } from "react-router-dom"
+import { useSyncExternalStore } from "react"
 
-const RESERVATION_ID_STORAGE_KEY = "user:last-reservation-id"
-const RESERVATION_UPDATE_INTENT_KEY = "user:last-reservation-update-intent"
+/** userReservationApi と同じキー（最新の予約 ID を参照するため） */
+const RESERVATION_META_KEY = "user:reservations:v2"
+const UPDATE_INTENT_KEY = "saas_reservation_update_intent"
 
-type LocationStateWithBooking = {
-  reservationId?: string
-  isUpdatingExistingReservation?: boolean
-} | null
-
-export function readReservationUpdateIntent(): boolean {
-  if (typeof window === "undefined") return false
+function readLatestReservationId(): string {
   try {
-    return window.sessionStorage.getItem(RESERVATION_UPDATE_INTENT_KEY) === "1"
-  } catch {
-    return false
-  }
-}
-
-export function clearReservationUpdateIntent() {
-  if (typeof window === "undefined") return
-  try {
-    window.sessionStorage.removeItem(RESERVATION_UPDATE_INTENT_KEY)
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-function readStoredReservationId(): string {
-  if (typeof window === "undefined") return ""
-  try {
-    return window.sessionStorage.getItem(RESERVATION_ID_STORAGE_KEY) ?? ""
+    const raw = localStorage.getItem(RESERVATION_META_KEY)
+    if (!raw) return ""
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return ""
+    for (let i = parsed.length - 1; i >= 0; i--) {
+      const item = parsed[i] as { id?: unknown }
+      if (typeof item?.id === "string" && item.id.length > 0) return item.id
+    }
+    return ""
   } catch {
     return ""
   }
 }
 
-function persistReservationId(reservationId: string) {
-  if (typeof window === "undefined") return
-  try {
-    window.sessionStorage.setItem(RESERVATION_ID_STORAGE_KEY, reservationId)
-  } catch {
-    // Ignore storage failures.
+function subscribeReservationMeta(onStoreChange: () => void) {
+  function onStorage(e: StorageEvent) {
+    if (e.key === RESERVATION_META_KEY || e.key === null) onStoreChange()
+  }
+  window.addEventListener("storage", onStorage)
+  const id = window.setInterval(onStoreChange, 2000)
+  return () => {
+    window.removeEventListener("storage", onStorage)
+    window.clearInterval(id)
   }
 }
 
 export function usePersistentReservationId(): string {
-  const location = useLocation()
-  const fromState = ((location.state as LocationStateWithBooking)?.reservationId ?? "").trim()
-  const stored = readStoredReservationId()
-  const resolved = fromState || stored
+  return useSyncExternalStore(subscribeReservationMeta, readLatestReservationId, () => "")
+}
 
-  useEffect(() => {
-    if (!fromState) return
-    persistReservationId(fromState)
-  }, [fromState])
+export function setReservationUpdateIntent(value: boolean): void {
+  try {
+    if (value) localStorage.setItem(UPDATE_INTENT_KEY, "1")
+    else localStorage.removeItem(UPDATE_INTENT_KEY)
+  } catch {
+    /* ignore */
+  }
+}
 
-  /** ルーター state がリロード等で消えても、予約変更フローの意図を残す */
-  useEffect(() => {
-    const st = location.state as LocationStateWithBooking
-    if (!st || typeof st !== "object" || !("isUpdatingExistingReservation" in st)) return
-    if (st.isUpdatingExistingReservation === true) {
-      try {
-        window.sessionStorage.setItem(RESERVATION_UPDATE_INTENT_KEY, "1")
-      } catch {
-        // Ignore storage failures.
-      }
-      return
-    }
-    if (st.isUpdatingExistingReservation === false) {
-      clearReservationUpdateIntent()
-    }
-  }, [location.state])
+export function readReservationUpdateIntent(): boolean {
+  try {
+    return localStorage.getItem(UPDATE_INTENT_KEY) === "1"
+  } catch {
+    return false
+  }
+}
 
-  return resolved
+export function clearReservationUpdateIntent(): void {
+  try {
+    localStorage.removeItem(UPDATE_INTENT_KEY)
+  } catch {
+    /* ignore */
+  }
 }

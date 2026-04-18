@@ -1,91 +1,44 @@
 import { ArrowLeft, Dumbbell, LogOut, UserRound } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
-import {
-  checkCustomerSessionAlive,
-  logoutCustomer,
-} from "@/features/auth/api/customerAuthApi"
+import { logoutCustomer } from "@/features/auth/api/customerAuthApi"
 import { useCustomerSessionIdleTimeout } from "@/features/auth/hooks/useCustomerSessionIdleTimeout"
 import { fetchSalonPage } from "@/features/user/api/userSalonApi"
-import { buildPathWithShopId, resolveShopName, useShopId } from "@/features/user/hooks/useShopId"
-import { subscribeCustomerSessionInvalidated } from "@/lib/customerSession"
+import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
+import { subscribeCustomerSessionInvalidation } from "@/lib/customerSession"
 
 export function UserLayout() {
-  const location = useLocation()
-  const navigate = useNavigate()
   const shopId = useShopId()
-  const [shopName, setShopName] = useState(() => resolveShopName(shopId))
-  const isTopLevel = location.pathname === ROUTES.userHome
-  const sessionEndingRef = useRef(false)
-  const [sessionVerified, setSessionVerified] = useState(false)
-
-  const endCustomerSessionAndRedirect = useCallback(
-    async (reason: "idle_timeout" | "session_expired") => {
-      if (sessionEndingRef.current) return
-      sessionEndingRef.current = true
-      try {
-        await logoutCustomer()
-        navigate(`${ROUTES.customerLogin}?reason=${reason}`, { replace: true })
-      } finally {
-        sessionEndingRef.current = false
-      }
-    },
-    [navigate],
-  )
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [shopName, setShopName] = useState("予約ポータル")
 
   useCustomerSessionIdleTimeout(true)
 
   useEffect(() => {
-    return subscribeCustomerSessionInvalidated((source) => {
-      const reason = source === "idle" ? "idle_timeout" : "session_expired"
-      void endCustomerSessionAndRedirect(reason)
+    if (!shopId) return
+    fetchSalonPage(shopId)
+      .then((s) => setShopName(s.salon_name || "予約ポータル"))
+      .catch(() => {})
+  }, [shopId])
+
+  useEffect(() => {
+    return subscribeCustomerSessionInvalidation((reason) => {
+      const params = new URLSearchParams()
+      if (shopId) params.set("shopId", shopId)
+      if (reason === "idle") params.set("reason", "idle_timeout")
+      else params.set("reason", "session_expired")
+      const q = params.toString()
+      void logoutCustomer().finally(() => {
+        navigate(`${ROUTES.customerLogin}${q ? `?${q}` : ""}`, { replace: true })
+      })
     })
-  }, [endCustomerSessionAndRedirect])
+  }, [navigate, shopId])
 
-  /** 戻る・BFCache 復帰でも未ログインなら予約者画面を表示しない */
-  useEffect(() => {
-    let cancelled = false
-
-    async function guard() {
-      if (sessionEndingRef.current) return
-      const ok = await checkCustomerSessionAlive()
-      if (cancelled) return
-      if (!ok) {
-        navigate(`${ROUTES.customerLogin}?reason=require_login`, { replace: true })
-        return
-      }
-      setSessionVerified(true)
-    }
-
-    void guard()
-    return () => {
-      cancelled = true
-    }
-  }, [location.pathname, location.key, navigate])
-
-  useEffect(() => {
-    function onPageShow(event: PageTransitionEvent) {
-      if (!event.persisted) return
-      void (async () => {
-        if (sessionEndingRef.current) return
-        const ok = await checkCustomerSessionAlive()
-        if (!ok) {
-          navigate(`${ROUTES.customerLogin}?reason=require_login`, { replace: true })
-        }
-      })()
-    }
-
-    window.addEventListener("pageshow", onPageShow)
-    return () => window.removeEventListener("pageshow", onPageShow)
-  }, [navigate])
-
-  async function handleLogout() {
-    await logoutCustomer()
-    navigate(ROUTES.customerLogin, { replace: true })
-  }
+  const isTopLevel = location.pathname === ROUTES.userHome
 
   function handleBack() {
     if (window.history.length > 1) {
@@ -95,34 +48,9 @@ export function UserLayout() {
     navigate(buildPathWithShopId(ROUTES.userHome, shopId))
   }
 
-  useEffect(() => {
-    if (!shopId) {
-      setShopName("店舗")
-      return
-    }
-
-    let mounted = true
-    void fetchSalonPage(shopId)
-      .then((page) => {
-        if (!mounted) return
-        setShopName(page.salon_name || resolveShopName(shopId))
-      })
-      .catch(() => {
-        if (!mounted) return
-        setShopName(resolveShopName(shopId))
-      })
-
-    return () => {
-      mounted = false
-    }
-  }, [shopId])
-
-  if (!sessionVerified) {
-    return (
-      <main className="flex min-h-dvh items-center justify-center bg-white px-4">
-        <p className="text-sm text-muted-foreground">読み込み中...</p>
-      </main>
-    )
+  async function handleLogout() {
+    await logoutCustomer()
+    navigate(buildPathWithShopId(ROUTES.customerLogin, shopId))
   }
 
   return (
@@ -135,6 +63,7 @@ export function UserLayout() {
                 variant="ghost"
                 size="icon-sm"
                 className="rounded-full"
+                type="button"
                 onClick={handleBack}
                 aria-label="前の画面へ戻る"
               >
@@ -165,7 +94,7 @@ export function UserLayout() {
               variant="ghost"
               size="sm"
               className="text-xs text-muted-foreground"
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               aria-label="ログアウト"
             >
               <LogOut className="size-3.5 min-[420px]:mr-1" />
@@ -174,7 +103,7 @@ export function UserLayout() {
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
         <Outlet />
       </div>
     </main>

@@ -1,4 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react"
+import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react"
 import { ArrowRight, CheckCircle2, ChevronDown, Dumbbell, Eye, EyeOff, X } from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
 
@@ -6,12 +13,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
-import { getLineLoginUrl } from "@/features/auth/api/customerAuthApi"
 import mockUsers from "@/features/auth/api/mockUsers.json"
-import { AUTH_AUDIENCE_ALLOWED_ROLES, AUTH_AUDIENCE_TEXT, AUTH_TEXT } from "@/features/auth/constants"
-import { useAuthNavigation, type RegisteredInfo } from "@/features/auth/hooks/useAuthNavigation"
+import { getLineLoginUrl } from "@/features/auth/api/customerAuthApi"
+import { AUTH_AUDIENCE_TEXT, AUTH_TEXT } from "@/features/auth/constants"
+import { useAuthNavigation } from "@/features/auth/hooks/useAuthNavigation"
 import type { AuthFormCardProps, Gender, MockUser } from "@/features/auth/types/auth"
-import { API_BASE } from "@/lib/apiBase"
 import { fetchSalonPage } from "@/features/user/api/userSalonApi"
 import { persistShopSlug, resolveShopSlug } from "@/lib/shopSlug"
 import {
@@ -38,6 +44,10 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "STAFF", label: "スタッフ (STAFF)" },
 ]
 
+const VISIBLE_ROLES: Record<AuthAudience, UserRole[]> = {
+  CUSTOMER_PORTAL: ["CUSTOMER"],
+  BACKOFFICE_PORTAL: ["ADMIN", "STAFF"],
+}
 const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: "male", label: "男性" },
   { value: "female", label: "女性" },
@@ -50,12 +60,11 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   const audienceText = AUTH_AUDIENCE_TEXT[audience]
   const { submit } = useAuthNavigation(audience, mode)
   const isCustomerPortal = audience === "CUSTOMER_PORTAL"
+  const [loginError, setLoginError] = useState("")
   const [shopSlug] = useState(
     () => resolveShopSlug(searchParams.get("shopId") ?? undefined) ?? "",
   )
   const [salonName, setSalonName] = useState<string | null>(null)
-  const [loginError, setLoginError] = useState("")
-  const [registeredInfo, setRegisteredInfo] = useState<RegisteredInfo | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [phoneSegments, setPhoneSegments] = useState<PhoneSegments>(["", "", ""])
   const [gender, setGender] = useState<Gender | "">("")
@@ -64,13 +73,13 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   const [showTermsModal, setShowTermsModal] = useState(false)
   const isDev = import.meta.env.DEV
   const developmentUsers = (mockUsers as MockUser[]).filter((user) =>
-    AUTH_AUDIENCE_ALLOWED_ROLES[audience].includes(user.role),
+    VISIBLE_ROLES[audience].includes(user.role),
   )
 
   useEffect(() => {
     if (!isCustomerPortal || !shopSlug) return
     fetchSalonPage(shopSlug)
-      .then((salon) => setSalonName(salon.salon_name))
+      .then((salon: { salon_name: string }) => setSalonName(salon.salon_name))
       .catch(() => {})
   }, [isCustomerPortal, shopSlug])
 
@@ -93,7 +102,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
     event.preventDefault()
 
     const formData = new FormData(event.currentTarget)
-    const email = String(formData.get("email") ?? "").trim().toLowerCase()
+    const email = String(formData.get("email") ?? "")
     const password = String(formData.get("password") ?? "")
     const passwordConfirm = String(formData.get("passwordConfirm") ?? "")
     const signupRole = isCustomerPortal
@@ -148,21 +157,21 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
 
     if (result.ok) {
       setLoginError("")
-      if (result.registered) {
-        setRegisteredInfo(result.registered)
-      }
       return
     }
 
-    if (result.error) {
-      setLoginError(result.error)
-    } else if (mode === "login") {
-      setLoginError("ログインに失敗しました。メールアドレスまたはパスワードを確認してください。")
+    if (mode === "login") {
+      if (
+        audience === "BACKOFFICE_PORTAL" &&
+        result.reason === "unauthorized"
+      ) {
+        setLoginError("メールまたはパスワードが間違っています。")
+      } else {
+        setLoginError(
+          "ログインに失敗しました。メールアドレスまたはパスワードを確認してください。",
+        )
+      }
     }
-  }
-
-  if (registeredInfo) {
-    return <RegistrationSuccess info={registeredInfo} />
   }
 
   return (
@@ -233,16 +242,12 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                 <p className="mt-1.5 text-sm font-medium text-neutral-700">{salonName}</p>
               ) : null}
               <p className="mt-1 text-sm text-neutral-500">{text.description}</p>
+              {customerSessionNotice ? (
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {customerSessionNotice}
+                </p>
+              ) : null}
             </div>
-
-            {customerSessionNotice ? (
-              <div
-                role="status"
-                className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950"
-              >
-                {customerSessionNotice}
-              </div>
-            ) : null}
 
             {isCustomerPortal ? (
               <>
@@ -340,7 +345,9 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         inputMode="numeric"
                         value={phoneSegments[0]}
                         onChange={(event) => {
-                          setPhoneSegments((prev) => updatePhoneSegment(prev, 0, event.target.value))
+                          setPhoneSegments((prev: PhoneSegments) =>
+                            updatePhoneSegment(prev, 0, event.target.value),
+                          )
                           setLoginError("")
                         }}
                         placeholder="090"
@@ -354,7 +361,9 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         inputMode="numeric"
                         value={phoneSegments[1]}
                         onChange={(event) => {
-                          setPhoneSegments((prev) => updatePhoneSegment(prev, 1, event.target.value))
+                          setPhoneSegments((prev: PhoneSegments) =>
+                            updatePhoneSegment(prev, 1, event.target.value),
+                          )
                           setLoginError("")
                         }}
                         placeholder="1234"
@@ -368,7 +377,9 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         inputMode="numeric"
                         value={phoneSegments[2]}
                         onChange={(event) => {
-                          setPhoneSegments((prev) => updatePhoneSegment(prev, 2, event.target.value))
+                          setPhoneSegments((prev: PhoneSegments) =>
+                            updatePhoneSegment(prev, 2, event.target.value),
+                          )
                           setLoginError("")
                         }}
                         placeholder="5678"
@@ -469,7 +480,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               <TermsOfServiceModal onClose={() => setShowTermsModal(false)} />
             ) : null}
 
-            <div className="mt-6 flex items-center justify-between border-t border-neutral-100 pt-5">
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-5">
               <div className="text-sm text-neutral-500">
                 <span>{text.switchLabel}</span>
                 <Link
@@ -481,30 +492,28 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               </div>
             </div>
 
-            <Link
-              to={withShopId(ROUTES.landing)}
-              className="mt-3 inline-block text-xs text-neutral-400 underline decoration-neutral-200 underline-offset-4 transition-colors hover:text-neutral-600 hover:decoration-neutral-400"
-            >
-              トップへ戻る
-            </Link>
-
-            {isDev && mode === "signup" && isCustomerPortal ? <HealthCheck /> : null}
+            <div className="mt-4">
+              <Link
+                to={ROUTES.landing}
+                className="text-sm text-neutral-500 underline decoration-neutral-300 underline-offset-4 transition-colors hover:text-neutral-800"
+              >
+                トップへ戻る
+              </Link>
+            </div>
 
             {isDev ? (
-              <details className="mt-8 rounded-lg border border-dashed border-neutral-200 text-xs">
-                <summary className="cursor-pointer px-4 py-2.5 font-medium text-neutral-500 transition-colors hover:text-neutral-700">
-                  開発用テストアカウント
-                </summary>
-                <div className="space-y-2 border-t border-dashed border-neutral-200 px-4 py-3">
+              <div className="mt-6 rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-3">
+                <p className="text-sm font-semibold text-neutral-800">開発用テストアカウント</p>
+                <div className="mt-2 space-y-2">
                   {developmentUsers.map((user) => (
-                    <div key={user.id} className="font-mono text-neutral-400">
+                    <div key={user.id} className="text-xs text-neutral-600">
                       <p>{`role: ${user.role}`}</p>
                       <p>{`email: ${user.email}`}</p>
-                      <p>{`pass:  ${user.password_hash}`}</p>
+                      <p>{`password: ${user.password_hash}`}</p>
                     </div>
                   ))}
                 </div>
-              </details>
+              </div>
             ) : null}
           </div>
         </div>
@@ -513,118 +522,19 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   )
 }
 
-function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function FieldGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="space-y-1.5">
-      <Label className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-        {label}
-      </Label>
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-neutral-700">{label}</Label>
       {children}
-    </div>
-  )
-}
-
-function RegistrationSuccess({ info }: { info: RegisteredInfo }) {
-  const loginPath = ROUTES.customerLogin
-  return (
-    <main
-      className="flex min-h-dvh items-center justify-center bg-neutral-50 px-4 py-10"
-      style={{ fontFamily: "'SF Pro Text', 'SF Pro Display', 'Noto Sans JP', sans-serif" }}
-    >
-      <div className="w-full max-w-md">
-        <div className="rounded-2xl border border-neutral-200 bg-white p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-          <div className="flex flex-col items-center text-center">
-            <div className="flex size-16 items-center justify-center rounded-full bg-emerald-50">
-              <CheckCircle2 className="size-8 text-emerald-600" />
-            </div>
-            <h2 className="mt-5 text-xl font-bold tracking-tight text-neutral-900">
-              会員登録が完了しました
-            </h2>
-            <p className="mt-1.5 text-sm text-neutral-500">以下の内容で登録されました。</p>
-          </div>
-
-          <div className="mt-7 space-y-3">
-            <InfoField label="お名前" value={info.name} />
-            <InfoField label="メールアドレス" value={info.email} />
-            {info.phone ? <InfoField label="電話番号" value={info.phone} /> : null}
-          </div>
-
-          <div className="mt-6 rounded-lg border border-amber-200/60 bg-amber-50 px-4 py-3.5">
-            <p className="text-sm leading-relaxed text-amber-800">
-              店舗の予約ページには、別途共有されるリンクからアクセスしてください。
-            </p>
-          </div>
-
-          <div className="mt-6">
-            <Button
-              asChild
-              variant="outline"
-              className="h-11 w-full rounded-lg border-neutral-200 text-sm font-semibold transition-colors hover:border-neutral-400"
-            >
-              <Link to={loginPath}>ログイン画面へ</Link>
-            </Button>
-          </div>
-        </div>
-      </div>
-    </main>
-  )
-}
-
-function InfoField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-neutral-100 bg-neutral-50 px-4 py-3">
-      <p className="text-[10px] font-medium uppercase tracking-widest text-neutral-400">{label}</p>
-      <p className="mt-0.5 text-sm font-semibold text-neutral-900">{value}</p>
-    </div>
-  )
-}
-
-function HealthCheck() {
-  const [status, setStatus] = useState<"loading" | "ok" | "error">("loading")
-  const [response, setResponse] = useState("")
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch(`${API_BASE}/api/health`, { signal: controller.signal })
-      .then(async (res) => {
-        const text = await res.text()
-        setResponse(`${res.status} — ${text}`)
-        setStatus("ok")
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return
-        setResponse(err instanceof Error ? err.message : "接続失敗")
-        setStatus("error")
-      })
-    return () => controller.abort()
-  }, [])
-
-  return (
-    <div className="mt-6 rounded-lg border border-dashed border-neutral-200 px-4 py-3">
-      <p className="text-xs font-semibold text-neutral-600">API 接続確認</p>
-      <p className="mt-0.5 text-[10px] font-mono text-neutral-400">{`GET ${API_BASE}/api/health`}</p>
-      <div className="mt-2 flex items-center gap-2">
-        <span
-          className={`inline-block size-2 rounded-full ${
-            status === "loading"
-              ? "animate-pulse bg-amber-400"
-              : status === "ok"
-                ? "bg-emerald-500"
-                : "bg-red-500"
-          }`}
-        />
-        <span className="text-xs text-neutral-500">
-          {status === "loading" ? "確認中…" : response}
-        </span>
-      </div>
     </div>
   )
 }
 
 function TermsOfServiceModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose()
+    function handleKeyDown(e: Event) {
+      if (e instanceof KeyboardEvent && e.key === "Escape") onClose()
     }
     document.addEventListener("keydown", handleKeyDown)
     document.body.style.overflow = "hidden"
@@ -755,7 +665,7 @@ function LineLoginButton({ shopSlug, onError }: { shopSlug?: string; onError: (m
 }
 
 function BirthDateInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleChange(e: ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 8)
 
     let formatted = ""
@@ -767,7 +677,7 @@ function BirthDateInput({ value, onChange }: { value: string; onChange: (v: stri
     onChange(formatted)
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Backspace" && value.endsWith("/")) {
       e.preventDefault()
       onChange(value.slice(0, -2))

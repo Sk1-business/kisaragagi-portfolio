@@ -76,15 +76,6 @@
 
 body {
   @apply bg-background text-foreground antialiased;
-  font-family:
-    "SF Pro Text",
-    "SF Pro Display",
-    "Noto Sans JP",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Hiragino Kaku Gothic ProN",
-    "Yu Gothic UI",
-    sans-serif;
   margin: 0;
   min-width: 320px;
 }

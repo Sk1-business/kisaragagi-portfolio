@@ -1,35 +1,33 @@
-const SHOP_ID_QUERY_KEY = "shopId"
-const LAST_SHOP_SLUG_KEY = "customer:last-shop-slug"
+const STORAGE_KEY = "customer_portal_shop_slug"
 
-function readFromSessionStorage(): string | undefined {
-  if (typeof window === "undefined") return undefined
-  const value = window.sessionStorage.getItem(LAST_SHOP_SLUG_KEY)
-  return value?.trim() || undefined
-}
-
-export function persistShopSlug(shopSlug?: string) {
-  if (typeof window === "undefined") return
-  const nextValue = shopSlug?.trim()
-  if (!nextValue) return
-  window.sessionStorage.setItem(LAST_SHOP_SLUG_KEY, nextValue)
-}
-
-export function readShopSlugFromLocation(): string | undefined {
-  if (typeof window === "undefined") return undefined
-  const params = new URLSearchParams(window.location.search)
-  const value = params.get(SHOP_ID_QUERY_KEY)
-  return value?.trim() || undefined
-}
-
-export function resolveShopSlug(shopSlug?: string): string | undefined {
-  const resolved = shopSlug?.trim() || readShopSlugFromLocation() || readFromSessionStorage()
-  if (resolved) {
-    persistShopSlug(resolved)
+/**
+ * クエリ `shopId` または localStorage に保存された店舗スラッグを返す。
+ */
+export function resolveShopSlug(input?: string | null): string | null {
+  const trimmed = input?.trim()
+  if (trimmed) return trimmed
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)?.trim()
+    if (stored) return stored
+  } catch {
+    /* ignore */
   }
-  return resolved
+  return null
 }
 
+export function persistShopSlug(slug: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, slug.trim())
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * 店舗スコープ API パス: `/api/salons/{slug}{path}`
+ */
 export function buildSalonApiPath(shopSlug: string, path: string): string {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`
-  return `/api/s/${encodeURIComponent(shopSlug)}${normalizedPath}`
+  const base = `/api/salons/${encodeURIComponent(shopSlug)}`
+  if (!path || path === "/") return base
+  return path.startsWith("/") ? `${base}${path}` : `${base}/${path}`
 }

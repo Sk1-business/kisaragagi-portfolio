@@ -1,10 +1,16 @@
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  fetchAdminSettings,
+  type BusinessHoursItem,
+} from "@/features/admin/api/adminSettingsApi"
+import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
+import { fetchAdminTrainerNames } from "@/features/admin/api/trainersApi"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
-import { useStaff } from "@/features/admin/hooks/useStaff"
+import { colorFromTrainerName, useStaff } from "@/features/admin/hooks/useStaff"
 import { ROUTES } from "@/constants/routes"
 import { CalendarDayView } from "@/features/admin/components/calendar/CalendarDayView"
 import { CalendarWeekView } from "@/features/admin/components/calendar/CalendarWeekView"
@@ -40,10 +46,20 @@ function parseDateParam(s: string | null): Date {
 }
 
 export function AdminCalendarPage() {
-  const { reservations, loading } = useAdminReservations()
+  const { reservations, loading, replaceReservations } = useAdminReservations()
   const { staffList, loading: staffLoading } = useStaff()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [trainerNameList, setTrainerNameList] = useState<string[]>([])
+  const [trainersLoading, setTrainersLoading] = useState(true)
+  const [trainersError, setTrainersError] = useState(false)
+  const [selectedTrainerNames, setSelectedTrainerNames] = useState<Set<string>>(
+    () => new Set(),
+  )
+  const [calendarListLoading, setCalendarListLoading] = useState(true)
+  const [calendarListError, setCalendarListError] = useState(false)
+  const [businessHoursItems, setBusinessHoursItems] = useState<BusinessHoursItem[]>([])
+  const [holidayDateKeys, setHolidayDateKeys] = useState<ReadonlySet<string>>(() => new Set())
 
   const viewMode = useMemo(
     () => parseViewParam(searchParams.get("view")),
@@ -53,6 +69,112 @@ export function AdminCalendarPage() {
     () => parseDateParam(searchParams.get("date")),
     [searchParams],
   )
+
+  const reservationFetchOptions = useMemo(
+    () => ({
+      viewMode,
+      anchorDate: currentDate,
+    }),
+    [viewMode, currentDate],
+  )
+
+  useEffect(() => {
+    if (staffLoading) return
+    let cancelled = false
+    void (async () => {
+      setCalendarListLoading(true)
+      setCalendarListError(false)
+      try {
+        const list = await fetchAdminReservations(
+          staffList,
+          reservationFetchOptions,
+        )
+        if (cancelled) return
+        replaceReservations(list)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setCalendarListError(true)
+      } finally {
+        if (!cancelled) setCalendarListLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    staffLoading,
+    staffList,
+    replaceReservations,
+    navigate,
+    reservationFetchOptions,
+  ])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      setTrainersLoading(true)
+      setTrainersError(false)
+      try {
+        const names = await fetchAdminTrainerNames()
+        if (cancelled) return
+        setTrainerNameList(names)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setTrainerNameList([])
+        setTrainersError(true)
+      } finally {
+        if (!cancelled) setTrainersLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const s = await fetchAdminSettings()
+        if (cancelled) return
+        setBusinessHoursItems(s.business_hours)
+        setHolidayDateKeys(new Set(s.holidays))
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setBusinessHoursItems([])
+        setHolidayDateKeys(new Set())
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    const valid = new Set(trainerNameList)
+    setSelectedTrainerNames((prev) => {
+      const next = new Set<string>()
+      prev.forEach((n) => {
+        if (valid.has(n)) next.add(n)
+      })
+      if (next.size === prev.size && [...prev].every((n) => next.has(n))) {
+        return prev
+      }
+      return next
+    })
+  }, [trainerNameList])
 
   const patchSearchParams = (patch: (p: URLSearchParams) => void) => {
     setSearchParams(
@@ -137,14 +259,152 @@ export function AdminCalendarPage() {
         ? `${weekStart.getMonth() + 1}/${weekStart.getDate()} ～ ${weekEnd.getMonth() + 1}/${weekEnd.getDate()}`
         : `${currentDate.getFullYear()}年 ${currentDate.getMonth() + 1}月`
 
-  if (loading || staffLoading) {
+  const filteredReservations = useMemo(() => {
+    if (selectedTrainerNames.size === 0) return reservations
+    return reservations.filter((r) => {
+      const t = r.trainerName?.trim()
+      if (t && selectedTrainerNames.has(t)) return true
+      const staff = staffList.find((s) => s.id === r.assigneeId)
+      const byStaffName = staff?.name.trim()
+      if (byStaffName && selectedTrainerNames.has(byStaffName)) return true
+      return false
+    })
+  }, [reservations, selectedTrainerNames, staffList])
+
+  const toggleTrainerName = (name: string) => {
+    setSelectedTrainerNames((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  const clearTrainerFilter = () => setSelectedTrainerNames(new Set())
+
+  const refetchTrainers = () => {
+    void (async () => {
+      setTrainersLoading(true)
+      setTrainersError(false)
+      try {
+        const names = await fetchAdminTrainerNames()
+        setTrainerNameList(names)
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setTrainerNameList([])
+        setTrainersError(true)
+      } finally {
+        setTrainersLoading(false)
+      }
+    })()
+  }
+
+  if (loading || staffLoading || calendarListLoading) {
     return (
       <p className="text-sm text-muted-foreground">読み込み中...</p>
     )
   }
 
+  if (calendarListError) {
+    return (
+      <div className="space-y-3 rounded-lg border border-border bg-card p-6">
+        <p className="text-sm text-muted-foreground">
+          予約一覧の取得に失敗しました。ネットワークまたはサーバーを確認してください。
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setCalendarListError(false)
+            setCalendarListLoading(true)
+            void (async () => {
+              try {
+                const list = await fetchAdminReservations(
+                  staffList,
+                  reservationFetchOptions,
+                )
+                replaceReservations(list)
+                setCalendarListError(false)
+              } catch (e) {
+                if (e instanceof Error && e.message === "UNAUTHORIZED") {
+                  navigate(ROUTES.backofficeLogin, { replace: true })
+                  return
+                }
+                setCalendarListError(true)
+              } finally {
+                setCalendarListLoading(false)
+              }
+            })()
+          }}
+        >
+          再試行
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
+      <Card className="rounded-lg border-border shadow-xs">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">トレーナーで絞り込み</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            このサロンに登録されているトレーナー名から選びます。複数選べます。未選択のときは全員分を表示します。
+          </p>
+        </CardHeader>
+        <CardContent>
+          {trainersLoading ? (
+            <p className="text-sm text-muted-foreground">トレーナー一覧を読み込み中...</p>
+          ) : trainersError ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                トレーナー一覧の取得に失敗しました。ネットワークまたはサーバーを確認してください。
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={refetchTrainers}>
+                再試行
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              {trainerNameList.map((name) => (
+                <Button
+                  key={name}
+                  variant={selectedTrainerNames.has(name) ? "default" : "outline"}
+                  size="sm"
+                  className="rounded-full px-4"
+                  onClick={() => toggleTrainerName(name)}
+                  aria-pressed={selectedTrainerNames.has(name)}
+                >
+                  <span
+                    className="mr-2 inline-block size-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: colorFromTrainerName(name) }}
+                  />
+                  {name}
+                </Button>
+              ))}
+              {trainerNameList.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={clearTrainerFilter}
+                  disabled={selectedTrainerNames.size === 0}
+                >
+                  選択をクリア
+                </Button>
+              )}
+              {trainerNameList.length === 0 && !trainersError ? (
+                <p className="text-sm text-muted-foreground">登録されているトレーナーがありません。</p>
+              ) : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card className="rounded-lg border-border shadow-xs">
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-lg">予約カレンダー</CardTitle>
@@ -179,23 +439,27 @@ export function AdminCalendarPage() {
           {viewMode === "day" && (
             <CalendarDayView
               date={currentDate}
-              reservations={reservations}
+              reservations={filteredReservations}
               staffList={staffList}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
+              holidayDateKeys={holidayDateKeys}
+              businessHoursItems={businessHoursItems}
             />
           )}
           {viewMode === "week" && (
             <CalendarWeekView
               date={currentDate}
-              reservations={reservations}
+              reservations={filteredReservations}
               staffList={staffList}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
+              holidayDateKeys={holidayDateKeys}
+              businessHoursItems={businessHoursItems}
             />
           )}
           {viewMode === "month" && (
             <CalendarMonthView
               date={currentDate}
-              reservations={reservations}
+              reservations={filteredReservations}
               staffList={staffList}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
               onSelectDay={(day) => {
@@ -204,6 +468,8 @@ export function AdminCalendarPage() {
                   p.set("date", ymd(startOfDay(day)))
                 })
               }}
+              holidayDateKeys={holidayDateKeys}
+              businessHoursItems={businessHoursItems}
             />
           )}
         </CardContent>

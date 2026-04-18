@@ -7,14 +7,13 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { cloneDefaultStaff } from "@/features/admin/api/staffApi"
+import {
+  deactivateAdminTrainer,
+  fetchAdminTrainers,
+  postAdminTrainer,
+  putAdminTrainer,
+} from "@/features/admin/api/trainersApi"
 import type { Staff } from "@/features/admin/types/staff"
-
-const STORAGE_KEY = "saas_admin_staff_v1"
-
-function newStaffId(): string {
-  return `st_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`
-}
 
 function isValidHexColor(s: string): boolean {
   const t = s.trim().toLowerCase()
@@ -27,35 +26,33 @@ function normalizeColorInput(s: string): string {
   return t.startsWith("#") ? t : `#${t}`
 }
 
-function loadInitial(): Staff[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const list = parsed.filter(
-          (x): x is Staff =>
-            x != null &&
-            typeof x === "object" &&
-            typeof (x as Staff).id === "string" &&
-            typeof (x as Staff).name === "string" &&
-            typeof (x as Staff).color === "string",
-        )
-        if (list.length > 0) return list
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  return cloneDefaultStaff()
-}
-
 type AdminStaffContextValue = {
   staffList: Staff[]
   loading: boolean
-  addStaff: (input: { name: string; color: string }) => Staff | null
-  updateStaff: (id: string, input: { name: string; color: string }) => boolean
-  deleteStaff: (id: string) => void
+  /** 初回（または再取得）の一覧取得に失敗したとき */
+  staffLoadError: boolean
+  refetchStaff: () => Promise<void>
+  addStaff: (input: {
+    name: string
+    color: string
+    description?: string
+    image_url?: string
+    display_order?: number
+    /** サロンメニューID。1件ごとに POST /api/admin/trainers が走る */
+    menuIds: string[]
+  }) => Promise<Staff | null>
+  updateStaff: (
+    id: string,
+    input: {
+      name: string
+      color: string
+      description: string
+      image_url: string
+      display_order?: number
+      menuIds: string[]
+    },
+  ) => Promise<boolean>
+  deleteStaff: (staff: Staff) => Promise<void>
 }
 
 const AdminStaffContext = createContext<AdminStaffContextValue | null>(null)
@@ -63,62 +60,165 @@ const AdminStaffContext = createContext<AdminStaffContextValue | null>(null)
 export function AdminStaffProvider({ children }: { children: ReactNode }) {
   const [staffList, setStaffList] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
+  const [staffLoadError, setStaffLoadError] = useState(false)
+
+  const refetchStaff = useCallback(async () => {
+    setLoading(true)
+    setStaffLoadError(false)
+    try {
+      const list = await fetchAdminTrainers()
+      setStaffList(list)
+    } catch {
+      setStaffLoadError(true)
+      setStaffList([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    setStaffList(loadInitial())
-    setLoading(false)
-  }, [])
+    void refetchStaff()
+  }, [refetchStaff])
 
-  const addStaff = useCallback((input: { name: string; color: string }): Staff | null => {
-    const name = input.name.trim()
-    const color = input.color.trim()
-    if (!name || !isValidHexColor(color)) return null
-    const normalized = normalizeColorInput(color)
-    const staff: Staff = { id: newStaffId(), name, color: normalized }
-    setStaffList((prev) => {
-      const next = [...prev, staff]
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      return next
-    })
-    return staff
-  }, [])
+  const addStaff = useCallback(
+    async (input: {
+      name: string
+      color: string
+      description?: string
+      image_url?: string
+      display_order?: number
+      menuIds: string[]
+    }): Promise<Staff | null> => {
+      const name = input.name.trim()
+      const color = input.color.trim()
+      if (!name || !isValidHexColor(color)) return null
+      const normalized = normalizeColorInput(color)
+      const menuIds = input.menuIds
+        .map((id) => String(id).trim())
+        .filter(Boolean)
+      const base: Parameters<typeof postAdminTrainer>[0] = {
+        name,
+        color: normalized,
+        description: input.description?.trim() || undefined,
+        image_url: input.image_url?.trim() || undefined,
+      }
+      if (
+        input.display_order !== undefined &&
+        Number.isFinite(input.display_order)
+      ) {
+        base.display_order = Math.round(input.display_order)
+      }
+      try {
+        let created: Staff | null = null
+        if (menuIds.length === 0) {
+          created = await postAdminTrainer(base)
+        } else {
+          for (const menuId of menuIds) {
+            const row = await postAdminTrainer({
+              ...base,
+              menu_ids: [menuId],
+            })
+            if (!created) created = row
+          }
+        }
+        if (!created) return null
+        const withMenus: Staff = {
+          ...created,
+          menuIds: menuIds.length > 0 ? [...menuIds] : created.menuIds,
+        }
+        setStaffList((prev) =>
+          [...prev.filter((s) => s.id !== withMenus.id), withMenus].sort((a, b) =>
+            a.name.localeCompare(b.name, "ja"),
+          ),
+        )
+        return withMenus
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") throw e
+        return null
+      }
+    },
+    [],
+  )
 
-  const updateStaff = useCallback((id: string, input: { name: string; color: string }): boolean => {
-    const name = input.name.trim()
-    const color = input.color.trim()
-    if (!name || !isValidHexColor(color)) return false
-    const normalized = normalizeColorInput(color)
-    let ok = false
-    setStaffList((prev) => {
-      const idx = prev.findIndex((s) => s.id === id)
-      if (idx < 0) return prev
-      ok = true
-      const next = [...prev]
-      next[idx] = { ...next[idx], name, color: normalized }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      return next
-    })
-    return ok
-  }, [])
+  const updateStaff = useCallback(
+    async (
+      id: string,
+      input: {
+        name: string
+        color: string
+        description: string
+        image_url: string
+        display_order?: number
+        menuIds: string[]
+      },
+    ): Promise<boolean> => {
+      const name = input.name.trim()
+      const color = input.color.trim()
+      if (!name || !isValidHexColor(color)) return false
+      const normalized = normalizeColorInput(color)
+      const menuIds = input.menuIds
+        .map((mid) => String(mid).trim())
+        .filter(Boolean)
+      try {
+        await putAdminTrainer(id, {
+          name,
+          color: normalized,
+          description: input.description,
+          image_url: input.image_url,
+          display_order: input.display_order,
+          menu_ids: menuIds,
+        })
+        const descTrim = input.description.trim()
+        const imgTrim = input.image_url.trim()
+        setStaffList((prev) => {
+          const idx = prev.findIndex((s) => s.id === id)
+          if (idx < 0) return prev
+          const next = [...prev]
+          const cur = next[idx]
+          next[idx] = {
+            ...cur,
+            name,
+            color: normalized,
+            description: descTrim || undefined,
+            image_url: imgTrim || undefined,
+            display_order: input.display_order,
+            menuIds: [...menuIds],
+          }
+          return next.sort((a, b) => a.name.localeCompare(b.name, "ja"))
+        })
+        return true
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") throw e
+        return false
+      }
+    },
+    [],
+  )
 
-  const deleteStaff = useCallback((id: string) => {
-    setStaffList((prev) => {
-      const next = prev.filter((s) => s.id !== id)
-      if (next.length === prev.length) return prev
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      return next
-    })
+  const deleteStaff = useCallback(async (staff: Staff): Promise<void> => {
+    await deactivateAdminTrainer(staff)
+    setStaffList((prev) => prev.filter((s) => s.id !== staff.id))
   }, [])
 
   const value = useMemo(
     () => ({
       staffList,
       loading,
+      staffLoadError,
+      refetchStaff,
       addStaff,
       updateStaff,
       deleteStaff,
     }),
-    [staffList, loading, addStaff, updateStaff, deleteStaff],
+    [
+      staffList,
+      loading,
+      staffLoadError,
+      refetchStaff,
+      addStaff,
+      updateStaff,
+      deleteStaff,
+    ],
   )
 
   return (

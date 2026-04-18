@@ -162,50 +162,53 @@ export function UserReservationInputPage() {
     !isZeroPriceMenu
 
   useEffect(() => {
-    if (isUpdateFlow || !showInlineStripe) {
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
+      if (isUpdateFlow || !showInlineStripe) {
+        setStripeClientSecret("")
+        setStripePublishableKey("")
+        setStripeAmountYen(0)
+        setSkipCardPaymentInline(false)
+        setIsStripeReady(false)
+        setStripeInitError("")
+        return
+      }
+      // 確認ステップでは既に取得した PaymentIntent を維持する（ここでクリアするとフォームが永遠に準備中になる）
+      if (reviewStep) {
+        return
+      }
+      if (!resolvedMenu || !date || !time || !shopId?.trim()) {
+        return
+      }
+      setStripeInitError("")
+      setIsStripeReady(false)
       setStripeClientSecret("")
       setStripePublishableKey("")
       setStripeAmountYen(0)
       setSkipCardPaymentInline(false)
-      setIsStripeReady(false)
-      setStripeInitError("")
-      return
-    }
-    // 確認ステップでは既に取得した PaymentIntent を維持する（ここでクリアするとフォームが永遠に準備中になる）
-    if (reviewStep) {
-      return
-    }
-    if (!resolvedMenu || !date || !time || !shopId?.trim()) {
-      return
-    }
-    let active = true
-    setStripeInitError("")
-    setIsStripeReady(false)
-    setStripeClientSecret("")
-    setStripePublishableKey("")
-    setStripeAmountYen(0)
-    setSkipCardPaymentInline(false)
-    void createReservationPaymentIntent({
-      shopSlug: shopId,
-      menuId: resolvedMenu.menu_id,
-      mode,
-      trainerId: mode === "nomination" ? trainerId || null : null,
-      date,
-      time,
-    }).then((result) => {
-      if (!active) return
-      if (!result.ok) {
-        setStripeInitError(result.error)
-        return
-      }
-      if ("skipPayment" in result && result.skipPayment) {
-        setSkipCardPaymentInline(true)
-        setIsStripeReady(true)
-        return
-      }
-      setStripeClientSecret(result.clientSecret)
-      setStripePublishableKey(result.publishableKey)
-      setStripeAmountYen(result.amountYen)
+      void createReservationPaymentIntent({
+        shopSlug: shopId,
+        menuId: resolvedMenu.menu_id,
+        mode,
+        trainerId: mode === "nomination" ? trainerId || null : null,
+        date,
+        time,
+      }).then((result) => {
+        if (!active) return
+        if (!result.ok) {
+          setStripeInitError(result.error)
+          return
+        }
+        if ("skipPayment" in result && result.skipPayment) {
+          setSkipCardPaymentInline(true)
+          setIsStripeReady(true)
+          return
+        }
+        setStripeClientSecret(result.clientSecret)
+        setStripePublishableKey(result.publishableKey)
+        setStripeAmountYen(result.amountYen)
+      })
     })
     return () => {
       active = false
@@ -224,79 +227,88 @@ export function UserReservationInputPage() {
 
   useEffect(() => {
     let isMounted = true
-    if (!shopId || isZeroPriceMenu) {
-      setSavedCards([])
-      setSavedCardsLoading(false)
-      return () => {
-        isMounted = false
-      }
-    }
-    setSavedCardsLoading(true)
-    fetchPaymentCards(shopId)
-      .then((list) => {
-        if (!isMounted) return
-        setSavedCards(list)
-      })
-      .catch(() => {
-        if (!isMounted) return
+    queueMicrotask(() => {
+      if (!isMounted) return
+      if (!shopId || isZeroPriceMenu) {
         setSavedCards([])
-      })
-      .finally(() => {
-        if (!isMounted) return
         setSavedCardsLoading(false)
-      })
+        return
+      }
+      setSavedCardsLoading(true)
+      void fetchPaymentCards(shopId)
+        .then((list) => {
+          if (!isMounted) return
+          setSavedCards(list)
+        })
+        .catch(() => {
+          if (!isMounted) return
+          setSavedCards([])
+        })
+        .finally(() => {
+          if (!isMounted) return
+          setSavedCardsLoading(false)
+        })
+    })
     return () => {
       isMounted = false
     }
   }, [shopId, isZeroPriceMenu])
 
   useEffect(() => {
-    if (savedCardsLoading || savedCardsBootstrapped) return
-    if (savedCards.length > 0) {
-      setCreditCardMode("saved")
-      setSelectedSavedCardId(savedCards[0].id)
-    }
-    setSavedCardsBootstrapped(true)
+    queueMicrotask(() => {
+      if (savedCardsLoading || savedCardsBootstrapped) return
+      if (savedCards.length > 0) {
+        setCreditCardMode("saved")
+        setSelectedSavedCardId(savedCards[0].id)
+      }
+      setSavedCardsBootstrapped(true)
+    })
   }, [savedCardsLoading, savedCards, savedCardsBootstrapped])
 
   useEffect(() => {
-    if (creditCardMode !== "saved" || savedCards.length > 0) return
-    setCreditCardMode("new")
+    queueMicrotask(() => {
+      if (creditCardMode !== "saved" || savedCards.length > 0) return
+      setCreditCardMode("new")
+    })
   }, [creditCardMode, savedCards.length])
 
   useEffect(() => {
-    setCreditFlowError("")
+    queueMicrotask(() => {
+      setCreditFlowError("")
+    })
   }, [paymentMethod, creditCardMode, selectedSavedCardId, resolvedSavedStripePmId])
 
   useEffect(() => {
-    if (paymentMethod !== "credit" || creditCardMode !== "saved" || !selectedSavedCardId) {
-      setResolvedSavedStripePmId("")
-      setSavedCardResolveError("")
-      setIsResolvingSavedCard(false)
-      return
-    }
     let cancelled = false
-    setIsResolvingSavedCard(true)
-    setSavedCardResolveError("")
-    setResolvedSavedStripePmId("")
-    void fetchPaymentCardDetail(selectedSavedCardId, shopId)
-      .then(({ stripePaymentMethodId }) => {
-        if (cancelled) return
-        if (!stripePaymentMethodId?.trim()) {
-          setSavedCardResolveError(
-            "このカードでは決済できません。別のカードを選ぶか、マイページで再登録してください。",
-          )
-          return
-        }
-        setResolvedSavedStripePmId(stripePaymentMethodId.trim())
-      })
-      .catch(() => {
-        if (cancelled) return
-        setSavedCardResolveError("カード情報の取得に失敗しました。")
-      })
-      .finally(() => {
-        if (!cancelled) setIsResolvingSavedCard(false)
-      })
+    queueMicrotask(() => {
+      if (paymentMethod !== "credit" || creditCardMode !== "saved" || !selectedSavedCardId) {
+        setResolvedSavedStripePmId("")
+        setSavedCardResolveError("")
+        setIsResolvingSavedCard(false)
+        return
+      }
+      setIsResolvingSavedCard(true)
+      setSavedCardResolveError("")
+      setResolvedSavedStripePmId("")
+      void fetchPaymentCardDetail(selectedSavedCardId, shopId)
+        .then(({ stripePaymentMethodId }) => {
+          if (cancelled) return
+          if (!stripePaymentMethodId?.trim()) {
+            setSavedCardResolveError(
+              "このカードでは決済できません。別のカードを選ぶか、マイページで再登録してください。",
+            )
+            return
+          }
+          setResolvedSavedStripePmId(stripePaymentMethodId.trim())
+        })
+        .catch(() => {
+          if (cancelled) return
+          setSavedCardResolveError("カード情報の取得に失敗しました。")
+        })
+        .finally(() => {
+          if (!cancelled) setIsResolvingSavedCard(false)
+        })
+    })
     return () => {
       cancelled = true
     }
@@ -304,13 +316,15 @@ export function UserReservationInputPage() {
 
   useEffect(() => {
     let isMounted = true
-    fetchUserProfile().then((profile) => {
+    void fetchUserProfile().then((profile) => {
       if (!isMounted) return
-      const [parsedLastName, ...restName] = profile.fullName.trim().split(/\s+/)
-      setLastName(parsedLastName ?? "")
-      setFirstName(restName.join(" "))
-      setEmail(profile.email)
-      setPhoneSegments(parsePhoneToSegments(profile.phone))
+      queueMicrotask(() => {
+        const [parsedLastName, ...restName] = profile.fullName.trim().split(/\s+/)
+        setLastName(parsedLastName ?? "")
+        setFirstName(restName.join(" "))
+        setEmail(profile.email)
+        setPhoneSegments(parsePhoneToSegments(profile.phone))
+      })
     })
     return () => {
       isMounted = false
@@ -319,32 +333,33 @@ export function UserReservationInputPage() {
 
   useEffect(() => {
     let isMounted = true
-    if (!shopId?.trim()) {
-      setResolvedMenu(null)
-      setResolvedMenuLoading(false)
-      return () => {
-        isMounted = false
-      }
-    }
-    setResolvedMenuLoading(true)
-    void fetchMenuForReservationCheckout({
-      shopSlug: shopId,
-      preferredMenuId: preferredMenuId || undefined,
-      mode,
-      trainerId: mode === "nomination" ? trainerId || null : null,
-    })
-      .then((menu) => {
-        if (!isMounted) return
-        setResolvedMenu(menu)
-      })
-      .catch(() => {
-        if (!isMounted) return
+    queueMicrotask(() => {
+      if (!isMounted) return
+      if (!shopId?.trim()) {
         setResolvedMenu(null)
-      })
-      .finally(() => {
-        if (!isMounted) return
         setResolvedMenuLoading(false)
+        return
+      }
+      setResolvedMenuLoading(true)
+      void fetchMenuForReservationCheckout({
+        shopSlug: shopId,
+        preferredMenuId: preferredMenuId || undefined,
+        mode,
+        trainerId: mode === "nomination" ? trainerId || null : null,
       })
+        .then((menu) => {
+          if (!isMounted) return
+          setResolvedMenu(menu)
+        })
+        .catch(() => {
+          if (!isMounted) return
+          setResolvedMenu(null)
+        })
+        .finally(() => {
+          if (!isMounted) return
+          setResolvedMenuLoading(false)
+        })
+    })
     return () => {
       isMounted = false
     }
@@ -541,7 +556,7 @@ export function UserReservationInputPage() {
     const minutes = reviewData.menuDurationMinutes
     if (!minutes || minutes <= 0) return reviewData.time
     return `${reviewData.time}〜${addMinutesToTimeString(reviewData.time, minutes)}`
-  }, [reviewData?.time, reviewData?.menuDurationMinutes])
+  }, [reviewData])
 
   const reviewDisplayPriceText = useMemo(() => {
     if (!reviewData) return "未定"

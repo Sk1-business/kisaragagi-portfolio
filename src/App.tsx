@@ -10,12 +10,13 @@ import {
   CustomerLoginPage,
   CustomerSignupPage,
 } from "@/features/auth/pages"
-import { LineCallbackPage } from "@/features/auth/pages/LineCallbackPage"
 import { AdminCalendarPage } from "@/features/admin/pages/AdminCalendarPage"
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage"
+import { AdminNewReservationConfirmPage } from "@/features/admin/pages/AdminNewReservationConfirmPage"
+import { AdminNewReservationPage } from "@/features/admin/pages/AdminNewReservationPage"
 import { AdminReservationDetailPage } from "@/features/admin/pages/AdminReservationDetailPage"
-import { AdminCancelledListPage } from "@/features/admin/pages/AdminCancelledListPage"
 import { AdminShiftCalendarPage } from "@/features/admin/pages/AdminShiftCalendarPage"
+import { AdminMenusPage } from "@/features/admin/pages/AdminMenusPage"
 import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
@@ -41,17 +42,17 @@ function LandingPage() {
         </div>
         <div>
           <p className="text-sm text-muted-foreground">予約管理SaaS</p>
-          <h1 className="text-2xl font-semibold tracking-tight">スマート予約プラットフォーム</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Effortless is Stylish</h1>
         </div>
       </div>
 
-      <div className="mb-6 flex items-center gap-2 rounded-xl bg-muted px-4 py-3">
+      <div className="mb-6 flex items-center gap-2 rounded-lg bg-muted px-4 py-3">
         <BadgeAlert className="size-5 shrink-0" />
         <p className="text-xl font-bold tracking-tight">開発用のページです。</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className="rounded-2xl shadow-xs">
+        <Card className="rounded-lg shadow-xs">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <UserRound className="size-4" />
@@ -60,6 +61,13 @@ function LandingPage() {
             <CardDescription>開発用: 予約者向け認証ページに遷移します</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
+
+            <Button asChild className="w-full rounded-md">
+              <Link to={ROUTES.customerLogin}>予約者ログインへ</Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full rounded-md">
+              <Link to={ROUTES.customerSignup}>予約者新規登録へ</Link>
+            </Button>
             <Button asChild className="w-full rounded-xl">
               <Link to={`${ROUTES.customerLogin}?shopId=sample-salon-2026`}>予約者ログインへ</Link>
             </Button>
@@ -69,7 +77,7 @@ function LandingPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl shadow-xs">
+        <Card className="rounded-lg shadow-xs">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <ShieldCheck className="size-4" />
@@ -78,10 +86,10 @@ function LandingPage() {
             <CardDescription>開発用: 管理者・スタッフ向け認証ページに遷移します</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button asChild className="w-full rounded-xl">
+            <Button asChild className="w-full rounded-md">
               <Link to={ROUTES.backofficeLogin}>管理者・スタッフログインへ</Link>
             </Button>
-            <Button asChild variant="outline" className="w-full rounded-xl">
+            <Button asChild variant="outline" className="w-full rounded-md">
               <Link to={ROUTES.backofficeSignup}>管理者・スタッフ新規登録へ</Link>
             </Button>
           </CardContent>
@@ -99,7 +107,6 @@ function App() {
 
         <Route path={ROUTES.customerLogin} element={<CustomerLoginPage />} />
         <Route path={ROUTES.customerSignup} element={<CustomerSignupPage />} />
-        <Route path={ROUTES.lineCallback} element={<LineCallbackPage />} />
         <Route path={ROUTES.backofficeLogin} element={<BackofficeLoginPage />} />
         <Route path={ROUTES.backofficeSignup} element={<BackofficeSignupPage />} />
         <Route element={<UserLayout />}>
@@ -121,8 +128,17 @@ function App() {
           <Route path={ROUTES.adminHome} element={<AdminDashboardPage />} />
           <Route path={ROUTES.adminCalendar} element={<AdminCalendarPage />} />
           <Route path={ROUTES.adminShiftCalendar} element={<AdminShiftCalendarPage />} />
-          <Route path={ROUTES.adminCancelled} element={<AdminCancelledListPage />} />
+          <Route
+            path={ROUTES.adminCancelled}
+            element={<Navigate to={ROUTES.adminHome} replace />}
+          />
           <Route path={ROUTES.adminStaff} element={<AdminStaffPage />} />
+          <Route path={ROUTES.adminMenus} element={<AdminMenusPage />} />
+          <Route
+            path={ROUTES.adminNewReservationConfirm}
+            element={<AdminNewReservationConfirmPage />}
+          />
+          <Route path={ROUTES.adminNewReservation} element={<AdminNewReservationPage />} />
           <Route
             path={ROUTES.adminReservationDetail}
             element={<AdminReservationDetailPage />}

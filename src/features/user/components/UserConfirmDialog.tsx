@@ -1,93 +1,78 @@
 import type { ReactNode } from "react"
-import { AlertTriangle, CircleAlert } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 
-interface UserConfirmDialogProps {
+type Props = {
   open: boolean
   title: string
-  description: ReactNode
+  description?: ReactNode
+  content?: ReactNode
   onCancel: () => void
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   confirmLabel: string
-  cancelLabel?: string
-  showCancelButton?: boolean
   isConfirming?: boolean
   confirmDisabled?: boolean
   cancelDisabled?: boolean
   errorMessage?: string
   variant?: "default" | "destructive"
-  content?: ReactNode
+  showCancelButton?: boolean
 }
 
 export function UserConfirmDialog({
   open,
   title,
   description,
+  content,
   onCancel,
   onConfirm,
   confirmLabel,
-  cancelLabel = "戻る",
-  showCancelButton = true,
   isConfirming = false,
   confirmDisabled = false,
   cancelDisabled = false,
-  errorMessage = "",
-  variant = "destructive",
-  content = null,
-}: UserConfirmDialogProps) {
+  errorMessage,
+  variant = "default",
+  showCancelButton = true,
+}: Props) {
   if (!open) return null
-  const isDestructive = variant === "destructive"
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={() => {
-          if (cancelDisabled) return
-          onCancel()
-        }}
-        onKeyDown={() => {}}
-        role="presentation"
-      />
-      <div className="relative mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-        <div className="flex items-center gap-3">
-          <div
-            className={`flex size-10 items-center justify-center rounded-full ${
-              isDestructive ? "bg-red-100" : "bg-slate-100"
-            }`}
-          >
-            {isDestructive ? (
-              <AlertTriangle className="size-5 text-red-600" />
-            ) : (
-              <CircleAlert className="size-5 text-slate-600" />
-            )}
-          </div>
-          <h3 className="text-base font-bold text-foreground">{title}</h3>
-        </div>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="user-confirm-title"
+    >
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <h3 id="user-confirm-title" className="text-lg font-bold text-foreground">
+          {title}
+        </h3>
+        {description ? <div className="mt-2 text-sm text-muted-foreground">{description}</div> : null}
         {content}
-        <p className="mt-3 text-sm text-muted-foreground">{description}</p>
-        {errorMessage ? <p className="mt-3 text-xs text-destructive">{errorMessage}</p> : null}
-        <div className="mt-5 flex gap-3">
+        {errorMessage ? (
+          <p className="mt-3 text-sm text-destructive" role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           {showCancelButton ? (
             <Button
               type="button"
               variant="outline"
-              className="flex-1 rounded-xl"
-              disabled={cancelDisabled}
+              className="rounded-xl"
               onClick={onCancel}
+              disabled={cancelDisabled || isConfirming}
             >
-              {cancelLabel}
+              キャンセル
             </Button>
           ) : null}
           <Button
             type="button"
-            variant={variant}
-            className={`${showCancelButton ? "flex-1" : "w-full"} rounded-xl`}
-            disabled={confirmDisabled}
-            onClick={onConfirm}
+            variant={variant === "destructive" ? "destructive" : "default"}
+            className="rounded-xl"
+            onClick={() => void onConfirm()}
+            disabled={confirmDisabled || isConfirming}
           >
-            {isConfirming ? "処理中..." : confirmLabel}
+            {isConfirming ? "処理中…" : confirmLabel}
           </Button>
         </div>
       </div>

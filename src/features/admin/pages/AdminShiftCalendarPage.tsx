@@ -3,143 +3,126 @@ import { useNavigate } from "react-router-dom"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
-import { useStaff } from "@/features/admin/hooks/useStaff"
-import { ROUTES } from "@/constants/routes"
-import { CalendarDayView } from "@/features/admin/components/calendar/CalendarDayView"
-import { CalendarWeekView } from "@/features/admin/components/calendar/CalendarWeekView"
-import { CalendarMonthView } from "@/features/admin/components/calendar/CalendarMonthView"
 import {
-  addDays,
-  addWeeks,
-  addMonths,
-  startOfDay,
-  formatDateJa,
-} from "@/features/admin/lib/calendarUtils"
-
-type ViewMode = "day" | "week" | "month"
+  fetchAdminSettings,
+  type BusinessHoursItem,
+} from "@/features/admin/api/adminSettingsApi"
+import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
+import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
+import { useTrainerShiftsForMonth } from "@/features/admin/hooks/useTrainerShiftsForMonth"
+import { useStaff } from "@/features/admin/hooks/useStaff"
+import { ShiftCalendarMonthView } from "@/features/admin/components/calendar/ShiftCalendarMonthView"
+import { addMonths, startOfDay } from "@/features/admin/lib/calendarUtils"
+import { ROUTES } from "@/constants/routes"
 
 export function AdminShiftCalendarPage() {
-  const { reservations, loading } = useAdminReservations()
-  const { staffList, loading: staffLoading } = useStaff()
   const navigate = useNavigate()
+  const { staffList, loading: staffLoading } = useStaff()
+  const { reservations, replaceReservations } = useAdminReservations()
+  const [reservationsLoading, setReservationsLoading] = useState(true)
+  const [reservationsFetchFailed, setReservationsFetchFailed] = useState(false)
   const [currentDate, setCurrentDate] = useState(() => startOfDay(new Date()))
-  const [viewMode, setViewMode] = useState<ViewMode>("month")
-  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string | null>(null)
+  const [businessHoursItems, setBusinessHoursItems] = useState<BusinessHoursItem[]>([])
+  const [holidayDateKeys, setHolidayDateKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const [settingsLoading, setSettingsLoading] = useState(true)
+  const [settingsError, setSettingsError] = useState(false)
+
+  const { loading: shiftsLoading, error: shiftsError, refetch } = useTrainerShiftsForMonth(
+    staffList,
+    currentDate,
+  )
 
   useEffect(() => {
-    if (staffList.length === 0) {
-      setSelectedAssigneeId(null)
-      return
+    let cancelled = false
+    void (async () => {
+      setSettingsLoading(true)
+      setSettingsError(false)
+      try {
+        const s = await fetchAdminSettings()
+        if (!cancelled) {
+          setBusinessHoursItems(s.business_hours)
+          setHolidayDateKeys(new Set(s.holidays))
+        }
+      } catch {
+        if (!cancelled) setSettingsError(true)
+      } finally {
+        if (!cancelled) setSettingsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
     }
-    if (
-      selectedAssigneeId === null ||
-      !staffList.some((s) => s.id === selectedAssigneeId)
-    ) {
-      setSelectedAssigneeId(staffList[0].id)
+  }, [])
+
+  useEffect(() => {
+    if (staffLoading) return
+    let cancelled = false
+    void (async () => {
+      setReservationsLoading(true)
+      setReservationsFetchFailed(false)
+      try {
+        const list = await fetchAdminReservations(staffList, {
+          viewMode: "month",
+          anchorDate: currentDate,
+        })
+        if (cancelled) return
+        replaceReservations(list)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setReservationsFetchFailed(true)
+      } finally {
+        if (!cancelled) setReservationsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
     }
-  }, [staffList, selectedAssigneeId])
-
-  const filteredReservations =
-    selectedAssigneeId == null
-      ? reservations
-      : reservations.filter((r) => r.assigneeId === selectedAssigneeId)
-
-  const handleSelectReservation = (id: string) => {
-    navigate(ROUTES.adminReservationDetail.replace(":id", id))
-  }
+  }, [staffLoading, staffList, replaceReservations, navigate, currentDate])
 
   const goPrev = () => {
-    if (viewMode === "day") setCurrentDate((d) => addDays(d, -1))
-    else if (viewMode === "week") setCurrentDate((d) => addWeeks(d, -1))
-    else setCurrentDate((d) => addMonths(d, -1))
+    setCurrentDate((d) => addMonths(d, -1))
   }
 
   const goNext = () => {
-    if (viewMode === "day") setCurrentDate((d) => addDays(d, 1))
-    else if (viewMode === "week") setCurrentDate((d) => addWeeks(d, 1))
-    else setCurrentDate((d) => addMonths(d, 1))
+    setCurrentDate((d) => addMonths(d, 1))
   }
 
   const goToday = () => {
     setCurrentDate(startOfDay(new Date()))
   }
 
-  const weekStart =
-    viewMode === "week"
-      ? (() => {
-          const d = new Date(currentDate)
-          const day = d.getDay()
-          const diff = day === 0 ? -6 : 1 - day
-          d.setDate(d.getDate() + diff)
-          return d
-        })()
-      : null
-  const weekEnd = weekStart ? addDays(weekStart, 6) : null
+  const titleMonth = `${currentDate.getFullYear()}年 ${currentDate.getMonth() + 1}月`
 
-  const titleByMode =
-    viewMode === "day"
-      ? formatDateJa(currentDate)
-      : viewMode === "week" && weekStart && weekEnd
-        ? `${weekStart.getMonth() + 1}/${weekStart.getDate()} ～ ${weekEnd.getMonth() + 1}/${weekEnd.getDate()}`
-        : `${currentDate.getFullYear()}年 ${currentDate.getMonth() + 1}月`
-
-  if (loading || staffLoading) {
+  if (staffLoading || (staffList.length > 0 && shiftsLoading)) {
     return <p className="text-sm text-muted-foreground">読み込み中...</p>
   }
 
   return (
     <div className="space-y-4">
-      {/* 担当者選択バナー */}
-      <Card className="rounded-lg border-border shadow-xs">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">担当者を選択</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {staffList.map((staff) => (
-              <Button
-                key={staff.id}
-                variant={selectedAssigneeId === staff.id ? "default" : "outline"}
-                size="sm"
-                className="rounded-full px-4"
-                onClick={() => setSelectedAssigneeId(staff.id)}
-              >
-                <span
-                  className="mr-2 inline-block size-3 shrink-0 rounded-full"
-                  style={{ backgroundColor: staff.color }}
-                />
-                {staff.name}
-              </Button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
       <Card className="rounded-lg border-border shadow-xs">
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-lg">シフトカレンダー</CardTitle>
+          <div>
+            <CardTitle className="text-lg">シフトカレンダー</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              シフトは{" "}
+              <span className="font-mono text-xs">GET /api/admin/trainers/&#123;trainer_id&#125;/shifts</span>{" "}
+              で取得した <span className="font-mono text-xs">trainer_shifts</span> を表示します。
+              編集時の勤務時間は{" "}
+              <span className="font-mono text-xs">GET /api/admin/settings</span> の営業時間内に制限されます。
+            </p>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-md border border-border bg-muted/30 p-0.5">
-              {(["day", "week", "month"] as const).map((mode) => (
-                <Button
-                  key={mode}
-                  variant={viewMode === mode ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded px-3 text-xs"
-                  onClick={() => setViewMode(mode)}
-                >
-                  {mode === "day" ? "1日" : mode === "week" ? "1週間" : "1ヶ月"}
-                </Button>
-              ))}
-            </div>
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
                 size="icon"
                 className="size-8"
                 onClick={goPrev}
-                aria-label="前へ"
+                aria-label="前の月へ"
               >
                 <ChevronLeft className="size-4" />
               </Button>
@@ -149,14 +132,14 @@ export function AdminShiftCalendarPage() {
                 className="min-w-[120px]"
                 onClick={goToday}
               >
-                {titleByMode}
+                {titleMonth}
               </Button>
               <Button
                 variant="outline"
                 size="icon"
                 className="size-8"
                 onClick={goNext}
-                aria-label="次へ"
+                aria-label="次の月へ"
               >
                 <ChevronRight className="size-4" />
               </Button>
@@ -164,41 +147,31 @@ export function AdminShiftCalendarPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {selectedAssigneeId == null ? (
+          {settingsError ? (
+            <p className="mb-4 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              営業時間（GET /api/admin/settings）の取得に失敗しました。シフトの保存時は営業時間内に収まる必要があります。
+            </p>
+          ) : null}
+          {shiftsError ? (
+            <p className="py-8 text-center text-sm text-destructive">
+              シフト一覧の取得に失敗しました。ネットワークまたはサーバーを確認してください。
+            </p>
+          ) : staffList.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              上で担当者を選択すると、その担当者の予約が表示されます。
+              スタッフが登録されていません。スタッフ管理から担当者を追加してください。
             </p>
           ) : (
-            <>
-              {viewMode === "day" && (
-                <CalendarDayView
-                  date={currentDate}
-                  reservations={filteredReservations}
-                  staffList={staffList}
-                  onSelectReservation={(r) => handleSelectReservation(r.id)}
-                />
-              )}
-              {viewMode === "week" && (
-                <CalendarWeekView
-                  date={currentDate}
-                  reservations={filteredReservations}
-                  staffList={staffList}
-                  onSelectReservation={(r) => handleSelectReservation(r.id)}
-                />
-              )}
-              {viewMode === "month" && (
-                <CalendarMonthView
-                  date={currentDate}
-                  reservations={filteredReservations}
-                  staffList={staffList}
-                  onSelectReservation={(r) => handleSelectReservation(r.id)}
-                  onSelectDay={(day) => {
-                    setCurrentDate(startOfDay(new Date(day.getTime())))
-                    setViewMode("day")
-                  }}
-                />
-              )}
-            </>
+            <ShiftCalendarMonthView
+              date={currentDate}
+              staffList={staffList}
+              businessHoursItems={businessHoursItems}
+              holidayDateKeys={holidayDateKeys}
+              settingsLoading={settingsLoading}
+              reservations={reservations}
+              reservationsLoading={reservationsLoading}
+              reservationsFetchFailed={reservationsFetchFailed}
+              refetchShifts={refetch}
+            />
           )}
         </CardContent>
       </Card>

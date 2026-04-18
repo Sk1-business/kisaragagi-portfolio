@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { useStaff } from "@/features/admin/hooks/useStaff"
-import { getStaffById } from "@/features/admin/api/staffApi"
+import { getReservationAssigneeDisplayName } from "@/features/admin/api/staffApi"
 import { formatTime, formatDateJa } from "@/features/admin/lib/calendarUtils"
 import { hasConfirmedOverlapForAssignee } from "@/features/admin/lib/reservationOverlap"
 import type { Reservation } from "@/features/admin/types/reservation"
@@ -68,7 +68,6 @@ export function AdminCancelledListPage() {
                 </thead>
                 <tbody>
                   {cancelledReservations.map((r) => {
-                    const staff = getStaffById(r.assigneeId, staffList)
                     const d = new Date(r.startAt)
                     return (
                       <tr key={r.id} className="border-b border-border/60">
@@ -77,7 +76,9 @@ export function AdminCancelledListPage() {
                           {formatTime(r.startAt)} ～ {formatTime(r.endAt)}
                         </td>
                         <td className="py-2 pr-4">{r.customerName}</td>
-                        <td className="py-2 pr-4">{staff?.name ?? r.assigneeId}</td>
+                        <td className="py-2 pr-4">
+                          {getReservationAssigneeDisplayName(r, staffList)}
+                        </td>
                         <td className="py-2 pr-2">
                           <Button
                             type="button"

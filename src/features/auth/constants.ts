@@ -1,4 +1,4 @@
-import type { AuthAudience, AuthMode, UserRole } from "@/types"
+import type { AuthAudience, AuthMode } from "@/types"
 
 type AuthText = {
   title: string
@@ -40,9 +40,4 @@ export const AUTH_AUDIENCE_TEXT: Record<
     title: "管理者・スタッフ用",
     description: "管理者・スタッフ向けのログイン・新規登録ページです。",
   },
-}
-
-export const AUTH_AUDIENCE_ALLOWED_ROLES: Record<AuthAudience, UserRole[]> = {
-  CUSTOMER_PORTAL: ["CUSTOMER"],
-  BACKOFFICE_PORTAL: ["ADMIN", "STAFF"],
 }

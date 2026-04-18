@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -15,6 +14,8 @@ const STORAGE_KEY = "saas_admin_reservations_v2"
 type AdminReservationsContextValue = {
   reservations: Reservation[]
   loading: boolean
+  /** 予約カレンダー用 API などで一覧を差し替える（localStorage は更新しない） */
+  replaceReservations: (items: Reservation[]) => void
   updateReservationStatus: (id: string, status: "CONFIRMED" | "CANCELLED") => void
   updateReservationMemo: (id: string, memo: string | undefined) => void
   updateReservationAssignee: (id: string, assigneeId: string) => void
@@ -38,12 +39,11 @@ function loadInitial(): Reservation[] {
 }
 
 export function AdminReservationsProvider({ children }: { children: ReactNode }) {
-  const [reservations, setReservations] = useState<Reservation[]>([])
-  const [loading, setLoading] = useState(true)
+  const [reservations, setReservations] = useState<Reservation[]>(() => loadInitial())
+  const [loading] = useState(false)
 
-  useEffect(() => {
-    setReservations(loadInitial())
-    setLoading(false)
+  const replaceReservations = useCallback((items: Reservation[]) => {
+    setReservations(items)
   }, [])
 
   const updateReservationStatus = useCallback(
@@ -63,8 +63,9 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
         if (r.id !== id) return r
         const trimmed = memo?.trim()
         if (!trimmed) {
-          const { memo: _m, ...rest } = r
-          return rest as Reservation
+          const next = { ...r }
+          delete next.memo
+          return next
         }
         return { ...r, memo: trimmed }
       })
@@ -75,7 +76,9 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
 
   const updateReservationAssignee = useCallback((id: string, assigneeId: string) => {
     setReservations((prev) => {
-      const next = prev.map((r) => (r.id === id ? { ...r, assigneeId } : r))
+      const next = prev.map((r) =>
+        r.id === id ? { ...r, assigneeId, trainerId: assigneeId } : r,
+      )
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
       return next
     })
@@ -101,6 +104,7 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
     () => ({
       reservations,
       loading,
+      replaceReservations,
       updateReservationStatus,
       updateReservationMemo,
       updateReservationAssignee,
@@ -110,6 +114,7 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
     [
       reservations,
       loading,
+      replaceReservations,
       updateReservationStatus,
       updateReservationMemo,
       updateReservationAssignee,

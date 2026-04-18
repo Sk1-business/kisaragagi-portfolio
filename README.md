@@ -1,141 +1,103 @@
 # Struct Front
 
-予約管理SaaS用のフロントエンド（画面側）プロジェクトです。
+予約管理SaaS（モック）用のフロントエンドプロジェクトです。  
+Vite + React + TypeScript をベースに、Tailwind CSS と shadcn/ui を利用しています。
 
----
+## 技術スタック
 
-## このプロジェクトで使っている技術
+- Frontend: React
+- Build Tool: Vite
+- Language: TypeScript
+- Styling: Tailwind CSS
+- UI: shadcn/ui, Lucide Icons
+- Routing: React Router
 
-| 技術 | 役割 |
-|---|---|
-| **React** | 画面の部品（ボタン、フォームなど）を組み立てるためのライブラリ |
-| **TypeScript** | JavaScript に型チェックを加えた言語。入力ミスをビルド時に検出できる |
-| **Vite** | 開発サーバーの起動やビルド（本番用ファイルの生成）を行うツール |
-| **Tailwind CSS** | クラス名を書くだけでスタイルが当たる CSS フレームワーク |
-| **shadcn/ui** | Tailwind ベースの UI 部品集（ボタン、カードなど） |
-| **React Router** | ページ遷移を管理するライブラリ |
-| **Lucide Icons** | アイコン素材集 |
-
----
-
-## 環境構築（初回のみ）
-
-以下の 3 つのソフトウェアをインストールします。
-
-### 1. Git（ソースコードの管理ツール）
-
-| OS | 手順 |
-|---|---|
-| **Mac** | ターミナルで `git --version` を実行。未インストールの場合は自動でインストールが始まります |
-| **Windows** | [git-scm.com](https://git-scm.com/) からインストーラをダウンロードし、画面の指示に従ってインストール |
-
-### 2. Node.js（JavaScript の実行環境）
-
-Node.js をインストールすると、パッケージ管理ツール **npm** も一緒に入ります。
-
-| OS | 手順 |
-|---|---|
-| **Mac** | [nodejs.org](https://nodejs.org/) から **LTS 版**（推奨版）をダウンロードしてインストール |
-| **Windows** | 同上。インストーラの指示に従い、デフォルト設定のまま進めて OK |
-
-> **推奨バージョン**: Node.js 18 以上 / npm 9 以上
-
-インストール後、ターミナル（Mac）または PowerShell（Windows）で以下を実行して確認できます。
-
-```bash
-node -v
-npm -v
-```
-
-### 3. Cursor（コードエディタ）
-
-[Cursor](https://www.cursor.com/) をインストールしてください（Windows / Mac 両対応）。  
-本プロジェクトでは Cursor に AI ルール（`.cursor/rules/`）を設定しており、コーディング時に自動でプロジェクトのルールが適用されます。
-
----
-
-## プロジェクトのセットアップ
-
-ターミナル（Mac）または PowerShell（Windows）を開き、以下のコマンドを**順番に**実行してください。
-
-### 1. ソースコードを取得する
-
-```bash
-git clone <リポジトリURL>
-```
-
-> `<リポジトリURL>` はチームから共有される GitHub の URL に置き換えてください。
-
-### 2. プロジェクトフォルダに移動する
-
-```bash
-cd SaaS_frontend
-```
-
-### 3. 必要なパッケージをインストールする
-
-```bash
-npm install
-```
-
-初回は数分かかることがあります。完了すると `node_modules` フォルダが作られます。
-
-### 4. 開発サーバーを起動する
-
-```bash
-npm run dev
-```
-
-起動後、ターミナルに表示される URL（通常 `http://localhost:5173`）をブラウザで開くと画面が表示されます。
-
-**止めるとき**: ターミナルで `Ctrl + C` を押してください。
-
----
-
-## よく使うコマンド
-
-プロジェクトフォルダ内で実行します。
-
-| コマンド | 説明 |
-|---|---|
-| `npm run dev` | 開発サーバーを起動する（コード変更が即座に画面に反映される） |
-| `npm run build` | 本番用ファイルを生成する（`dist` フォルダに出力） |
-| `npm run lint` | コードの書き方チェックを実行する |
-| `npm run preview` | `build` で生成したファイルをローカルで確認する |
-
----
-
-## トラブルシューティング
-
-### `npm install` でエラーが出る
-
-- Node.js のバージョンが古い可能性があります。`node -v` で 18 以上か確認してください。
-- ネットワーク接続を確認してください（パッケージのダウンロードが必要です）。
-
-### `npm run dev` でポートが使用中と表示される
-
-別のアプリが同じポート（5173）を使っています。  
-既に起動している開発サーバーがないか確認するか、ターミナルを閉じてやり直してください。
-
-### 画面が真っ白になる
-
-ブラウザの開発者ツール（`F12`）を開き、Console タブでエラーメッセージを確認してください。
-
----
-
-## バージョン情報
+## バージョン
 
 主要な依存関係のバージョン（`package.json` 時点）:
 
 - Node.js: 18+ 推奨
 - npm: 9+ 推奨
 - React: `^19.2.0`
+- React DOM: `^19.2.0`
 - TypeScript: `~5.9.3`
 - Vite: `^7.3.1`
+- React Router DOM: `^7.13.1`
 - Tailwind CSS: `^4.2.1`
 - @tailwindcss/vite: `^4.2.1`
 - Lucide React: `^0.575.0`
 
+## クローン方法
+
+### Windows (PowerShell)
+
+```bash
+git clone <your-repository-url>
+cd Struct_front
+npm install
+```
+
+### Mac (Terminal)
+
+```bash
+git clone <your-repository-url>
+cd Struct_front
+npm install
+```
+
+## 管理者画面（モック）
+
+- 予約: `localStorage` `saas_admin_reservations_v2`
+- スタッフ: `saas_admin_staff_v1`（`/admin/staff`）。同名（前後空白除き）の登録・編集は不可。未終了の確定予約がある担当は削除不可。
+
+## バックエンド・周辺ツール（開発）
+
+| 用途 | 接続 |
+|------|------|
+| FastAPI（API サーバー） | `http://localhost:8000` |
+| PostgreSQL 16（メイン DB） | ポート `5433` |
+| Mailpit（SMTP / Web UI） | SMTP `1025` / Web UI `http://localhost:8025` |
+| Adminer（DB ブラウザ） | `http://localhost:8081` |
+
+フロントの `npm run dev` は `/api` を上記 FastAPI にプロキシします（既定 `http://localhost:8000`。変更は `.env` の `VITE_DEV_PROXY_TARGET`）。`.env.example` を参照。
+
+**バックエンドリポジトリ**: 本プロジェクトと同階層の **Struct**（FastAPI）。管理者ログイン／ログアウト／`me` は `Struct/app/api/admin/auth.py`（ルーターに `prefix=/api/admin`）と対応しています。フロント側のパス定数は `src/constants/adminApi.ts` を参照。
+
+### 管理者ログイン（API 連携時）
+
+バックエンドに登録したアカウント例:
+
+- メール: `admin@example.com`
+- パスワード: `admin123`
+
+（モック画面の開発用表示とも一致）
+
+### 管理者向け API（フロントが想定するエンドポイント）
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| `POST` | `/api/admin/login` | 認証成功時 `Set-Cookie` で `access_token`（HttpOnly 等はサーバー設定） |
+| `POST` | `/api/admin/logout` | Cookie を削除。以降は未認証扱い |
+| `GET` | `/api/admin/me` | セッション有効なら `200`、無効・未ログインなら `401`（管理者レイアウトの表示前チェック・戻る操作後の再検証に使用） |
+| `GET` | `/api/admin/reservations` | 予約一覧（要ログイン）。実装は `Struct/app/api/admin/reservations.py`。**ページネーション** `items` / `total` / `page` / `per_page`。クエリは `date`, `view`（`day`\|`week`）等（詳細は OpenAPI）。フロントは `month` 表示時は日付指定なしで全件をページング取得、`day`\|`week` では該当範囲に絞り込み |
+| `GET` | `/api/admin/reservations/{reservation_id}` | 予約1件（要ログイン）。`ReservationOut`。予約詳細画面（`/admin/reservations/:id`）で使用 |
+
+ログアウト後は `replace` でログイン画面へ遷移し、戻る／bfcache 復帰時も `GET /api/admin/me` で再確認してセッション切れならログインへ戻します。
+
+予約カレンダー（`/admin/calendar`）表示時に `GET /api/admin/reservations` を呼び、一覧をコンテキストへ反映します。`401` のときはログイン画面へ遷移します。
+
+## 開発・ビルド
+
+```bash
+# 開発サーバー起動
+npm run dev
+
+# Lint
+npm run lint
+
+# 本番ビルド
+npm run build
+```
 ---
 
 ## 決済機能（クレジット / PayPay）を動かす手順

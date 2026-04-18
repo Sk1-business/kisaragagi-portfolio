@@ -27,7 +27,10 @@ import {
 } from "@/features/user/api/userReservationApi"
 import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
-import { usePersistentReservationId } from "@/features/user/hooks/usePersistentReservationId"
+import {
+  setReservationUpdateIntent,
+  usePersistentReservationId,
+} from "@/features/user/hooks/usePersistentReservationId"
 import { useSalonName } from "@/features/user/hooks/useSalonName"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 import { useUserReservation } from "@/features/user/hooks/useUserReservation"
@@ -63,23 +66,24 @@ export function UserReservationDetailPage() {
 
   useEffect(() => {
     let isMounted = true
-    setIsPolicyLoading(true)
-    setLoadError("")
-
-    void fetchReservationPolicies()
-      .then(({ cancellation, change }) => {
-        if (!isMounted) return
-        setCancellationPolicy(cancellation)
-        setReservationChangePolicy(change)
-      })
-      .catch(() => {
-        if (!isMounted) return
-        setLoadError("予約情報の取得に失敗しました。")
-      })
-      .finally(() => {
-        if (!isMounted) return
-        setIsPolicyLoading(false)
-      })
+    queueMicrotask(() => {
+      setIsPolicyLoading(true)
+      setLoadError("")
+      void fetchReservationPolicies()
+        .then(({ cancellation, change }) => {
+          if (!isMounted) return
+          setCancellationPolicy(cancellation)
+          setReservationChangePolicy(change)
+        })
+        .catch(() => {
+          if (!isMounted) return
+          setLoadError("予約情報の取得に失敗しました。")
+        })
+        .finally(() => {
+          if (!isMounted) return
+          setIsPolicyLoading(false)
+        })
+    })
 
     return () => {
       isMounted = false
@@ -101,7 +105,7 @@ export function UserReservationDetailPage() {
   const expectedTimeRange = useMemo(() => {
     if (!reservation?.time) return "未選択"
     return formatReservationExpectedTimeRange(reservation.time, reservation.serviceEndAt)
-  }, [reservation?.time, reservation?.serviceEndAt])
+  }, [reservation])
 
   const displayMenuName = reservation?.menuName?.trim() || "未定"
   const fromPastTab = Boolean(
@@ -347,6 +351,7 @@ export function UserReservationDetailPage() {
                     )
                     return
                   }
+                  setReservationUpdateIntent(true)
                   navigate(editPath, {
                     state: { reservationId: reservation.id, isUpdatingExistingReservation: true },
                   })

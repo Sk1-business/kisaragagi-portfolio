@@ -1,33 +1,30 @@
-const PHONE_MAX_DIGITS = 11
-const PHONE_SEGMENT_LENGTHS = [3, 4, 4] as const
-
 export type PhoneSegments = [string, string, string]
 
-export function extractPhoneDigits(value: string) {
-  return value.replace(/\D/g, "").slice(0, PHONE_MAX_DIGITS)
+export function isCompletePhoneSegments(s: PhoneSegments): boolean {
+  return /^\d{3}$/.test(s[0]) && /^\d{4}$/.test(s[1]) && /^\d{4}$/.test(s[2])
 }
 
-export function parsePhoneToSegments(value: string): PhoneSegments {
-  const digits = extractPhoneDigits(value)
-  const [len1, len2] = PHONE_SEGMENT_LENGTHS
-  return [digits.slice(0, len1), digits.slice(len1, len1 + len2), digits.slice(len1 + len2)]
+export function joinPhoneSegments(s: PhoneSegments): string {
+  if (s.every((x) => !x.trim())) return ""
+  return `${s[0]}-${s[1]}-${s[2]}`
 }
+
+export function parsePhoneToSegments(phone: string): PhoneSegments {
+  const digits = phone.replace(/\D/g, "")
+  if (digits.length <= 3) return [digits.slice(0, 3), "", ""]
+  if (digits.length <= 7) return [digits.slice(0, 3), digits.slice(3, 7), ""]
+  return [digits.slice(0, 3), digits.slice(3, 7), digits.slice(7, 11)]
+}
+
+const SEGMENT_MAX_LEN: [number, number, number] = [3, 4, 4]
 
 export function updatePhoneSegment(
-  segments: PhoneSegments,
+  prev: PhoneSegments,
   index: 0 | 1 | 2,
-  nextValue: string,
+  value: string,
 ): PhoneSegments {
-  const next = [...segments] as PhoneSegments
-  next[index] = nextValue.replace(/\D/g, "").slice(0, PHONE_SEGMENT_LENGTHS[index])
+  const digits = value.replace(/\D/g, "").slice(0, SEGMENT_MAX_LEN[index])
+  const next: PhoneSegments = [...prev] as PhoneSegments
+  next[index] = digits
   return next
-}
-
-export function joinPhoneSegments(segments: PhoneSegments) {
-  const [part1, part2, part3] = segments
-  return [part1, part2, part3].filter((part) => part.length > 0).join("-")
-}
-
-export function isCompletePhoneSegments(segments: PhoneSegments) {
-  return PHONE_SEGMENT_LENGTHS.every((length, index) => segments[index].length === length)
 }
