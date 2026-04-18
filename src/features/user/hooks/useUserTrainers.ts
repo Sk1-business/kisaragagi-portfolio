@@ -7,7 +7,9 @@ export function useUserTrainers(shopId: string | undefined) {
 
   useEffect(() => {
     if (!shopId) {
-      setTrainers([])
+      queueMicrotask(() => {
+        setTrainers([])
+      })
       return
     }
     let mounted = true

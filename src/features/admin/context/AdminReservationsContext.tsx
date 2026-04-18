@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -40,13 +39,8 @@ function loadInitial(): Reservation[] {
 }
 
 export function AdminReservationsProvider({ children }: { children: ReactNode }) {
-  const [reservations, setReservations] = useState<Reservation[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    setReservations(loadInitial())
-    setLoading(false)
-  }, [])
+  const [reservations, setReservations] = useState<Reservation[]>(() => loadInitial())
+  const [loading] = useState(false)
 
   const replaceReservations = useCallback((items: Reservation[]) => {
     setReservations(items)
@@ -69,8 +63,9 @@ export function AdminReservationsProvider({ children }: { children: ReactNode })
         if (r.id !== id) return r
         const trimmed = memo?.trim()
         if (!trimmed) {
-          const { memo: _m, ...rest } = r
-          return rest as Reservation
+          const next = { ...r }
+          delete next.memo
+          return next
         }
         return { ...r, memo: trimmed }
       })

@@ -37,15 +37,19 @@ export function UserNominationPage() {
 
   useEffect(() => {
     if (!selectedTrainerId) {
-      setMenuOptions([])
-      setSelectedMenuId("")
-      setMenuLoadError("")
-      setIsLoadingMenus(false)
+      queueMicrotask(() => {
+        setMenuOptions([])
+        setSelectedMenuId("")
+        setMenuLoadError("")
+        setIsLoadingMenus(false)
+      })
       return
     }
     let mounted = true
-    setIsLoadingMenus(true)
-    setMenuLoadError("")
+    queueMicrotask(() => {
+      setIsLoadingMenus(true)
+      setMenuLoadError("")
+    })
     void fetchReservationMenus(shopId, selectedTrainerId)
       .then((menus) => {
         if (!mounted) return

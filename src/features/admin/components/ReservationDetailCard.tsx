@@ -137,27 +137,27 @@ export function ReservationDetailCard({
 
   useEffect(() => {
     if (!editingMemo) {
-      setMemoDraft(reservation.memo ?? "")
+      queueMicrotask(() => {
+        setMemoDraft(reservation.memo ?? "")
+      })
     }
   }, [reservation.memo, reservation.id, editingMemo])
 
   useEffect(() => {
     if (!editingStatus) {
-      setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
+      queueMicrotask(() => {
+        setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
+      })
     }
   }, [reservation.status, reservation.id, editingStatus])
 
   useEffect(() => {
     if (!editingAssignee) {
-      setAssigneeDraft(resolveReservationStaffIdForUi(reservation, staffList))
+      queueMicrotask(() => {
+        setAssigneeDraft(resolveReservationStaffIdForUi(reservation, staffList))
+      })
     }
-  }, [
-    reservation.assigneeId,
-    reservation.trainerId,
-    reservation.id,
-    editingAssignee,
-    staffList,
-  ])
+  }, [reservation, editingAssignee, staffList])
 
   /** シフト取得後などで選択が無効になったとき、表示と state を一致させる */
   useEffect(() => {
@@ -169,8 +169,11 @@ export function ReservationDetailCard({
       : staffList.find((s) => canSelectStaffForAssignee(s.id))?.id ??
         resolveReservationStaffIdForUi(reservation, staffList)
     if (effective !== assigneeDraft) {
-      setAssigneeDraft(effective)
+      queueMicrotask(() => {
+        setAssigneeDraft(effective)
+      })
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- canSelectStaffForAssignee は reservation / staffList 由来の派生
   }, [
     editingAssignee,
     assigneeDraft,

@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type Dispatch,
@@ -83,12 +82,8 @@ const AdminShiftAvailabilityContext =
   createContext<AdminShiftAvailabilityContextValue | null>(null)
 
 export function AdminShiftAvailabilityProvider({ children }: { children: ReactNode }) {
-  const [overrides, setOverrides] = useState<OverridesMap>({})
+  const [overrides, setOverrides] = useState<OverridesMap>(() => normalizeOverrides(loadInitial()))
   const [apiShiftRows, setApiShiftRows] = useState<ApiShiftRowsMap>({})
-
-  useEffect(() => {
-    setOverrides(normalizeOverrides(loadInitial()))
-  }, [])
 
   const resolveStaffDay = useCallback(
     (staff: Staff, day: Date): ResolvedShiftDay => {

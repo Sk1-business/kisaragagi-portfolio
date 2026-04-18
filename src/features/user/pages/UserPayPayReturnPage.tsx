@@ -19,8 +19,10 @@ export function UserPayPayReturnPage() {
 
   useEffect(() => {
     if (!merchantPaymentId) {
-      setError("PayPay決済情報が見つかりません。")
-      setIsLoading(false)
+      queueMicrotask(() => {
+        setError("PayPay決済情報が見つかりません。")
+        setIsLoading(false)
+      })
       return
     }
 

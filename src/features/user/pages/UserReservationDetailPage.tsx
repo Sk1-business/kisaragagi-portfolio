@@ -66,23 +66,24 @@ export function UserReservationDetailPage() {
 
   useEffect(() => {
     let isMounted = true
-    setIsPolicyLoading(true)
-    setLoadError("")
-
-    void fetchReservationPolicies()
-      .then(({ cancellation, change }) => {
-        if (!isMounted) return
-        setCancellationPolicy(cancellation)
-        setReservationChangePolicy(change)
-      })
-      .catch(() => {
-        if (!isMounted) return
-        setLoadError("予約情報の取得に失敗しました。")
-      })
-      .finally(() => {
-        if (!isMounted) return
-        setIsPolicyLoading(false)
-      })
+    queueMicrotask(() => {
+      setIsPolicyLoading(true)
+      setLoadError("")
+      void fetchReservationPolicies()
+        .then(({ cancellation, change }) => {
+          if (!isMounted) return
+          setCancellationPolicy(cancellation)
+          setReservationChangePolicy(change)
+        })
+        .catch(() => {
+          if (!isMounted) return
+          setLoadError("予約情報の取得に失敗しました。")
+        })
+        .finally(() => {
+          if (!isMounted) return
+          setIsPolicyLoading(false)
+        })
+    })
 
     return () => {
       isMounted = false
@@ -104,7 +105,7 @@ export function UserReservationDetailPage() {
   const expectedTimeRange = useMemo(() => {
     if (!reservation?.time) return "未選択"
     return formatReservationExpectedTimeRange(reservation.time, reservation.serviceEndAt)
-  }, [reservation?.time, reservation?.serviceEndAt])
+  }, [reservation])
 
   const displayMenuName = reservation?.menuName?.trim() || "未定"
   const fromPastTab = Boolean(

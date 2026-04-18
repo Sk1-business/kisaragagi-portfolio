@@ -11,23 +11,27 @@ export function useUserReservation(reservationId: string, shopId: string | undef
 
   useEffect(() => {
     if (!reservationId.trim()) {
-      setReservation(null)
-      setIsLoading(false)
-      return
-    }
-    let mounted = true
-    setIsLoading(true)
-    void fetchUserReservationById(reservationId, shopId)
-      .then((row) => {
-        if (!mounted) return
-        setReservation(row)
-        setIsLoading(false)
-      })
-      .catch(() => {
-        if (!mounted) return
+      queueMicrotask(() => {
         setReservation(null)
         setIsLoading(false)
       })
+      return
+    }
+    let mounted = true
+    queueMicrotask(() => {
+      setIsLoading(true)
+      void fetchUserReservationById(reservationId, shopId)
+        .then((row) => {
+          if (!mounted) return
+          setReservation(row)
+          setIsLoading(false)
+        })
+        .catch(() => {
+          if (!mounted) return
+          setReservation(null)
+          setIsLoading(false)
+        })
+    })
     return () => {
       mounted = false
     }

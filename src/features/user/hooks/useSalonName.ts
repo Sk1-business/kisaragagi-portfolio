@@ -7,7 +7,9 @@ export function useSalonName(shopId: string | undefined): string {
 
   useEffect(() => {
     if (!shopId) {
-      setName("サロン")
+      queueMicrotask(() => {
+        setName("サロン")
+      })
       return
     }
     let mounted = true

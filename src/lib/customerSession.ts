@@ -35,6 +35,7 @@ export function invalidateCustomerSession(reason: string): void {
   }
 }
 
-export function notifyUnauthorizedCustomerApi(_path: string): void {
+export function notifyUnauthorizedCustomerApi(path: string): void {
+  void path
   invalidateCustomerSession("unauthorized")
 }

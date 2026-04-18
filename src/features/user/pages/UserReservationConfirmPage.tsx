@@ -136,33 +136,35 @@ export function UserReservationConfirmPage() {
     if (!hasData) return
     if (!isCreditPayment) return
     let active = true
-    setSkipCardPayment(false)
-    setIsStripeReady(false)
-    setStripeClientSecret("")
-    setStripePublishableKey("")
-    setStripeAmountYen(0)
-    setSubmitError("")
-    void createReservationPaymentIntent({
-      shopSlug: shopId,
-      menuId: input.menuId,
-      mode: input.mode,
-      trainerId: input.mode === "nomination" ? input.trainerId || null : null,
-      date: input.date,
-      time: input.time,
-    }).then((result) => {
-      if (!active) return
-      if (!result.ok) {
-        setSubmitError(result.error)
-        return
-      }
-      if ("skipPayment" in result && result.skipPayment) {
-        setSkipCardPayment(true)
-        setIsStripeReady(true)
-        return
-      }
-      setStripeClientSecret(result.clientSecret)
-      setStripePublishableKey(result.publishableKey)
-      setStripeAmountYen(result.amountYen)
+    queueMicrotask(() => {
+      setSkipCardPayment(false)
+      setIsStripeReady(false)
+      setStripeClientSecret("")
+      setStripePublishableKey("")
+      setStripeAmountYen(0)
+      setSubmitError("")
+      void createReservationPaymentIntent({
+        shopSlug: shopId,
+        menuId: input.menuId,
+        mode: input.mode,
+        trainerId: input.mode === "nomination" ? input.trainerId || null : null,
+        date: input.date,
+        time: input.time,
+      }).then((result) => {
+        if (!active) return
+        if (!result.ok) {
+          setSubmitError(result.error)
+          return
+        }
+        if ("skipPayment" in result && result.skipPayment) {
+          setSkipCardPayment(true)
+          setIsStripeReady(true)
+          return
+        }
+        setStripeClientSecret(result.clientSecret)
+        setStripePublishableKey(result.publishableKey)
+        setStripeAmountYen(result.amountYen)
+      })
     })
     return () => {
       active = false

@@ -49,7 +49,9 @@ export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const ac = new AbortController()
-    void runCheck(ac.signal)
+    queueMicrotask(() => {
+      void runCheck(ac.signal)
+    })
     return () => ac.abort()
   }, [location.pathname, runCheck])
 
