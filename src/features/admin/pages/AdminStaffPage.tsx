@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Pencil, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -63,6 +63,8 @@ export function AdminStaffPage() {
   const [formSaving, setFormSaving] = useState(false)
   /** 追加フロー: 入力後の登録確認ダイアログ */
   const [addConfirmOpen, setAddConfirmOpen] = useState(false)
+  /** 編集フロー: 入力後の保存確認ダイアログ */
+  const [editConfirmOpen, setEditConfirmOpen] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<Staff | null>(null)
   const [pageError, setPageError] = useState("")
@@ -81,6 +83,7 @@ export function AdminStaffPage() {
     setSalonMenus([])
     setMenusLoadError(false)
     setAddConfirmOpen(false)
+    setEditConfirmOpen(false)
     setFormOpen("add")
   }
 
@@ -110,6 +113,22 @@ export function AdminStaffPage() {
     }
   }, [menuFormActive])
 
+  /** スタッフフォームではアーカイブ済みメニューを選択肢に出さない */
+  const menusForStaffForm = useMemo(
+    () => salonMenus.filter((m) => !m.is_archived),
+    [salonMenus],
+  )
+
+  useEffect(() => {
+    if (!menuFormActive || salonMenus.length === 0) return
+    setSelectedMenuIds((prev) =>
+      prev.filter((id) => {
+        const m = salonMenus.find((x) => x.menu_id === id)
+        return Boolean(m && !m.is_archived)
+      }),
+    )
+  }, [salonMenus, menuFormActive])
+
   useEffect(() => {
     if (!formOpen || formOpen === "add" || !("edit" in formOpen)) return
     const id = formOpen.edit.id
@@ -136,9 +155,13 @@ export function AdminStaffPage() {
     )
   }
 
-  const orderedSelectedMenuIds = salonMenus
-    .map((m) => m.menu_id)
-    .filter((id) => selectedMenuIds.includes(id))
+  const orderedSelectedMenuIds = useMemo(
+    () =>
+      menusForStaffForm
+        .map((m) => m.menu_id)
+        .filter((id) => selectedMenuIds.includes(id)),
+    [menusForStaffForm, selectedMenuIds],
+  )
 
   const openEdit = (s: Staff) => {
     setFormError("")
@@ -153,6 +176,7 @@ export function AdminStaffPage() {
         : "",
     )
     setSelectedMenuIds(s.menuIds ? [...s.menuIds] : [])
+    setEditConfirmOpen(false)
     setFormOpen({ edit: s })
   }
 
@@ -160,6 +184,7 @@ export function AdminStaffPage() {
     setFormOpen(null)
     setFormError("")
     setAddConfirmOpen(false)
+    setEditConfirmOpen(false)
   }
 
   /** 追加: 入力検証のうえ確認ダイアログへ */
@@ -236,37 +261,52 @@ export function AdminStaffPage() {
     })()
   }
 
-  /** 編集のみ保存 */
-  const submitEditForm = () => {
+  /** 編集: 入力検証のうえ確認ダイアログへ */
+  const requestEditConfirm = () => {
+    if (!formOpen || typeof formOpen !== "object" || !("edit" in formOpen)) return
+    const color = normalizeHex(formColor)
+    if (!/^#[0-9a-f]{6}$/i.test(color)) {
+      setFormError("色は #RRGGBB 形式で入力してください")
+      return
+    }
+    const name = formName.trim()
+    if (!name) {
+      setFormError("名前を入力してください")
+      return
+    }
+    if (name.length > 100) {
+      setFormError("名前は100文字以内で入力してください")
+      return
+    }
+    const doRaw = formDisplayOrder.trim()
+    if (doRaw) {
+      const n = Number(doRaw)
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+        setFormError("表示順序は0以上の整数で入力してください（未入力で省略）")
+        return
+      }
+    }
+    if (isStaffNameTaken(staffList, name, formOpen.edit.id)) {
+      setFormError("すでに登録されている名前です")
+      return
+    }
+    setFormError("")
+    setEditConfirmOpen(true)
+  }
+
+  /** 編集: 確認後に PUT */
+  const confirmUpdateStaff = () => {
     void (async () => {
       if (!formOpen || typeof formOpen !== "object" || !("edit" in formOpen)) return
       const color = normalizeHex(formColor)
-      if (!/^#[0-9a-f]{6}$/i.test(color)) {
-        setFormError("色は #RRGGBB 形式で入力してください")
-        return
-      }
       const name = formName.trim()
-      if (!name) {
-        setFormError("名前を入力してください")
-        return
-      }
-      if (name.length > 100) {
-        setFormError("名前は100文字以内で入力してください")
-        return
-      }
       const doRaw = formDisplayOrder.trim()
-      if (doRaw) {
-        const n = Number(doRaw)
-        if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
-          setFormError("表示順序は0以上の整数で入力してください（未入力で省略）")
-          return
-        }
-      }
       setFormSaving(true)
       setFormError("")
       try {
         if (isStaffNameTaken(staffList, name, formOpen.edit.id)) {
           setFormError("すでに登録されている名前です")
+          setEditConfirmOpen(false)
           return
         }
         const displayOrderParsed = doRaw ? Math.round(Number(doRaw)) : undefined
@@ -282,6 +322,7 @@ export function AdminStaffPage() {
           setFormError("保存できませんでした")
           return
         }
+        setEditConfirmOpen(false)
         closeForm()
       } catch (e) {
         if (e instanceof Error && e.message === "UNAUTHORIZED") {
@@ -456,7 +497,14 @@ export function AdminStaffPage() {
         </CardContent>
       </Card>
 
-      {formOpen && !(formOpen === "add" && addConfirmOpen) && (
+      {formOpen &&
+        !(formOpen === "add" && addConfirmOpen) &&
+        !(
+          typeof formOpen === "object" &&
+          formOpen !== null &&
+          "edit" in formOpen &&
+          editConfirmOpen
+        ) && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           role="dialog"
@@ -531,7 +579,7 @@ export function AdminStaffPage() {
                   <div className="space-y-2">
                     <Label>対応可能なメニュー</Label>
                     <p className="text-xs text-muted-foreground">
-                      メニュー管理 API の GET /api/admin/menus の全件（非公開・アーカイブ含む）から選択します。
+                      メニュー管理 API の GET /api/admin/menus から、未アーカイブのメニューを表示して選択します（アーカイブ済みは表示しません）。
                       {formOpen === "add" ? (
                         <>
                           {" "}
@@ -552,14 +600,14 @@ export function AdminStaffPage() {
                       <p className="text-sm text-destructive" role="alert">
                         メニュー一覧の取得に失敗しました。画面を閉じて再度お試しください。
                       </p>
-                    ) : salonMenus.length === 0 ? (
+                    ) : menusForStaffForm.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         登録メニューがありません。メニュー未選択のまま登録すると、対応メニューなしの1回だけ
                         POST します。
                       </p>
                     ) : (
                       <ul className="max-h-48 space-y-2 overflow-y-auto rounded-md border border-border p-3">
-                        {salonMenus.map((m) => (
+                        {menusForStaffForm.map((m) => (
                           <li key={m.menu_id} className="flex items-start gap-2 text-sm">
                             <input
                               id={`staff-menu-${m.menu_id}`}
@@ -576,11 +624,6 @@ export function AdminStaffPage() {
                               {!m.is_public ? (
                                 <span className="ml-1.5 text-xs text-amber-700 dark:text-amber-400">
                                   非公開
-                                </span>
-                              ) : null}
-                              {m.is_archived ? (
-                                <span className="ml-1.5 text-xs text-muted-foreground">
-                                  アーカイブ
                                 </span>
                               ) : null}
                             </label>
@@ -644,11 +687,119 @@ export function AdminStaffPage() {
                     type="button"
                     className="rounded-md"
                     disabled={formSaving || menusLoading}
-                    onClick={submitEditForm}
+                    onClick={requestEditConfirm}
                   >
-                    {formSaving ? "保存中..." : "保存"}
+                    保存
                   </Button>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {typeof formOpen === "object" &&
+        formOpen !== null &&
+        "edit" in formOpen &&
+        editConfirmOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="staff-edit-confirm-title"
+          onClick={() => setEditConfirmOpen(false)}
+        >
+          <Card
+            className="w-full max-w-md border-border shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader>
+              <CardTitle id="staff-edit-confirm-title" className="text-base">
+                保存の確認
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-foreground">
+                この内容でスタッフ情報を更新しますか？
+              </p>
+              <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+                <p>
+                  <span className="text-muted-foreground">スタッフ名: </span>
+                  <span className="font-medium">{formName.trim()}</span>
+                </p>
+                <p className="mt-2 flex items-center gap-2">
+                  <span className="text-muted-foreground">表示色: </span>
+                  <span
+                    className="inline-block size-4 rounded-full border border-border"
+                    style={{ backgroundColor: normalizeHex(formColor) }}
+                  />
+                  <span className="font-mono text-xs">{normalizeHex(formColor)}</span>
+                </p>
+                {formDescription.trim() ? (
+                  <p className="mt-2 whitespace-pre-wrap">
+                    <span className="text-muted-foreground">メモ: </span>
+                    {formDescription.trim()}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-muted-foreground">メモ: （未入力）</p>
+                )}
+                {formImageUrl.trim() ? (
+                  <p className="mt-2 break-all text-xs">
+                    <span className="text-muted-foreground">画像URL: </span>
+                    {formImageUrl.trim()}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-muted-foreground">画像URL: （未入力）</p>
+                )}
+                {formDisplayOrder.trim() ? (
+                  <p className="mt-2 font-mono text-xs">
+                    <span className="text-muted-foreground">表示順序: </span>
+                    {formDisplayOrder.trim()}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-muted-foreground">表示順序: （未入力・サーバー採番）</p>
+                )}
+                <p className="mt-2 text-sm">
+                  <span className="text-muted-foreground">対応メニュー: </span>
+                  {orderedSelectedMenuIds.length === 0 ? <span>なし</span> : null}
+                </p>
+                {orderedSelectedMenuIds.length > 0 && (
+                  <ul className="mt-1 list-inside list-disc text-sm text-foreground">
+                    {orderedSelectedMenuIds.map((id) => {
+                      const label =
+                        salonMenus.find((m) => m.menu_id === id)?.name ?? "（名称不明）"
+                      return (
+                        <li key={id}>
+                          {label}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+              {formError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {formError}
+                </p>
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-md"
+                  disabled={formSaving}
+                  onClick={() => setEditConfirmOpen(false)}
+                >
+                  いいえ
+                </Button>
+                <Button
+                  type="button"
+                  className="rounded-md"
+                  disabled={formSaving}
+                  onClick={confirmUpdateStaff}
+                >
+                  {formSaving ? "保存中..." : "はい"}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -715,14 +866,7 @@ export function AdminStaffPage() {
                 )}
                 <p className="mt-2 text-sm">
                   <span className="text-muted-foreground">対応メニュー: </span>
-                  {orderedSelectedMenuIds.length === 0 ? (
-                    <span>なし（POST 1回）</span>
-                  ) : (
-                    <span>
-                      {orderedSelectedMenuIds.length} 件選択 → POST{" "}
-                      {orderedSelectedMenuIds.length} 回（各リクエストに選択メニューを1件ずつ含めます）
-                    </span>
-                  )}
+                  {orderedSelectedMenuIds.length === 0 ? <span>なし</span> : null}
                 </p>
                 {orderedSelectedMenuIds.length > 0 && (
                   <ul className="mt-1 list-inside list-disc text-sm text-foreground">

@@ -352,7 +352,7 @@ export function AdminMenusPage() {
       <div className="flex flex-wrap justify-end gap-2">
         <Button type="button" size="sm" className="rounded-md" onClick={openAdd}>
           <Plus className="mr-1 size-4" />
-          メニューを追加
+          メニュー一覧に追加
         </Button>
       </div>
 
@@ -373,7 +373,6 @@ export function AdminMenusPage() {
                 <th className="pb-2 pr-3 font-medium">名前</th>
                 <th className="pb-2 pr-3 font-medium">所要（分）</th>
                 <th className="pb-2 pr-3 font-medium">価格</th>
-                <th className="pb-2 pr-3 font-medium">公開</th>
                 <th className="pb-2 font-medium">操作</th>
               </tr>
             </thead>
@@ -385,7 +384,6 @@ export function AdminMenusPage() {
                     {m.duration_minutes ?? "—"}
                   </td>
                   <td className="py-3 pr-3 text-muted-foreground">{formatPrice(m)}</td>
-                  <td className="py-3 pr-3">{m.is_public ? "はい" : "いいえ"}</td>
                   <td className="py-3">
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -434,7 +432,6 @@ export function AdminMenusPage() {
                 <th className="px-3 py-2 pr-3 font-medium">名前</th>
                 <th className="py-2 pr-3 font-medium">所要（分）</th>
                 <th className="py-2 pr-3 font-medium">価格</th>
-                <th className="py-2 pr-3 font-medium">公開</th>
                 <th className="px-3 py-2 font-medium">操作</th>
               </tr>
             </thead>
@@ -446,7 +443,6 @@ export function AdminMenusPage() {
                     {m.duration_minutes ?? "—"}
                   </td>
                   <td className="py-3 pr-3 text-muted-foreground">{formatPrice(m)}</td>
-                  <td className="py-3 pr-3">{m.is_public ? "はい" : "いいえ"}</td>
                   <td className="px-3 py-3">
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -469,7 +465,7 @@ export function AdminMenusPage() {
                         onClick={() => setRestoreTarget(m)}
                       >
                         <Plus className="mr-1 size-3.5" />
-                        追加
+                        メニュー一覧に追加
                       </Button>
                     </div>
                   </td>
