@@ -11,6 +11,7 @@ import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import { fetchAdminTrainerNames } from "@/features/admin/api/trainersApi"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { colorFromTrainerName, useStaff } from "@/features/admin/hooks/useStaff"
+import type { Staff } from "@/features/admin/types/staff"
 import { ROUTES } from "@/constants/routes"
 import { CalendarDayView } from "@/features/admin/components/calendar/CalendarDayView"
 import { CalendarWeekView } from "@/features/admin/components/calendar/CalendarWeekView"
@@ -43,6 +44,12 @@ function parseDateParam(s: string | null): Date {
   const dt = new Date(y, m - 1, d)
   if (Number.isNaN(dt.getTime())) return startOfDay(new Date())
   return startOfDay(dt)
+}
+
+/** 予約カレンダーのトレーナー絞り込みチップ：スタッフ登録の表示色を優先 */
+function trainerFilterDotColor(name: string, staffList: Staff[]): string {
+  const staff = staffList.find((s) => s.name.trim() === name.trim())
+  return staff?.color ?? colorFromTrainerName(name)
 }
 
 export function AdminCalendarPage() {
@@ -381,7 +388,7 @@ export function AdminCalendarPage() {
                 >
                   <span
                     className="mr-2 inline-block size-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: colorFromTrainerName(name) }}
+                    style={{ backgroundColor: trainerFilterDotColor(name, staffList) }}
                   />
                   {name}
                 </Button>
