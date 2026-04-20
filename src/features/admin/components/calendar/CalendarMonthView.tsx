@@ -48,14 +48,14 @@ export function CalendarMonthView({
   const calendarStart = startOfWeek(monthStart)
   const weeks: Date[][] = []
   let current = calendarStart
-  while (current <= monthEnd || weeks.length < 6) {
+  /** 対象月の末日をまたぐまでの週だけ表示（4〜6週で可変）。 */
+  while (current <= monthEnd) {
     const week: Date[] = []
     for (let i = 0; i < 7; i++) {
       week.push(current)
       current = addDays(current, 1)
     }
     weeks.push(week)
-    if (weeks.length >= 6) break
   }
 
   const isCurrentMonth = (d: Date) => d.getMonth() === date.getMonth()

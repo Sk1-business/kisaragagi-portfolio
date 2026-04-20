@@ -172,9 +172,6 @@ export function ShiftCalendarMonthView({
                   ? getBusinessHoursForJsDate(businessHoursItems, day)
                   : null
               const isWeekdayClosed = biz?.isClosed === true
-              /** 定休（holidays）・休業曜日はシフト編集不可（休日と同様） */
-              const disableShiftEdit =
-                isHoliday || (inMonth && isWeekdayClosed)
               return (
                 <div
                   key={day.toISOString()}
@@ -204,6 +201,11 @@ export function ShiftCalendarMonthView({
                     {sortedStaff.map((staff) => {
                       const resolved = resolveStaffDay(staff, dayNorm)
                       const work = resolved.kind === "work"
+                      const hasExistingShift =
+                        (apiShiftRows[staff.id]?.[dateKey]?.length ?? 0) > 0
+                      /** 休業日は新規/更新不可。既存シフトがある場合のみ削除目的で編集を許可。 */
+                      const disableShiftEdit =
+                        (isHoliday || (inMonth && isWeekdayClosed)) && !hasExistingShift
                       return (
                         <button
                           key={staff.id}
@@ -229,8 +231,8 @@ export function ShiftCalendarMonthView({
                           title={
                             disableShiftEdit
                               ? isHoliday
-                                ? "定休日のためシフトを編集できません"
-                                : "休業日のためシフトを編集できません"
+                                ? "定休日のため新規登録はできません（既存シフトがある日のみ削除可）"
+                                : "休業日のため新規登録はできません（既存シフトがある日のみ削除可）"
                               : `${rowLabel(resolved, staff)}（クリックで編集）`
                           }
                           onClick={() => setEditing({ staff, day: dayNorm })}

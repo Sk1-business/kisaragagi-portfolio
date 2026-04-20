@@ -237,8 +237,7 @@ export async function putAdminTrainer(
 
 /**
  * `POST /api/admin/trainers` — トレーナー登録。
- * 対応メニューは `trainer_menus` に1行ずつ入る想定のため、複数メニューは呼び出し側で
- * メニューIDごとに本関数を複数回呼ぶ（各リクエストの `menu_ids` は1件）。
+ * 対応メニューは `menu_ids` でまとめて送る（サーバー側で `trainer_menus` に紐づく想定）。
  * `display_order` を省略した場合はサーバーが当サロンの最大値+1で採番する想定。
  * `is_active: true` はサーバー側デフォルト。
  */
@@ -249,7 +248,7 @@ export async function postAdminTrainer(input: {
   description?: string
   image_url?: string
   display_order?: number
-  /** 送る場合は通常1件（複数メニューは複数回 POST） */
+  /** 対応メニューID（同一 trainer_id に紐づける） */
   menu_ids?: string[]
 }): Promise<Staff> {
   const payload: Record<string, unknown> = {

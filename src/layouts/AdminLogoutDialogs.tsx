@@ -5,6 +5,7 @@ type LogoutConfirmDialogProps = {
   onCancel: () => void
   onConfirm: () => void
   confirming: boolean
+  errorMessage?: string | null
 }
 
 export function LogoutConfirmDialog({
@@ -12,6 +13,7 @@ export function LogoutConfirmDialog({
   onCancel,
   onConfirm,
   confirming,
+  errorMessage,
 }: LogoutConfirmDialogProps) {
   if (!open) return null
 
@@ -31,6 +33,11 @@ export function LogoutConfirmDialog({
         <p id="logout-confirm-title" className="text-base font-medium">
           本当にログアウトしますか？
         </p>
+        {errorMessage ? (
+          <p className="mt-2 text-sm text-destructive" role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
         <div className="mt-6 flex flex-wrap justify-end gap-2">
           <Button
             type="button"

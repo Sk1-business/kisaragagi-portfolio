@@ -45,7 +45,7 @@ export function AdminDashboardPage() {
         const onlyToday = list.filter(
           (r) =>
             getIsoDateKeyInTimeZone(r.startAt, ADMIN_CALENDAR_TIME_ZONE) ===
-              jstKey && r.status !== "CANCELLED",
+              jstKey && r.status === "CONFIRMED",
         )
         setTodaySource(onlyToday)
       } catch (e) {

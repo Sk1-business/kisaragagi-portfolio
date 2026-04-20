@@ -61,6 +61,8 @@ export function AdminStaffPage() {
   const [selectedMenuIds, setSelectedMenuIds] = useState<string[]>([])
   const [formError, setFormError] = useState("")
   const [formSaving, setFormSaving] = useState(false)
+  const [trainerDetailLoading, setTrainerDetailLoading] = useState(false)
+  const [trainerDetailError, setTrainerDetailError] = useState("")
   /** 追加フロー: 入力後の登録確認ダイアログ */
   const [addConfirmOpen, setAddConfirmOpen] = useState(false)
   /** 編集フロー: 入力後の保存確認ダイアログ */
@@ -84,6 +86,8 @@ export function AdminStaffPage() {
     setMenusLoadError(false)
     setAddConfirmOpen(false)
     setEditConfirmOpen(false)
+    setTrainerDetailLoading(false)
+    setTrainerDetailError("")
     setFormOpen("add")
   }
 
@@ -133,21 +137,41 @@ export function AdminStaffPage() {
     if (!formOpen || formOpen === "add" || !("edit" in formOpen)) return
     const id = formOpen.edit.id
     let cancelled = false
-    void fetchAdminTrainerById(id).then((detail) => {
-      if (cancelled || !detail) return
-      setFormDescription(detail.description ?? "")
-      setFormImageUrl(detail.image_url ?? "")
-      setFormDisplayOrder(
-        detail.display_order !== undefined && detail.display_order !== null
-          ? String(detail.display_order)
-          : "",
-      )
-      setSelectedMenuIds(detail.menuIds ? [...detail.menuIds] : [])
-    })
+    void (async () => {
+      setTrainerDetailLoading(true)
+      setTrainerDetailError("")
+      try {
+        const detail = await fetchAdminTrainerById(id)
+        if (cancelled) return
+        if (!detail) {
+          setTrainerDetailError("スタッフ詳細を取得できませんでした。")
+          return
+        }
+        setFormDescription(detail.description ?? "")
+        setFormImageUrl(detail.image_url ?? "")
+        setFormDisplayOrder(
+          detail.display_order !== undefined && detail.display_order !== null
+            ? String(detail.display_order)
+            : "",
+        )
+        setSelectedMenuIds(detail.menuIds ? [...detail.menuIds] : [])
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setTrainerDetailError(
+          "スタッフ詳細の取得に失敗しました。再取得してから保存してください。",
+        )
+      } finally {
+        if (!cancelled) setTrainerDetailLoading(false)
+      }
+    })()
     return () => {
       cancelled = true
     }
-  }, [formOpen])
+  }, [formOpen, navigate])
 
   const toggleMenuSelection = (menuId: string) => {
     setSelectedMenuIds((prev) =>
@@ -177,6 +201,8 @@ export function AdminStaffPage() {
     )
     setSelectedMenuIds(s.menuIds ? [...s.menuIds] : [])
     setEditConfirmOpen(false)
+    setTrainerDetailLoading(false)
+    setTrainerDetailError("")
     setFormOpen({ edit: s })
   }
 
@@ -185,6 +211,8 @@ export function AdminStaffPage() {
     setFormError("")
     setAddConfirmOpen(false)
     setEditConfirmOpen(false)
+    setTrainerDetailLoading(false)
+    setTrainerDetailError("")
   }
 
   /** 追加: 入力検証のうえ確認ダイアログへ */
@@ -288,6 +316,10 @@ export function AdminStaffPage() {
     }
     if (isStaffNameTaken(staffList, name, formOpen.edit.id)) {
       setFormError("すでに登録されている名前です")
+      return
+    }
+    if (trainerDetailError) {
+      setFormError("スタッフ詳細の取得に失敗しているため、保存できません。")
       return
     }
     setFormError("")
@@ -582,9 +614,8 @@ export function AdminStaffPage() {
                       メニュー管理 API の GET /api/admin/menus から、未アーカイブのメニューを表示して選択します（アーカイブ済みは表示しません）。
                       {formOpen === "add" ? (
                         <>
-                          {" "}
-                          新規登録では、チェックしたメニューごとに POST /api/admin/trainers
-                          を1回ずつ送り、各リクエストに選択したメニューを1件ずつ含めます。
+                          {" "}新規登録では POST /api/admin/trainers を1回だけ実行し、選択した
+                          メニューをまとめて送信します。
                         </>
                       ) : (
                         <>
@@ -602,8 +633,7 @@ export function AdminStaffPage() {
                       </p>
                     ) : menusForStaffForm.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        登録メニューがありません。メニュー未選択のまま登録すると、対応メニューなしの1回だけ
-                        POST します。
+                        登録メニューがありません。メニュー未選択のまま登録すると、対応メニューなしで保存されます。
                       </p>
                     ) : (
                       <ul className="max-h-48 space-y-2 overflow-y-auto rounded-md border border-border p-3">
@@ -669,6 +699,27 @@ export function AdminStaffPage() {
                   {formError}
                 </p>
               )}
+              {trainerDetailLoading ? (
+                <p className="text-sm text-muted-foreground">スタッフ詳細を読み込み中...</p>
+              ) : null}
+              {trainerDetailError ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-destructive" role="alert">
+                    {trainerDetailError}
+                  </p>
+                  {typeof formOpen === "object" && formOpen !== null && "edit" in formOpen ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-md"
+                      onClick={() => setFormOpen({ edit: formOpen.edit })}
+                    >
+                      再取得
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex flex-wrap justify-end gap-2">
                 <Button type="button" variant="outline" className="rounded-md" onClick={closeForm}>
                   キャンセル
@@ -686,7 +737,12 @@ export function AdminStaffPage() {
                   <Button
                     type="button"
                     className="rounded-md"
-                    disabled={formSaving || menusLoading}
+                    disabled={
+                      formSaving ||
+                      menusLoading ||
+                      trainerDetailLoading ||
+                      Boolean(trainerDetailError)
+                    }
                     onClick={requestEditConfirm}
                   >
                     保存

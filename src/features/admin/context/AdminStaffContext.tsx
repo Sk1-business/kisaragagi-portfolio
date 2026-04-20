@@ -38,7 +38,7 @@ type AdminStaffContextValue = {
     description?: string
     image_url?: string
     display_order?: number
-    /** サロンメニューID。1件ごとに POST /api/admin/trainers が走る */
+    /** サロンメニューID。POST /api/admin/trainers の menu_ids にまとめて送る */
     menuIds: string[]
   }) => Promise<Staff | null>
   updateStaff: (
@@ -109,18 +109,10 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
         base.display_order = Math.round(input.display_order)
       }
       try {
-        let created: Staff | null = null
-        if (menuIds.length === 0) {
-          created = await postAdminTrainer(base)
-        } else {
-          for (const menuId of menuIds) {
-            const row = await postAdminTrainer({
-              ...base,
-              menu_ids: [menuId],
-            })
-            if (!created) created = row
-          }
-        }
+        const created = await postAdminTrainer({
+          ...base,
+          menu_ids: menuIds,
+        })
         if (!created) return null
         const withMenus: Staff = {
           ...created,
