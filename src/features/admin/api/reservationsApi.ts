@@ -656,7 +656,8 @@ export async function putAdminReservationTrainerId(
     throw new Error("UNAUTHORIZED")
   }
   if (!res.ok) {
-    throw new Error("FETCH_FAILED")
+    const detail = await parseAdminApiErrorDetail(res)
+    throw new Error(detail ?? "FETCH_FAILED")
   }
 }
 

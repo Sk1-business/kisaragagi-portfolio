@@ -74,6 +74,20 @@ export function ReservationDetailCard({
 }: ReservationDetailCardProps) {
   const startDate = new Date(reservation.startAt)
   const currentApiStatus = mapReservationStatusToApiStatus(reservation.status)
+  const isDoneReservation = currentApiStatus === "DONE"
+  const nowMs = Date.now()
+  const startMs = new Date(reservation.startAt).getTime()
+  const endMs = new Date(reservation.endAt).getTime()
+  const reservationNotStarted = Number.isFinite(startMs) && startMs > nowMs
+  const reservationEnded = Number.isFinite(endMs) && endMs < nowMs
+
+  const canSelectStatus = (status: AdminReservationApiStatus): boolean => {
+    if (reservationNotStarted) {
+      return status === "BOOKED" || status === "CANCELED"
+    }
+    if (reservationEnded && status === "BOOKED") return false
+    return true
+  }
 
   /** この時間帯にほかの確定予約がなければ選択可。現在の担当は常に可。 */
   const canSelectStaffForSlot = (staffId: string) =>
@@ -127,6 +141,7 @@ export function ReservationDetailCard({
   const [statusDraft, setStatusDraft] = useState<AdminReservationApiStatus>(() =>
     mapReservationStatusToApiStatus(reservation.status),
   )
+  const [statusRuleError, setStatusRuleError] = useState("")
   const [statusConfirm, setStatusConfirm] = useState<AdminReservationApiStatus | null>(null)
   const [editingAssignee, setEditingAssignee] = useState(false)
   const [assigneeDraft, setAssigneeDraft] = useState(() =>
@@ -147,6 +162,7 @@ export function ReservationDetailCard({
     if (!editingStatus) {
       queueMicrotask(() => {
         setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
+        setStatusRuleError("")
       })
     }
   }, [reservation.status, reservation.id, editingStatus])
@@ -158,6 +174,14 @@ export function ReservationDetailCard({
       })
     }
   }, [reservation, editingAssignee, staffList])
+
+  useEffect(() => {
+    if (!isDoneReservation) return
+    setEditingMemo(false)
+    setEditingAssignee(false)
+    setAssigneeConfirm(null)
+    setAssigneeSlotError("")
+  }, [isDoneReservation])
 
   /** シフト取得後などで選択が無効になったとき、表示と state を一致させる */
   useEffect(() => {
@@ -238,7 +262,10 @@ export function ReservationDetailCard({
         <div>
           <div className="mb-1 flex items-center justify-between gap-2">
             <p className="text-xs font-medium text-muted-foreground">担当者</p>
-            {onUpdateAssignee && staffList.length > 0 && !editingAssignee && (
+            {onUpdateAssignee &&
+              staffList.length > 0 &&
+              !editingAssignee &&
+              !isDoneReservation && (
               <Button
                 type="button"
                 variant="outline"
@@ -250,7 +277,10 @@ export function ReservationDetailCard({
               </Button>
             )}
           </div>
-          {onUpdateAssignee && staffList.length > 0 && editingAssignee ? (
+          {onUpdateAssignee &&
+          staffList.length > 0 &&
+          editingAssignee &&
+          !isDoneReservation ? (
             <div className="space-y-2">
               <Label htmlFor="reservation-assignee-edit" className="sr-only">
                 担当者を変更
@@ -395,6 +425,7 @@ export function ReservationDetailCard({
                 size="sm"
                 className="h-7 rounded-md px-2 text-xs"
                 onClick={() => {
+                  setStatusRuleError("")
                   setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
                   setEditingStatus(true)
                 }}
@@ -416,14 +447,31 @@ export function ReservationDetailCard({
                   setStatusDraft(e.target.value as AdminReservationApiStatus)
                 }
               >
-                <option value="BOOKED">予約確定</option>
-                <option value="DONE">完了</option>
-                <option value="NOSHOW">ノーショー（無断キャンセル）</option>
-                <option value="CANCELED">キャンセル</option>
+                <option value="BOOKED" disabled={!canSelectStatus("BOOKED")}>予約確定</option>
+                <option value="DONE" disabled={!canSelectStatus("DONE")}>完了</option>
+                <option value="NOSHOW" disabled={!canSelectStatus("NOSHOW")}>
+                  ノーショー（無断キャンセル）
+                </option>
+                <option value="CANCELED" disabled={!canSelectStatus("CANCELED")}>キャンセル</option>
               </select>
               <p className="text-xs text-muted-foreground">
                 「キャンセル」にするとカレンダーから非表示になり、キャンセル一覧に表示されます。
               </p>
+              {reservationNotStarted ? (
+                <p className="text-xs text-muted-foreground">
+                  予約開始前は「予約確定」または「キャンセル」のみ変更できます。
+                </p>
+              ) : null}
+              {reservationEnded ? (
+                <p className="text-xs text-muted-foreground">
+                  予約終了後は「予約確定」へ戻すことはできません。
+                </p>
+              ) : null}
+              {statusRuleError ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {statusRuleError}
+                </p>
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -433,6 +481,14 @@ export function ReservationDetailCard({
                   onClick={() => {
                     if (statusDraft === currentApiStatus) {
                       setEditingStatus(false)
+                      return
+                    }
+                    if (!canSelectStatus(statusDraft)) {
+                      setStatusRuleError(
+                        reservationNotStarted
+                          ? "予約開始前は「予約確定」または「キャンセル」のみ選択できます。"
+                          : "予約終了後は「予約確定」に戻せません。",
+                      )
                       return
                     }
                     setStatusConfirm(statusDraft)
@@ -461,7 +517,7 @@ export function ReservationDetailCard({
         <div>
           <div className="mb-1 flex items-center justify-between gap-2">
             <p className="text-xs font-medium text-muted-foreground">メモ</p>
-            {onUpdateMemo && !editingMemo && (
+            {onUpdateMemo && !editingMemo && !isDoneReservation && (
               <Button
                 type="button"
                 variant="outline"
@@ -476,7 +532,7 @@ export function ReservationDetailCard({
               </Button>
             )}
           </div>
-          {onUpdateMemo && editingMemo ? (
+          {onUpdateMemo && editingMemo && !isDoneReservation ? (
             <div className="space-y-2">
               <Label htmlFor="reservation-memo-edit" className="sr-only">
                 メモを編集

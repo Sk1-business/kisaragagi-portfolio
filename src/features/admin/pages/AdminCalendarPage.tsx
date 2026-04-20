@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -65,6 +65,7 @@ export function AdminCalendarPage() {
   )
   const [calendarListLoading, setCalendarListLoading] = useState(true)
   const [calendarListError, setCalendarListError] = useState(false)
+  const [calendarLastUpdated, setCalendarLastUpdated] = useState<Date | null>(null)
   const [businessHoursItems, setBusinessHoursItems] = useState<BusinessHoursItem[]>([])
   const [holidayDateKeys, setHolidayDateKeys] = useState<ReadonlySet<string>>(() => new Set())
 
@@ -85,19 +86,33 @@ export function AdminCalendarPage() {
     [viewMode, currentDate],
   )
 
+  const refetchCalendarReservations = async () => {
+    setCalendarListLoading(true)
+    setCalendarListError(false)
+    try {
+      const list = await fetchAdminReservations(staffList, reservationFetchOptions)
+      replaceReservations(list)
+      setCalendarLastUpdated(new Date())
+    } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
+      setCalendarListError(true)
+    } finally {
+      setCalendarListLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (staffLoading) return
     let cancelled = false
     void (async () => {
-      setCalendarListLoading(true)
-      setCalendarListError(false)
       try {
-        const list = await fetchAdminReservations(
-          staffList,
-          reservationFetchOptions,
-        )
+        const list = await fetchAdminReservations(staffList, reservationFetchOptions)
         if (cancelled) return
         replaceReservations(list)
+        setCalendarLastUpdated(new Date())
       } catch (e) {
         if (cancelled) return
         if (e instanceof Error && e.message === "UNAUTHORIZED") {
@@ -325,28 +340,7 @@ export function AdminCalendarPage() {
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => {
-            setCalendarListError(false)
-            setCalendarListLoading(true)
-            void (async () => {
-              try {
-                const list = await fetchAdminReservations(
-                  staffList,
-                  reservationFetchOptions,
-                )
-                replaceReservations(list)
-                setCalendarListError(false)
-              } catch (e) {
-                if (e instanceof Error && e.message === "UNAUTHORIZED") {
-                  navigate(ROUTES.backofficeLogin, { replace: true })
-                  return
-                }
-                setCalendarListError(true)
-              } finally {
-                setCalendarListLoading(false)
-              }
-            })()
-          }}
+          onClick={() => void refetchCalendarReservations()}
         >
           再試行
         </Button>
@@ -376,7 +370,7 @@ export function AdminCalendarPage() {
               </Button>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="self-end flex flex-wrap items-center gap-2">
               {trainerNameList.map((name) => (
                 <Button
                   key={name}
@@ -415,7 +409,8 @@ export function AdminCalendarPage() {
       <Card className="rounded-lg border-border shadow-xs">
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-lg">予約カレンダー</CardTitle>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:flex-nowrap">
+            <div className="mt-1 flex flex-wrap items-center gap-2 sm:mr-6 sm:mt-2">
             <div className="flex rounded-md border border-border bg-muted/30 p-0.5">
               {(["day", "week", "month"] as const).map((mode) => (
                 <Button
@@ -438,6 +433,24 @@ export function AdminCalendarPage() {
               </Button>
               <Button variant="outline" size="icon" className="size-8" onClick={goNext} aria-label="次へ">
                 <ChevronRight className="size-4" />
+              </Button>
+            </div>
+            </div>
+            <div className="ml-auto flex flex-col items-end gap-1">
+              {calendarLastUpdated ? (
+                <p className="text-xs text-muted-foreground text-right">
+                  最終更新: {calendarLastUpdated.toLocaleString("ja-JP")}
+                </p>
+              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-md"
+                disabled={calendarListLoading}
+                onClick={() => void refetchCalendarReservations()}
+              >
+                <RefreshCw className="mr-1 size-4" />
+                再読み込み
               </Button>
             </div>
           </div>

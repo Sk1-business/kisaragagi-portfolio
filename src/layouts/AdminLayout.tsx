@@ -22,8 +22,10 @@ function AdminLayoutContent() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string | null>(null)
 
   function openLogoutConfirm() {
+    setLogoutError(null)
     setConfirmOpen(true)
   }
 
@@ -34,12 +36,17 @@ function AdminLayoutContent() {
 
   async function confirmLogout() {
     setLoggingOut(true)
+    setLogoutError(null)
     try {
-      await postAdminLogout()
-    } finally {
-      setLoggingOut(false)
+      const ok = await postAdminLogout()
+      if (!ok) {
+        setLogoutError("ログアウトに失敗しました。通信状態を確認して再試行してください。")
+        return
+      }
       setConfirmOpen(false)
       setSuccessOpen(true)
+    } finally {
+      setLoggingOut(false)
     }
   }
 
@@ -114,6 +121,7 @@ function AdminLayoutContent() {
     <LogoutConfirmDialog
       open={confirmOpen}
       confirming={loggingOut}
+      errorMessage={logoutError}
       onCancel={cancelLogoutConfirm}
       onConfirm={() => void confirmLogout()}
     />
