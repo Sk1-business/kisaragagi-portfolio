@@ -63,15 +63,9 @@ function LandingPage() {
           <CardContent className="space-y-2">
 
             <Button asChild className="w-full rounded-md">
-              <Link to={ROUTES.customerLogin}>予約者ログインへ</Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full rounded-md">
-              <Link to={ROUTES.customerSignup}>予約者新規登録へ</Link>
-            </Button>
-            <Button asChild className="w-full rounded-xl">
               <Link to={`${ROUTES.customerLogin}?shopId=sample-salon-2026`}>予約者ログインへ</Link>
             </Button>
-            <Button asChild variant="outline" className="w-full rounded-xl">
+            <Button asChild variant="outline" className="w-full rounded-md">
               <Link to={`${ROUTES.customerSignup}?shopId=sample-salon-2026`}>予約者新規登録へ</Link>
             </Button>
           </CardContent>

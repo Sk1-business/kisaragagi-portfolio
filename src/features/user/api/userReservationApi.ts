@@ -675,6 +675,9 @@ export async function updateUserReservation(
         customer_email: payload.email || undefined,
         customer_phone: payload.phone || undefined,
         notes: payload.note || undefined,
+        booking_type: payload.mode === "nomination" ? "SHIMEI" : "OMAKASE",
+        trainer_id:
+          payload.mode === "nomination" ? (payload.trainerId?.trim() ? payload.trainerId : undefined) : null,
       },
     })
 
