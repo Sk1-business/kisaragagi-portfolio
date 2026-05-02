@@ -10,6 +10,7 @@ type Props = {
   onCancel: () => void
   onConfirm: () => void | Promise<void>
   confirmLabel: string
+  cancelLabel?: string
   isConfirming?: boolean
   confirmDisabled?: boolean
   cancelDisabled?: boolean
@@ -26,6 +27,7 @@ export function UserConfirmDialog({
   onCancel,
   onConfirm,
   confirmLabel,
+  cancelLabel = "キャンセル",
   isConfirming = false,
   confirmDisabled = false,
   cancelDisabled = false,
@@ -62,7 +64,7 @@ export function UserConfirmDialog({
               onClick={onCancel}
               disabled={cancelDisabled || isConfirming}
             >
-              キャンセル
+              {cancelLabel}
             </Button>
           ) : null}
           <Button

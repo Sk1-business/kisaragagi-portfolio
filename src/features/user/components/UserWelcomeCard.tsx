@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarDays, Clock3, MapPin, Sparkles, UserRound } from "lucide-react"
+import { ArrowRight, CalendarDays, Clock3, MapPin, UserRound } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
@@ -25,29 +25,19 @@ export function UserWelcomeCard({ summary, shopId, reservationId }: UserWelcomeC
             className="h-full w-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
-          <div className="absolute left-5 top-5 rounded-full border border-white/30 bg-white/15 px-3 py-1 text-xs font-medium text-white backdrop-blur-md">
-            予約サービス
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 p-6">
+          <div className="absolute left-0 right-0 top-0 p-6">
             <h2 className="text-2xl font-bold tracking-tight text-white drop-shadow-md sm:text-3xl">
               {summary.shopName}
             </h2>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 p-6">
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/80">
               {summary.message}
             </p>
           </div>
         </div>
 
-        <div className="grid gap-px bg-slate-200 sm:grid-cols-3">
-          <div className="flex items-start gap-3 bg-white p-4">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-violet-50">
-              <Sparkles className="size-4 text-violet-500" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">概要</p>
-              <p className="mt-1 text-sm leading-snug text-foreground">{summary.shopOverview}</p>
-            </div>
-          </div>
+        <div className="grid gap-px bg-slate-200 sm:grid-cols-2">
           <div className="flex items-start gap-3 bg-white p-4">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-cyan-50">
               <MapPin className="size-4 text-cyan-600" />
@@ -63,7 +53,7 @@ export function UserWelcomeCard({ summary, shopId, reservationId }: UserWelcomeC
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">営業時間</p>
-              <p className="mt-1 whitespace-pre-line text-sm leading-snug text-foreground">
+              <p className="mt-1 text-sm leading-snug text-foreground">
                 {summary.businessHours}
               </p>
             </div>

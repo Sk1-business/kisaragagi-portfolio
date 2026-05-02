@@ -1,21 +1,36 @@
-﻿import { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { CheckCircle2, Loader2 } from "lucide-react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import { finalizePayPayReservation } from "@/features/user/api/userReservationApi"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { buildPathWithShopId } from "@/features/user/hooks/useShopId"
+import { persistShopSlug, resolveShopSlug } from "@/lib/shopSlug"
 
 export function UserPayPayReturnPage() {
   const [searchParams] = useSearchParams()
-  const shopId = searchParams.get("shopId")?.trim() || undefined
+  const location = useLocation()
+  const navigate = useNavigate()
+  const queryShopId = searchParams.get("shopId")?.trim() || undefined
+  const shopId = resolveShopSlug(queryShopId) ?? undefined
   const merchantPaymentId = searchParams.get("merchantPaymentId")?.trim() || ""
 
   const [isLoading, setIsLoading] = useState(true)
   const [isDone, setIsDone] = useState(false)
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    if (!queryShopId) return
+    persistShopSlug(queryShopId)
+    const nextParams = new URLSearchParams(location.search)
+    nextParams.delete("shopId")
+    const nextSearch = nextParams.toString()
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${location.hash}`, {
+      replace: true,
+    })
+  }, [location.hash, location.pathname, location.search, navigate, queryShopId])
 
   useEffect(() => {
     if (!merchantPaymentId) {
@@ -52,7 +67,7 @@ export function UserPayPayReturnPage() {
         <UserSectionCard title="PayPay決済確認中" subtitle="支払い結果を確認しています。">
           <div className="flex items-center gap-2 px-6 py-8 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            <span>決済情報を確認しています…</span>
+            <span>決済情報を確認しています...</span>
           </div>
         </UserSectionCard>
       </section>
@@ -67,9 +82,9 @@ export function UserPayPayReturnPage() {
             <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-100">
               <CheckCircle2 className="size-7 text-emerald-600" />
             </div>
-            <p className="text-sm text-muted-foreground">マイページから予約詳細を確認できます。</p>
+            <p className="text-sm text-muted-foreground">予約が完了しました。</p>
             <Button asChild className="mt-6 rounded-xl">
-              <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ</Link>
+              <Link to={buildPathWithShopId(ROUTES.userHome, shopId)}>ホームへ</Link>
             </Button>
           </div>
         </UserSectionCard>
@@ -87,7 +102,7 @@ export function UserPayPayReturnPage() {
               <Link to={buildPathWithShopId(ROUTES.userReservationInput, shopId)}>予約入力へ戻る</Link>
             </Button>
             <Button asChild className="rounded-xl">
-              <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ</Link>
+              <Link to={buildPathWithShopId(ROUTES.userHome, shopId)}>ホームへ</Link>
             </Button>
           </div>
         </div>

@@ -12,11 +12,6 @@ export const ROUTES = {
   userReservationInput: "/user/reservation/input",
   userReservationConfirm: "/user/reservation/confirm",
   userReservationPaypayReturn: "/user/reservation/paypay-return",
-  userMypage: "/user/mypage",
-  userMypageReservationDetail: "/user/mypage/reservation",
-  userMypageProfile: "/user/mypage/profile",
-  userMypagePayment: "/user/mypage/payment",
-  userMypagePaymentDetail: "/user/mypage/payment/detail",
 
   adminHome: "/admin",
   adminCalendar: "/admin/calendar",

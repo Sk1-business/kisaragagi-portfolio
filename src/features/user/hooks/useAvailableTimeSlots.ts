@@ -8,6 +8,7 @@ import {
 export function useAvailableTimeSlots(
   selectedDate: string,
   shopSlug?: string,
+  preferredMenuId?: string,
   trainerId?: string,
   /** 予約変更時: この予約を空き判定から除外し同一枠を選べるようにする */
   excludeReservationId?: string,
@@ -25,7 +26,7 @@ export function useAvailableTimeSlots(
       }
     }
 
-    void fetchAvailableTimeSlots(selectedDate, shopSlug, trainerId, excludeReservationId)
+    void fetchAvailableTimeSlots(selectedDate, shopSlug, preferredMenuId, trainerId, excludeReservationId)
       .then((slots) => {
         if (!mounted) return
         setAvailableTimeSlots(slots)
@@ -38,7 +39,7 @@ export function useAvailableTimeSlots(
     return () => {
       mounted = false
     }
-  }, [selectedDate, shopSlug, trainerId, excludeReservationId])
+  }, [selectedDate, shopSlug, preferredMenuId, trainerId, excludeReservationId])
 
   return availableTimeSlots
 }

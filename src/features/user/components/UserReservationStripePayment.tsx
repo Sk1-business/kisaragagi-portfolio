@@ -7,69 +7,6 @@ export type UserReservationStripePaymentHandle = {
   confirm: () => Promise<string>
 }
 
-type SavedPmProps = {
-  stripePromise: Promise<Stripe | null>
-  clientSecret: string
-  amountYen: number
-  onReadyChange: (ready: boolean) => void
-}
-
-const SavedCardConfirm = forwardRef<UserReservationStripePaymentHandle, SavedPmProps>(
-  function SavedCardConfirm(
-    { stripePromise, clientSecret, amountYen, onReadyChange },
-    ref,
-  ) {
-    useImperativeHandle(
-      ref,
-      () => ({
-        async confirm() {
-          const stripe = await stripePromise
-          if (!stripe) {
-            throw new Error("決済の準備ができていません。")
-          }
-          const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`
-          const { error, paymentIntent } = await stripe.confirmPayment({
-            clientSecret,
-            confirmParams: {
-              return_url: returnUrl,
-            },
-            redirect: "if_required",
-          })
-          if (error) {
-            throw new Error(error.message ?? "決済に失敗しました。")
-          }
-          if (!paymentIntent?.id) {
-            throw new Error("決済が完了しませんでした。")
-          }
-          return paymentIntent.id
-        },
-      }),
-      [stripePromise, clientSecret],
-    )
-
-    useEffect(() => {
-      let active = true
-      void stripePromise.then((stripe) => {
-        if (active) onReadyChange(Boolean(stripe))
-      })
-      return () => {
-        active = false
-        onReadyChange(false)
-      }
-    }, [stripePromise, onReadyChange])
-
-    return (
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-foreground">ご請求額: ¥{amountYen.toLocaleString()}</p>
-        <p className="text-[11px] text-muted-foreground">
-          登録済みカードでお支払いします。「予約を確定する」で決済を実行します。3D
-          セキュアが求められる場合は画面の案内に従ってください。
-        </p>
-      </div>
-    )
-  },
-)
-
 type InnerProps = {
   onReadyChange: (ready: boolean) => void
 }
@@ -116,9 +53,6 @@ const StripePaymentInner = forwardRef<UserReservationStripePaymentHandle, InnerP
 
     return (
       <div className="space-y-3">
-        <p className="text-[11px] text-muted-foreground">
-          カード情報は Stripe のセキュアフォームで処理され、サーバーには保存されません。
-        </p>
         <PaymentElement />
       </div>
     )
@@ -130,12 +64,11 @@ type Props = {
   publishableKey: string
   amountYen: number
   onReadyChange: (ready: boolean) => void
-  useSavedCard?: boolean
 }
 
 export const UserReservationStripePayment = forwardRef<UserReservationStripePaymentHandle, Props>(
   function UserReservationStripePayment(
-    { clientSecret, publishableKey, amountYen, onReadyChange, useSavedCard = false },
+    { clientSecret, publishableKey, amountYen, onReadyChange },
     ref,
   ) {
     const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null)
@@ -146,24 +79,9 @@ export const UserReservationStripePayment = forwardRef<UserReservationStripePaym
 
     if (!stripePromise) return null
 
-    if (useSavedCard) {
-      return (
-        <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-          <p className="text-xs font-semibold text-foreground">オンライン決済（クレジット）</p>
-          <SavedCardConfirm
-            ref={ref}
-            stripePromise={stripePromise}
-            clientSecret={clientSecret}
-            amountYen={amountYen}
-            onReadyChange={onReadyChange}
-          />
-        </div>
-      )
-    }
-
     return (
       <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-        <p className="text-xs font-semibold text-foreground">オンライン決済（クレジット）</p>
+        <p className="text-xs font-semibold text-foreground">オンライン決済（クレジットカード）</p>
         <p className="text-sm font-medium text-foreground">ご請求額: ¥{amountYen.toLocaleString()}</p>
         <Elements stripe={stripePromise} options={{ clientSecret }}>
           <StripePaymentInner ref={ref} onReadyChange={onReadyChange} />

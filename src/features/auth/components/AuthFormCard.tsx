@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react"
 import { ArrowRight, CheckCircle2, ChevronDown, Dumbbell, Eye, EyeOff, X } from "lucide-react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -57,6 +57,8 @@ const GENDER_OPTIONS: { value: Gender; label: string }[] = [
 
 export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   const [searchParams] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
   const text = AUTH_TEXT[mode]
   const audienceText = AUTH_AUDIENCE_TEXT[audience]
   const { submit } = useAuthNavigation(audience, mode)
@@ -78,6 +80,18 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   )
 
   useEffect(() => {
+    const queryShopId = searchParams.get("shopId")?.trim()
+    if (!queryShopId) return
+    persistShopSlug(queryShopId)
+    const nextParams = new URLSearchParams(location.search)
+    nextParams.delete("shopId")
+    const nextSearch = nextParams.toString()
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${location.hash}`, {
+      replace: true,
+    })
+  }, [location.hash, location.pathname, location.search, navigate, searchParams])
+
+  useEffect(() => {
     if (!isCustomerPortal || !shopSlug) return
     fetchSalonPage(shopSlug)
       .then((salon: { salon_name: string }) => setSalonName(salon.salon_name))
@@ -94,8 +108,8 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
           ? "ログインしてください。"
           : null
 
-  function withShopId(path: string) {
-    if (shopSlug) return `${path}?shopId=${encodeURIComponent(shopSlug)}`
+  function withShopSlug(path: string) {
+    if (shopSlug) persistShopSlug(shopSlug)
     return path
   }
 
@@ -494,7 +508,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               <div className="text-sm text-neutral-500">
                 <span>{text.switchLabel}</span>
                 <Link
-                  to={withShopId(SWITCH_PATH[audience][mode])}
+                  to={withShopSlug(SWITCH_PATH[audience][mode])}
                   className="ml-1 font-semibold text-black underline decoration-neutral-300 underline-offset-4 transition-colors hover:decoration-black"
                 >
                   {text.switchLinkText}

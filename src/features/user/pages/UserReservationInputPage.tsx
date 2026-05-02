@@ -1,6 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import {
-  ArrowLeft,
   CalendarDays,
   CheckCircle2,
   Clock,
@@ -16,18 +15,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import {
-  fetchPaymentCards,
-  type PaymentCard,
-} from "@/features/user/api/userPaymentApi"
-import {
   createReservationPaymentIntent,
   createUserReservation,
   fetchMenuForReservationCheckout,
   finalizePaidUserReservation,
+  startPayPayCheckout,
   type ReservationCheckoutMenu,
 } from "@/features/user/api/userReservationApi"
 import { fetchUserProfile } from "@/features/user/api/userProfileApi"
-import { ReservationInputReviewSummary } from "@/features/user/components/ReservationInputReviewSummary"
+import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
 import {
   UserReservationStripePayment,
   type UserReservationStripePaymentHandle,
@@ -70,11 +66,6 @@ export interface ReservationInputData {
   /** 確認画面の「想定時間」「料金」表示用（入力時点のメニュー情報） */
   menuDurationMinutes?: number | null
   menuPrice?: number | null
-  /** credit のとき: 登録カード or 新規入力（新規は入力画面で Stripe → 同一ページで確認） */
-  creditCardMode?: "saved" | "new"
-  savedCardId?: string | null
-  /** 確認画面表示用 */
-  savedCardSummary?: string | null
 }
 
 const PAYMENT_METHODS = [
@@ -83,6 +74,8 @@ const PAYMENT_METHODS = [
 ] as const
 
 export function UserReservationInputPage() {
+  type ConfirmDialogStep = "summary" | "card"
+
   const shopId = useShopId()
   const navigate = useNavigate()
   const location = useLocation()
@@ -114,20 +107,15 @@ export function UserReservationInputPage() {
   const [resolvedMenuLoading, setResolvedMenuLoading] = useState(true)
 
   const [paymentMethod, setPaymentMethod] = useState<string>("credit")
-  const [savedCards, setSavedCards] = useState<PaymentCard[]>([])
-  const [savedCardsLoading, setSavedCardsLoading] = useState(true)
-  const [creditCardMode, setCreditCardMode] = useState<"saved" | "new">("new")
-  const [selectedSavedCardId, setSelectedSavedCardId] = useState("")
-  const [savedCardResolveError, setSavedCardResolveError] = useState("")
   const [creditFlowError, setCreditFlowError] = useState("")
-  const [savedCardsBootstrapped, setSavedCardsBootstrapped] = useState(false)
   const [lastName, setLastName] = useState("")
   const [firstName, setFirstName] = useState("")
   const [email, setEmail] = useState("")
   const [phoneSegments, setPhoneSegments] = useState<PhoneSegments>(["", "", ""])
   const [phoneError, setPhoneError] = useState("")
   const [note, setNote] = useState("")
-  const [reviewStep, setReviewStep] = useState(false)
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
+  const [confirmDialogStep, setConfirmDialogStep] = useState<ConfirmDialogStep>("summary")
   const [reviewData, setReviewData] = useState<ReservationInputData | null>(null)
   const [stripeClientSecret, setStripeClientSecret] = useState("")
   const [stripePublishableKey, setStripePublishableKey] = useState("")
@@ -155,8 +143,11 @@ export function UserReservationInputPage() {
   const showInlineStripe =
     !isUpdateFlow &&
     paymentMethod === "credit" &&
-    creditCardMode === "new" &&
     !isZeroPriceMenu
+  const shouldRenderPersistentStripe =
+    showInlineStripe &&
+    !skipCardPaymentInline &&
+    Boolean(stripeClientSecret && stripePublishableKey)
 
   useEffect(() => {
     let active = true
@@ -169,10 +160,6 @@ export function UserReservationInputPage() {
         setSkipCardPaymentInline(false)
         setIsStripeReady(false)
         setStripeInitError("")
-        return
-      }
-      // 確認ステップでは既に取得した PaymentIntent を維持する（ここでクリアするとフォームが永遠に準備中になる）
-      if (reviewStep) {
         return
       }
       if (!resolvedMenu || !date || !time || !shopId?.trim()) {
@@ -211,7 +198,6 @@ export function UserReservationInputPage() {
       active = false
     }
   }, [
-    reviewStep,
     isUpdateFlow,
     showInlineStripe,
     resolvedMenu,
@@ -223,67 +209,10 @@ export function UserReservationInputPage() {
   ])
 
   useEffect(() => {
-    let isMounted = true
-    queueMicrotask(() => {
-      if (!isMounted) return
-      if (!shopId || isZeroPriceMenu) {
-        setSavedCards([])
-        setSavedCardsLoading(false)
-        return
-      }
-      setSavedCardsLoading(true)
-      void fetchPaymentCards(shopId)
-        .then((list) => {
-          if (!isMounted) return
-          setSavedCards(list)
-        })
-        .catch(() => {
-          if (!isMounted) return
-          setSavedCards([])
-        })
-        .finally(() => {
-          if (!isMounted) return
-          setSavedCardsLoading(false)
-        })
-    })
-    return () => {
-      isMounted = false
-    }
-  }, [shopId, isZeroPriceMenu])
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      if (savedCardsLoading || savedCardsBootstrapped) return
-      if (savedCards.length > 0) {
-        setCreditCardMode("saved")
-        setSelectedSavedCardId(savedCards[0].id)
-      }
-      setSavedCardsBootstrapped(true)
-    })
-  }, [savedCardsLoading, savedCards, savedCardsBootstrapped])
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      if (creditCardMode !== "saved" || savedCards.length > 0) return
-      setCreditCardMode("new")
-    })
-  }, [creditCardMode, savedCards.length])
-
-  useEffect(() => {
     queueMicrotask(() => {
       setCreditFlowError("")
     })
-  }, [paymentMethod, creditCardMode, selectedSavedCardId])
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      if (paymentMethod !== "credit" || creditCardMode !== "saved") {
-        setSavedCardResolveError("")
-        return
-      }
-      setSavedCardResolveError(selectedSavedCardId ? "" : "登録カードを選択してください。")
-    })
-  }, [paymentMethod, creditCardMode, selectedSavedCardId])
+  }, [paymentMethod])
 
   useEffect(() => {
     let isMounted = true
@@ -343,11 +272,6 @@ export function UserReservationInputPage() {
     const phone = joinPhoneSegments(phoneSegments)
     const isNomination = mode === "nomination"
     const selectedMenuName = isNomination ? preferredMenuName || resolvedMenu.name : resolvedMenu.name
-    const selectedSavedCard = savedCards.find((c) => c.id === selectedSavedCardId)
-    const isCredit = !zeroPrice && paymentMethod === "credit"
-    const useSavedStripe =
-      isCredit && creditCardMode === "saved" && Boolean(selectedSavedCardId.trim())
-
     return {
       ...(isUpdateFlow && reservationId ? { reservationId } : {}),
       isUpdatingExistingReservation: isUpdateFlow,
@@ -369,12 +293,6 @@ export function UserReservationInputPage() {
       cardCvc: "",
       menuDurationMinutes: resolvedMenu.duration_minutes,
       menuPrice: resolvedMenu.price,
-      creditCardMode: isCredit ? creditCardMode : undefined,
-      savedCardId: useSavedStripe ? selectedSavedCardId.trim() : null,
-      savedCardSummary:
-        useSavedStripe && selectedSavedCard
-          ? `${selectedSavedCard.brand} ${selectedSavedCard.maskedNumber}`
-          : null,
     }
   }
 
@@ -393,53 +311,13 @@ export function UserReservationInputPage() {
       return
     }
 
-    const zeroPrice = resolvedMenu.price <= 0
-
-    if (!zeroPrice && paymentMethod === "credit" && creditCardMode === "saved") {
-      if (savedCards.length === 0) {
-        setCreditFlowError("登録済みのカードがありません。新しいカードを選ぶか、マイページでカードを登録してください。")
-        return
-      }
-      if (!selectedSavedCardId.trim()) {
-        setCreditFlowError("登録カードを選択してください。")
-        return
-      }
-      if (savedCardResolveError) {
-        return
-      }
-    }
-
-    if (showInlineStripe && !skipCardPaymentInline) {
-      if (stripeInitError) {
-        setCreditFlowError(stripeInitError)
-        return
-      }
-      if (!stripeClientSecret || !stripePublishableKey) {
-        setCreditFlowError("決済フォームの準備ができていません。少し待ってから再度お試しください。")
-        return
-      }
-      if (!isStripeReady) {
-        setCreditFlowError("カード入力フォームの読み込みが完了するまでお待ちください。")
-        return
-      }
-    }
-
     const inputData = buildInputData()
     if (!inputData) return
 
-    const useInlineNewCardFlow =
-      showInlineStripe && inputData.paymentMethod === "credit" && inputData.creditCardMode === "new"
-
-    if (useInlineNewCardFlow) {
-      setReviewData(inputData)
-      setReviewStep(true)
-      setFinalSubmitError("")
-      return
-    }
-
-    navigate(ROUTES.userReservationConfirm, {
-      state: inputData,
-    })
+    setReviewData(inputData)
+    setConfirmDialogStep("summary")
+    setFinalSubmitError("")
+    setIsConfirmDialogOpen(true)
   }
 
   async function handleFinalSubmit() {
@@ -491,6 +369,15 @@ export function UserReservationInputPage() {
             return
           }
         }
+      } else if (reviewData.paymentMethod === "paypay") {
+        const checkout = await startPayPayCheckout(commonPayload)
+        if (!checkout.ok) {
+          setFinalSubmitError(checkout.error)
+          setIsSubmittingFinal(false)
+          return
+        }
+        window.location.assign(checkout.redirectUrl)
+        return
       } else {
         const result = await createUserReservation(commonPayload)
         if (!result.ok) {
@@ -501,6 +388,7 @@ export function UserReservationInputPage() {
       }
 
       clearReservationUpdateIntent()
+      setIsConfirmDialogOpen(false)
       setIsSubmittingFinal(false)
       setIsCompleted(true)
     } catch (error) {
@@ -508,6 +396,26 @@ export function UserReservationInputPage() {
       setFinalSubmitError(message)
       setIsSubmittingFinal(false)
     }
+  }
+
+  async function handleConfirmDialogConfirm() {
+    if (!reviewData) return
+    if (reviewData.paymentMethod === "credit" && !skipCardPaymentInline && confirmDialogStep === "summary") {
+      setFinalSubmitError("")
+      setConfirmDialogStep("card")
+      return
+    }
+    await handleFinalSubmit()
+  }
+
+  function handleConfirmDialogCancel() {
+    if (confirmDialogStep === "card") {
+      setConfirmDialogStep("summary")
+      setFinalSubmitError("")
+      return
+    }
+    setIsConfirmDialogOpen(false)
+    setFinalSubmitError("")
   }
 
   function handleBack() {
@@ -535,10 +443,7 @@ export function UserReservationInputPage() {
 
   const confirmButtonDisabled =
     resolvedMenuLoading ||
-    !resolvedMenu ||
-    (showInlineStripe &&
-      !skipCardPaymentInline &&
-      (!stripeClientSecret || !stripePublishableKey || !isStripeReady))
+    !resolvedMenu
 
   if (isCompleted) {
     return (
@@ -547,9 +452,9 @@ export function UserReservationInputPage() {
           <CheckCircle2 className="size-8 text-emerald-600" />
         </div>
         <h2 className="text-xl font-bold text-foreground">予約が完了しました</h2>
-        <p className="mt-2 text-sm text-muted-foreground">マイページから内容をご確認いただけます。</p>
+        <p className="mt-2 text-sm text-muted-foreground">予約が完了しました。</p>
         <Button asChild size="lg" className="mt-6 rounded-xl">
-          <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ</Link>
+          <Link to={buildPathWithShopId(ROUTES.userHome, shopId)}>ホームへ</Link>
         </Button>
       </section>
     )
@@ -558,15 +463,10 @@ export function UserReservationInputPage() {
   return (
     <section className="space-y-5">
       <UserSectionCard
-        title={reviewStep ? "予約内容の確認" : "予約情報入力"}
-        subtitle={
-          reviewStep
-            ? "内容をご確認のうえ、確定してください。"
-            : "予約に必要な情報を入力してください。"
-        }
+        title="予約情報入力"
+        subtitle="予約に必要な情報を入力してください。"
       >
-        {!reviewStep ? (
-          <div className="space-y-1 border-b border-slate-100 px-6 py-4">
+        <div className="space-y-1 border-b border-slate-100 px-6 py-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               {"予約情報"}
             </p>
@@ -634,10 +534,8 @@ export function UserReservationInputPage() {
               </div>
             </div>
           </div>
-        ) : null}
 
-        {!reviewStep ? (
-          <form id="reservation-input-form" onSubmit={handleGoReview}>
+        <form id="reservation-input-form" onSubmit={handleGoReview}>
           <div className="space-y-5 border-b border-slate-100 px-6 py-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               {"予約者情報"}
@@ -777,221 +675,139 @@ export function UserReservationInputPage() {
                 })}
               </div>
 
-              {paymentMethod === "credit" ? (
-                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                  <p className="text-sm font-medium text-foreground">{"クレジットカードの指定"}</p>
-                  {savedCardsLoading ? (
-                    <p className="text-xs text-muted-foreground">{"登録カードを読み込み中…"}</p>
-                  ) : null}
-                  {!savedCardsLoading && savedCards.length > 0 ? (
-                    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 has-[:checked]:border-slate-900 has-[:checked]:ring-1 has-[:checked]:ring-slate-900">
-                      <input
-                        type="radio"
-                        name="creditCardMode"
-                        className="mt-1"
-                        checked={creditCardMode === "saved"}
-                        onChange={() => setCreditCardMode("saved")}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <span className="text-sm font-medium">{"マイページに登録したカードを使う"}</span>
-                        {creditCardMode === "saved" ? (
-                          <div className="mt-2 space-y-2">
-                            {savedCards.map((card) => {
-                              const checked = selectedSavedCardId === card.id
-                              return (
-                                <button
-                                  key={card.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedSavedCardId(card.id)
-                                    setCreditCardMode("saved")
-                                  }}
-                                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                                    checked
-                                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                                      : "border-slate-200 bg-white text-foreground hover:bg-slate-50"
-                                  }`}
-                                >
-                                  <span className="font-medium">{card.brand}</span>
-                                  <span className="ml-2 opacity-90">{card.maskedNumber}</span>
-                                  <span className="ml-2 text-xs opacity-80">期限 {card.expiry}</span>
-                                </button>
-                              )
-                            })}
-                            {savedCardResolveError ? (
-                              <p className="text-xs text-destructive">{savedCardResolveError}</p>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    </label>
-                  ) : null}
-                  {!savedCardsLoading && savedCards.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      {"登録済みのカードはありません。下の「新しいカードを入力する」で続けるか、"}
-                      <Link
-                        to={buildPathWithShopId(ROUTES.userMypagePayment, shopId)}
-                        className="font-medium text-primary underline-offset-2 hover:underline"
-                      >
-                        {"マイページのお支払い設定"}
-                      </Link>
-                      {"から登録できます。"}
-                    </p>
-                  ) : null}
-
-                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 has-[:checked]:border-slate-900 has-[:checked]:ring-1 has-[:checked]:ring-slate-900">
-                    <input
-                      type="radio"
-                      name="creditCardMode"
-                      className="mt-1"
-                      checked={creditCardMode === "new"}
-                      onChange={() => {
-                        setCreditCardMode("new")
-                        setSavedCardResolveError("")
-                      }}
-                    />
-                    <div>
-                      <span className="text-sm font-medium">{"新しいカードを入力する"}</span>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {
-                          "この画面の下に表示される Stripe のフォームにカード番号等を入力してください。内容確認後に決済します。"
-                        }
-                      </p>
-                    </div>
-                  </label>
-
-                  {creditFlowError ? <p className="text-xs text-destructive">{creditFlowError}</p> : null}
-                </div>
+              {paymentMethod === "credit" && creditFlowError ? (
+                <p className="text-xs text-destructive">{creditFlowError}</p>
               ) : null}
             </div>
           ) : null}
           </form>
-        ) : null}
-
-        {reviewStep && reviewData ? (
-          <ReservationInputReviewSummary
-            data={reviewData}
-            displayPriceText={reviewDisplayPriceText}
-            expectedTimeRange={reviewExpectedTimeRange}
-          />
-        ) : null}
-
-        {showInlineStripe && stripeInitError ? (
-          <div className="border-b border-slate-100 px-6 py-4">
-            <p className="text-sm text-destructive">{stripeInitError}</p>
-          </div>
-        ) : null}
-
-        {showInlineStripe &&
-        !skipCardPaymentInline &&
-        !stripeClientSecret &&
-        !stripeInitError &&
-        resolvedMenu &&
-        date &&
-        time ? (
-          <div className="border-b border-slate-100 px-6 py-4">
-            <p className="text-sm text-muted-foreground">決済フォームを準備しています…</p>
-          </div>
-        ) : null}
-
-        {showInlineStripe && stripeClientSecret && stripePublishableKey ? (
-          <div className="space-y-4 border-b border-slate-100 px-6 py-5">
-            <div
-              className={reviewStep && reviewData ? "space-y-4" : "hidden"}
-              aria-hidden={!(reviewStep && reviewData)}
-            >
-              <div className="flex items-center gap-2">
-                <CreditCard className="size-4 text-muted-foreground" />
-                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  {"決済方法"}
-                </p>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {PAYMENT_METHODS.map((method) => {
-                  const activeMethod = reviewStep && reviewData ? reviewData.paymentMethod : paymentMethod
-                  const isActive = activeMethod === method.id
-                  const Icon = method.icon
-                  return (
-                    <div
-                      key={method.id}
-                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${
-                        isActive
-                          ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                          : "border-slate-200 bg-white text-muted-foreground opacity-60"
-                      }`}
-                    >
-                      <Icon className="size-4" />
-                      {method.label}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-            <UserReservationStripePayment
-              key={stripeClientSecret}
-              ref={stripePaymentRef}
-              clientSecret={stripeClientSecret}
-              publishableKey={stripePublishableKey}
-              amountYen={stripeAmountYen}
-              onReadyChange={setIsStripeReady}
-            />
-          </div>
-        ) : null}
 
         <div className="flex gap-3 px-6 py-5">
-          {!reviewStep ? (
-            <>
-              <Button type="button" variant="outline" size="lg" className="rounded-xl" onClick={handleBack}>
-                {"前の画面へ戻る"}
-              </Button>
-              <Button
-                type="submit"
-                form="reservation-input-form"
-                size="lg"
-                className="flex-1 rounded-xl text-base"
-                disabled={confirmButtonDisabled}
-              >
-                確認画面へ進む
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                className="rounded-xl"
-                onClick={() => {
-                  setReviewStep(false)
-                  setFinalSubmitError("")
-                }}
-              >
-                <ArrowLeft className="mr-1 size-4" />
-                前の画面へ戻る
-              </Button>
-              <Button
-                type="button"
-                size="lg"
-                className="flex-1 rounded-xl text-base"
-                disabled={
-                  isSubmittingFinal ||
-                  (reviewData?.paymentMethod === "credit" &&
-                    !skipCardPaymentInline &&
-                    !isStripeReady)
-                }
-                onClick={() => {
-                  void handleFinalSubmit()
-                }}
-              >
-                {isSubmittingFinal ? "送信中..." : "予約を確定する"}
-              </Button>
-            </>
-          )}
+          <Button type="button" variant="outline" size="lg" className="rounded-xl" onClick={handleBack}>
+            {"前の画面へ戻る"}
+          </Button>
+          <Button
+            type="submit"
+            form="reservation-input-form"
+            size="lg"
+            className="flex-1 rounded-xl text-base"
+            disabled={confirmButtonDisabled}
+          >
+            内容を確認する
+          </Button>
         </div>
         {finalSubmitError ? (
           <p className="px-6 pb-5 text-sm text-destructive">{finalSubmitError}</p>
         ) : null}
       </UserSectionCard>
+      <UserConfirmDialog
+        open={isConfirmDialogOpen && reviewData !== null}
+        title={confirmDialogStep === "summary" ? "予約内容の確認" : "クレジットカード情報入力"}
+        description={
+          confirmDialogStep === "summary"
+            ? "日付・時間・料金をご確認のうえ、決済へ進んでください。"
+            : "カード情報を入力して予約を確定してください。"
+        }
+        content={
+          reviewData ? (
+            confirmDialogStep === "summary" ? (
+              <div className="mt-4 space-y-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[11px] text-muted-foreground">日付</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">
+                    {reviewData.date ? formatDateLongWithWeekday(reviewData.date) : "未選択"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[11px] text-muted-foreground">時間</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{reviewExpectedTimeRange}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[11px] text-muted-foreground">料金</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{reviewDisplayPriceText}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[11px] text-muted-foreground">決済方法</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">
+                    {reviewData.paymentMethod === "credit"
+                      ? "クレジットカード"
+                      : reviewData.paymentMethod === "paypay"
+                        ? "PayPay"
+                        : reviewData.paymentMethod === "free"
+                          ? "現地で決済"
+                          : reviewData.paymentMethod || "未選択"}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {showInlineStripe && (!date || !time) ? (
+                  <p className="text-xs text-muted-foreground">
+                    カード入力欄は日時選択後に表示されます。先に日付と時間を選択してください。
+                  </p>
+                ) : null}
+                {showInlineStripe && !resolvedMenu && !resolvedMenuLoading ? (
+                  <p className="text-xs text-destructive">
+                    メニュー情報を取得できないため、カード入力欄を表示できません。
+                  </p>
+                ) : null}
+                {showInlineStripe && stripeInitError ? (
+                  <p className="text-xs text-destructive">{stripeInitError}</p>
+                ) : null}
+                {showInlineStripe &&
+                !skipCardPaymentInline &&
+                !stripeClientSecret &&
+                !stripeInitError &&
+                resolvedMenuLoading ? (
+                  <p className="text-sm text-muted-foreground">メニュー情報を読み込んでいます...</p>
+                ) : null}
+                {showInlineStripe &&
+                !skipCardPaymentInline &&
+                !stripeClientSecret &&
+                !stripeInitError &&
+                resolvedMenu &&
+                date &&
+                time &&
+                !resolvedMenuLoading ? (
+                  <p className="text-sm text-muted-foreground">決済フォームを準備しています...</p>
+                ) : null}
+                {shouldRenderPersistentStripe ? (
+                  <UserReservationStripePayment
+                    ref={stripePaymentRef}
+                    clientSecret={stripeClientSecret}
+                    publishableKey={stripePublishableKey}
+                    amountYen={stripeAmountYen}
+                    onReadyChange={setIsStripeReady}
+                  />
+                ) : null}
+              </div>
+            )
+          ) : null
+        }
+        onCancel={handleConfirmDialogCancel}
+        onConfirm={() => {
+          void handleConfirmDialogConfirm()
+        }}
+        confirmLabel={
+          confirmDialogStep === "summary"
+            ? reviewData?.paymentMethod === "credit" || reviewData?.paymentMethod === "paypay"
+              ? "決済へ"
+              : isUpdateFlow
+                ? "更新する"
+                : "予約を確定する"
+            : "予約を確定する"
+        }
+        cancelLabel={confirmDialogStep === "card" ? "内容確認へ戻る" : "キャンセル"}
+        isConfirming={isSubmittingFinal}
+        confirmDisabled={
+          isSubmittingFinal ||
+          (confirmDialogStep === "card" &&
+            reviewData?.paymentMethod === "credit" &&
+            !skipCardPaymentInline &&
+            (!stripeClientSecret || !stripePublishableKey || !isStripeReady))
+        }
+        errorMessage={finalSubmitError || undefined}
+      />
     </section>
   )
 }

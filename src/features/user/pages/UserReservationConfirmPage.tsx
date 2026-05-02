@@ -86,9 +86,6 @@ export function UserReservationConfirmPage() {
       cardCvc: "",
       menuDurationMinutes: null,
       menuPrice: null,
-      creditCardMode: undefined,
-      savedCardId: null,
-      savedCardSummary: null,
     } satisfies ReservationInputData)
 
   const treatAsReservationUpdateFlow =
@@ -100,10 +97,6 @@ export function UserReservationConfirmPage() {
   ).trim()
   const isReservationUpdate = treatAsReservationUpdateFlow && Boolean(effectiveReservationId)
   const isCreditPayment = input.paymentMethod === "credit" && !isReservationUpdate
-  const useSavedCard =
-    isCreditPayment &&
-    input.creditCardMode === "saved" &&
-    Boolean(input.savedCardId?.trim())
 
   const menuPrice = input.menuPrice ?? null
   /** 入力画面で free 選択、または 0 円メニュー（API で skip 含む） */
@@ -150,7 +143,6 @@ export function UserReservationConfirmPage() {
         trainerId: input.mode === "nomination" ? input.trainerId || null : null,
         date: input.date,
         time: input.time,
-        cardId: useSavedCard ? input.savedCardId : undefined,
       }).then((result) => {
         if (!active) return
         if (!result.ok) {
@@ -177,8 +169,6 @@ export function UserReservationConfirmPage() {
     input.time,
     input.mode,
     input.trainerId,
-    input.savedCardId,
-    useSavedCard,
     isCreditPayment,
     shopId,
   ])
@@ -298,9 +288,9 @@ export function UserReservationConfirmPage() {
           <CheckCircle2 className="size-8 text-emerald-600" />
         </div>
         <h2 className="text-xl font-bold text-foreground">予約が完了しました</h2>
-        <p className="mt-2 text-sm text-muted-foreground">マイページから内容をご確認いただけます。</p>
+        <p className="mt-2 text-sm text-muted-foreground">予約が完了しました。</p>
         <Button asChild size="lg" className="mt-6 rounded-xl">
-          <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ</Link>
+          <Link to={buildPathWithShopId(ROUTES.userHome, shopId)}>ホームへ</Link>
         </Button>
       </section>
     )
@@ -465,13 +455,6 @@ export function UserReservationConfirmPage() {
               })}
             </div>
 
-            {isCreditPayment && !skipCardPayment && input.savedCardSummary?.trim() ? (
-              <p className="text-sm text-foreground">
-                <span className="text-muted-foreground">お支払いカード: </span>
-                {input.savedCardSummary}
-              </p>
-            ) : null}
-
             {isCreditPayment && !skipCardPayment && stripeClientSecret && stripePublishableKey ? (
               <UserReservationStripePayment
                 ref={stripePaymentRef}
@@ -479,7 +462,6 @@ export function UserReservationConfirmPage() {
                 publishableKey={stripePublishableKey}
                 amountYen={stripeAmountYen}
                 onReadyChange={setIsStripeReady}
-                useSavedCard={useSavedCard}
               />
             ) : null}
           </div>

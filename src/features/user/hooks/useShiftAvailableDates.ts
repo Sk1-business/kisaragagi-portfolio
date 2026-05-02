@@ -12,7 +12,9 @@ function toDateKey(date: Date) {
 export function useShiftAvailableDates(
   displayMonth: Date,
   shopSlug?: string,
+  preferredMenuId?: string,
   trainerId?: string,
+  excludeReservationId?: string,
 ) {
   const [shiftAvailableDates, setShiftAvailableDates] = useState<string[] | null>(null)
 
@@ -24,7 +26,14 @@ export function useShiftAvailableDates(
       if (mounted) setShiftAvailableDates(null)
     })
 
-    void fetchShiftAvailableDates(fromDate, toDate, shopSlug, trainerId)
+    void fetchShiftAvailableDates(
+      fromDate,
+      toDate,
+      shopSlug,
+      preferredMenuId,
+      trainerId,
+      excludeReservationId,
+    )
       .then((dates) => {
         if (!mounted) return
         setShiftAvailableDates(dates)
@@ -37,7 +46,7 @@ export function useShiftAvailableDates(
     return () => {
       mounted = false
     }
-  }, [displayMonth, shopSlug, trainerId])
+  }, [displayMonth, shopSlug, preferredMenuId, trainerId, excludeReservationId])
 
   return shiftAvailableDates
 }

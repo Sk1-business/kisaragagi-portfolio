@@ -1,44 +1,28 @@
-import { ArrowLeft, Dumbbell, LogOut, UserRound } from "lucide-react"
-import { useEffect, useState } from "react"
+import { ArrowLeft, Dumbbell } from "lucide-react"
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
-import { logoutCustomer } from "@/features/auth/api/customerAuthApi"
-import { useCustomerSessionIdleTimeout } from "@/features/auth/hooks/useCustomerSessionIdleTimeout"
-import { fetchSalonPage } from "@/features/user/api/userSalonApi"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
-import { subscribeCustomerSessionInvalidation } from "@/lib/customerSession"
+
+function getPageTitle(pathname: string): string {
+  if (pathname === ROUTES.userHome) return "トップページ"
+  if (pathname === ROUTES.userReservationNomination) return "トレーナー・メニュー選択"
+  if (pathname === ROUTES.userReservationChangeMode) return "予約変更"
+  if (pathname === ROUTES.userReservationSchedule) return "日時選択"
+  if (pathname === ROUTES.userReservationInput) return "予約情報入力"
+  if (pathname === ROUTES.userReservationConfirm) return "予約内容の確認"
+  if (pathname === ROUTES.userReservationPaypayReturn) return "PayPay決済"
+  return "予約画面"
+}
 
 export function UserLayout() {
   const shopId = useShopId()
   const navigate = useNavigate()
   const location = useLocation()
-  const [shopName, setShopName] = useState("予約ポータル")
-
-  useCustomerSessionIdleTimeout(true)
-
-  useEffect(() => {
-    if (!shopId) return
-    fetchSalonPage(shopId)
-      .then((s) => setShopName(s.salon_name || "予約ポータル"))
-      .catch(() => {})
-  }, [shopId])
-
-  useEffect(() => {
-    return subscribeCustomerSessionInvalidation((reason) => {
-      const params = new URLSearchParams()
-      if (shopId) params.set("shopId", shopId)
-      if (reason === "idle") params.set("reason", "idle_timeout")
-      else params.set("reason", "session_expired")
-      const q = params.toString()
-      void logoutCustomer().finally(() => {
-        navigate(`${ROUTES.customerLogin}${q ? `?${q}` : ""}`, { replace: true })
-      })
-    })
-  }, [navigate, shopId])
 
   const isTopLevel = location.pathname === ROUTES.userHome
+  const pageTitle = getPageTitle(location.pathname)
 
   function handleBack() {
     if (window.history.length > 1) {
@@ -46,11 +30,6 @@ export function UserLayout() {
       return
     }
     navigate(buildPathWithShopId(ROUTES.userHome, shopId))
-  }
-
-  async function handleLogout() {
-    await logoutCustomer()
-    navigate(buildPathWithShopId(ROUTES.customerLogin, shopId))
   }
 
   return (
@@ -74,32 +53,8 @@ export function UserLayout() {
               <div className="flex size-8 items-center justify-center rounded-lg bg-slate-900">
                 <Dumbbell className="size-4 text-white" />
               </div>
-              <div className="leading-tight">
-                <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-                  予約者画面
-                </p>
-                <p className="text-sm font-semibold text-foreground">{shopName}</p>
-              </div>
+              <span className="text-sm font-semibold text-foreground">{pageTitle}</span>
             </Link>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button asChild variant="ghost" size="sm" className="text-xs text-muted-foreground">
-              <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)} aria-label="マイページ">
-                <UserRound className="size-3.5 min-[420px]:mr-1" />
-                <span className="max-[419px]:sr-only">マイページ</span>
-              </Link>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground"
-              onClick={() => void handleLogout()}
-              aria-label="ログアウト"
-            >
-              <LogOut className="size-3.5 min-[420px]:mr-1" />
-              <span className="max-[419px]:sr-only">ログアウト</span>
-            </Button>
           </div>
         </div>
       </header>

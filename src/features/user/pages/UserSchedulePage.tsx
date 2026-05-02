@@ -96,11 +96,14 @@ export function UserSchedulePage() {
   const shiftAvailableDates = useShiftAvailableDates(
     displayMonth,
     shopId,
+    preferredMenuId || undefined,
     mode === "nomination" ? trainerId : undefined,
+    isUpdateFlow && reservationId ? reservationId : undefined,
   )
   const availableTimeSlots = useAvailableTimeSlots(
     selectedDate,
     shopId,
+    preferredMenuId || undefined,
     mode === "nomination" ? trainerId : undefined,
     isUpdateFlow && reservationId ? reservationId : undefined,
   )

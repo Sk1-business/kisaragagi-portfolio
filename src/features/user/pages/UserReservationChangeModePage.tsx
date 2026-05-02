@@ -16,7 +16,6 @@ export function UserReservationChangeModePage() {
 
   const nominationPath = buildPathWithShopId(ROUTES.userReservationNomination, shopId)
   const omakasePath = buildPathWithShopId(ROUTES.userReservationSchedule, shopId)
-  const detailPath = buildPathWithShopId(ROUTES.userMypageReservationDetail, shopId)
 
   if (!reservationId) {
     return (
@@ -26,7 +25,7 @@ export function UserReservationChangeModePage() {
           <p className="mt-2 text-sm text-muted-foreground">変更対象の予約が見つかりませんでした。</p>
         </div>
         <Button asChild variant="outline" size="lg" className="w-full rounded-xl">
-          <Link to={buildPathWithShopId(ROUTES.userMypage, shopId)}>マイページへ戻る</Link>
+          <Link to={buildPathWithShopId(ROUTES.userHome, shopId)}>ホームへ戻る</Link>
         </Button>
       </section>
     )
@@ -106,7 +105,7 @@ export function UserReservationChangeModePage() {
       </UserSectionCard>
 
       <Button asChild variant="outline" size="lg" className="w-full rounded-xl">
-        <Link to={detailPath} state={reservationId ? { reservationId } : undefined}>予約詳細へ戻る</Link>
+        <Link to={buildPathWithShopId(ROUTES.userHome, shopId)}>ホームへ戻る</Link>
       </Button>
     </section>
   )

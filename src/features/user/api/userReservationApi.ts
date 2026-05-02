@@ -275,7 +275,7 @@ export function formatReservationExpectedTimeRange(
   return end && end !== time ? `${time}〜${end}` : time
 }
 
-/** 予約詳細・マイページで決済手段ラベル表示用 */
+/** 予約詳細で決済手段ラベル表示用 */
 export function formatReservationPaymentMethod(method: string | null | undefined): string {
   if (!method?.trim()) return "—"
   const m = method.trim().toLowerCase()
@@ -837,7 +837,6 @@ export async function createReservationPaymentIntent(
     trainerId: string | null
     date: string
     time: string
-    cardId?: string | null
   },
 ): Promise<
   | {
@@ -873,7 +872,6 @@ export async function createReservationPaymentIntent(
         shop_slug: resolvedShopSlug,
         menu_id: menu.menu_id,
         start_at: toReservationStartIso(payload.date, payload.time),
-        card_id: payload.cardId?.trim() || undefined,
       },
     })
     return {
@@ -1070,13 +1068,18 @@ export async function finalizePayPayReservation(
 export async function fetchAvailableTimeSlots(
   date: string,
   shopSlug?: string,
+  preferredMenuId?: string,
   trainerId?: string,
   excludeReservationId?: string,
 ): Promise<AvailabilityTimeSlot[]> {
   if (!date) return []
   const resolvedShopSlug = resolveShopSlug(shopSlug)
   if (!resolvedShopSlug) return []
-  const menu = await resolveDefaultMenu(resolvedShopSlug)
+  const menu = await resolveMenuForNewReservation(resolvedShopSlug, {
+    preferredMenuId,
+    mode: trainerId ? "nomination" : "omakase",
+    trainerId: trainerId?.trim() || null,
+  })
   const trainerQuery = trainerId ? `&trainer_id=${encodeURIComponent(trainerId)}` : ""
   const excludeId = excludeReservationId?.trim()
   const excludeQuery = excludeId ? `&exclude_reservation_id=${encodeURIComponent(excludeId)}` : ""
@@ -1096,20 +1099,28 @@ export async function fetchShiftAvailableDates(
   fromDate: string,
   toDate: string,
   shopSlug?: string,
+  preferredMenuId?: string,
   trainerId?: string,
+  excludeReservationId?: string,
 ): Promise<string[]> {
   if (!fromDate || !toDate) return []
   const resolvedShopSlug = resolveShopSlug(shopSlug)
   if (!resolvedShopSlug) return []
-  const menu = await resolveDefaultMenu(resolvedShopSlug)
+  const menu = await resolveMenuForNewReservation(resolvedShopSlug, {
+    preferredMenuId,
+    mode: trainerId ? "nomination" : "omakase",
+    trainerId: trainerId?.trim() || null,
+  })
   const trainerQuery = trainerId ? `&trainer_id=${encodeURIComponent(trainerId)}` : ""
+  const excludeId = excludeReservationId?.trim()
+  const excludeQuery = excludeId ? `&exclude_reservation_id=${encodeURIComponent(excludeId)}` : ""
   const data = await apiRequest<AvailabilityDatesResponse>(
     `${buildSalonApiPath(
       resolvedShopSlug,
       "/availability-dates",
     )}?menu_id=${encodeURIComponent(menu.menu_id)}&from_date=${encodeURIComponent(
       fromDate,
-    )}&to_date=${encodeURIComponent(toDate)}${trainerQuery}`,
+    )}&to_date=${encodeURIComponent(toDate)}${trainerQuery}${excludeQuery}`,
   )
   return Array.isArray(data.dates) ? data.dates : []
 }

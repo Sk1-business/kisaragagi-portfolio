@@ -1,5 +1,4 @@
 import { API_BASE } from "@/lib/apiBase"
-import { clearCustomerPortalClientCaches } from "@/lib/customerSession"
 import { buildSalonApiPath, persistShopSlug, resolveShopSlug } from "@/lib/shopSlug"
 
 interface RegisterPayload {
@@ -167,19 +166,6 @@ export async function checkCustomerSessionAlive(): Promise<boolean> {
     return response.ok
   } catch {
     return false
-  }
-}
-
-export async function logoutCustomer(): Promise<void> {
-  try {
-    await fetch(`${API_BASE}/api/auth/logout`, {
-      method: "POST",
-      credentials: "include",
-    })
-  } catch {
-    // Ignore network errors on logout.
-  } finally {
-    clearCustomerPortalClientCaches()
   }
 }
 
