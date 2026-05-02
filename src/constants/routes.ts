@@ -4,6 +4,7 @@ export const ROUTES = {
   customerSignup: "/customer/signup",
   backofficeLogin: "/backoffice/login",
   backofficeSignup: "/backoffice/signup",
+  salonPublic: "/s/:slug",
   userHome: "/user",
   userReservationNomination: "/user/reservation/nomination",
   userReservationChangeMode: "/user/reservation/change-mode",

@@ -814,6 +814,21 @@ interface PayPayCheckoutResponse {
   payment_status: string
 }
 
+function normalizeReservationPaymentIntentError(error: unknown): string {
+  if (error instanceof ApiClientError) {
+    const message = error.message.trim()
+    if (message === "Salon Stripe Connect account is not connected") {
+      return "この店舗では現在オンライン決済を利用できません。別の決済方法を選択してください。"
+    }
+    if (error.status === 404 && message.toLowerCase().includes("card")) {
+      return "カードが見つかりません。別のカードを選択してください。"
+    }
+    return error.message
+  }
+  if (error instanceof Error) return error.message
+  return "決済の初期化に失敗しました。"
+}
+
 export async function createReservationPaymentIntent(
   payload: {
     shopSlug?: string
@@ -822,6 +837,7 @@ export async function createReservationPaymentIntent(
     trainerId: string | null
     date: string
     time: string
+    cardId?: string | null
   },
 ): Promise<
   | {
@@ -857,6 +873,7 @@ export async function createReservationPaymentIntent(
         shop_slug: resolvedShopSlug,
         menu_id: menu.menu_id,
         start_at: toReservationStartIso(payload.date, payload.time),
+        card_id: payload.cardId?.trim() || undefined,
       },
     })
     return {
@@ -868,9 +885,7 @@ export async function createReservationPaymentIntent(
       currency: response.currency,
     }
   } catch (error) {
-    if (error instanceof ApiClientError) return { ok: false, error: error.message }
-    if (error instanceof Error) return { ok: false, error: error.message }
-    return { ok: false, error: "決済の初期化に失敗しました。" }
+    return { ok: false, error: normalizeReservationPaymentIntentError(error) }
   }
 }
 

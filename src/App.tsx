@@ -23,6 +23,7 @@ import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
 import { UserMypagePage } from "@/features/user/pages/UserMypagePage"
 import { UserPaymentPage } from "@/features/user/pages/UserPaymentPage"
 import { UserPaymentDetailPage } from "@/features/user/pages/UserPaymentDetailPage"
+import { SalonPublicEntryPage } from "@/features/user/pages/SalonPublicEntryPage"
 import { UserProfilePage } from "@/features/user/pages/UserProfilePage"
 import { UserReservationConfirmPage } from "@/features/user/pages/UserReservationConfirmPage"
 import { UserReservationChangeModePage } from "@/features/user/pages/UserReservationChangeModePage"
@@ -103,6 +104,7 @@ function App() {
         <Route path={ROUTES.customerSignup} element={<CustomerSignupPage />} />
         <Route path={ROUTES.backofficeLogin} element={<BackofficeLoginPage />} />
         <Route path={ROUTES.backofficeSignup} element={<BackofficeSignupPage />} />
+        <Route path={ROUTES.salonPublic} element={<SalonPublicEntryPage />} />
         <Route element={<UserLayout />}>
           <Route path={ROUTES.userHome} element={<UserDashboardPage />} />
           <Route path={ROUTES.userReservationNomination} element={<UserNominationPage />} />
