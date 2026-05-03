@@ -128,6 +128,99 @@ function extractTrainerRows(data: unknown): unknown[] {
 }
 
 /**
+ * `GET …/trainers/{id}` の JSON が一覧と異なりラップされる場合に素行へ正規化する。
+ * 例: `{ "trainer": { … } }`, `{ "data": { … } }`, 単要素配列 `[ { … } ]`
+ */
+function unwrapTrainerDetailPayload(data: unknown): unknown {
+  let cur: unknown = data
+  const seen = new Set<unknown>()
+  for (let depth = 0; depth < 8 && cur != null; depth += 1) {
+    if (seen.has(cur)) break
+    seen.add(cur)
+    if (Array.isArray(cur)) {
+      const first = cur.find((x) => x && typeof x === "object")
+      cur = first ?? cur
+      continue
+    }
+    if (!cur || typeof cur !== "object") break
+    const o = cur as Record<string, unknown>
+    const nested =
+      o.trainer ??
+      o.Trainer ??
+      o.item ??
+      o.record ??
+      o.payload ??
+      o.result ??
+      (o.data && typeof o.data === "object" ? o.data : undefined)
+    if (nested && typeof nested === "object") {
+      cur = nested
+      continue
+    }
+    break
+  }
+  return cur
+}
+
+/** 詳細 GET が `name` 等を省略して差分だけ返すサーバー向けに一覧行をベースにマージする */
+function mergeTrainerDetailFromPartialRow(
+  row: unknown,
+  fallback: Staff,
+  requestedTrainerId: string,
+): Staff | null {
+  if (!row || typeof row !== "object") return null
+  const o = row as Record<string, unknown>
+  const idRaw = o.trainer_id ?? o.id
+  if (
+    idRaw != null &&
+    String(idRaw) !== String(fallback.id) &&
+    String(idRaw) !== String(requestedTrainerId)
+  ) {
+    return null
+  }
+  if (
+    idRaw == null &&
+    String(fallback.id) !== String(requestedTrainerId)
+  ) {
+    return null
+  }
+  const full = mapTrainerDetailRowToStaff(row)
+  if (full) return full
+  const next: Staff = { ...fallback }
+  const descRaw = o.description
+  if (typeof descRaw === "string") {
+    const t = descRaw.trim()
+    next.description = t.length > 0 ? t : undefined
+  }
+  const imgRaw = o.image_url ?? o.imageUrl
+  if (typeof imgRaw === "string") {
+    const t = imgRaw.trim()
+    next.image_url = t.length > 0 ? t : undefined
+  } else if (imgRaw === null) {
+    delete next.image_url
+  }
+  const doRaw = o.display_order ?? o.displayOrder
+  if (typeof doRaw === "number" && Number.isFinite(doRaw)) {
+    next.display_order = Math.round(doRaw)
+  } else if (typeof doRaw === "string" && /^\d+$/.test(doRaw.trim())) {
+    next.display_order = Math.round(Number(doRaw.trim()))
+  } else if (doRaw === null) {
+    delete next.display_order
+  }
+  const menuIds = parseTrainerMenuIds(o)
+  if (menuIds) next.menuIds = menuIds
+  else if (o.menu_ids === null || o.menuIds === null) delete next.menuIds
+  const colorRaw = o.color ?? o.display_color ?? o.calendar_color
+  if (typeof colorRaw === "string" && colorRaw.trim()) {
+    next.color = normalizeTrainerColor(colorRaw)
+  }
+  const nameRaw = o.name
+  if (typeof nameRaw === "string" && nameRaw.trim()) {
+    next.name = nameRaw.trim()
+  }
+  return next
+}
+
+/**
  * 対象サロンのトレーナー（`is_active` が true / 1 の行のみ。未指定は表示する）。
  * 要 `access_token` Cookie。
  */
@@ -171,11 +264,19 @@ function trainerDetailUrl(trainerId: string): string {
 /**
  * `GET /api/admin/trainers/{trainer_id}` — 1件（対応メニュー等の詳細用）。
  * 未実装のサーバーでは 404 となり得る。
+ * @param listFallback 一覧で開いた行。詳細 JSON のラップ／部分フィールド時にマージする。
  */
-export async function fetchAdminTrainerById(trainerId: string): Promise<Staff | null> {
+export async function fetchAdminTrainerById(
+  trainerId: string,
+  listFallback?: Staff,
+): Promise<Staff | null> {
   const res = await apiFetch(trainerDetailUrl(trainerId), { method: "GET" })
   if (res.status === 401) throw new Error("UNAUTHORIZED")
-  if (res.status === 404) return null
+  if (res.status === 404) {
+    return listFallback && String(listFallback.id) === String(trainerId)
+      ? listFallback
+      : null
+  }
   if (!res.ok) throw new Error("FETCH_FAILED")
   let data: unknown
   try {
@@ -183,7 +284,15 @@ export async function fetchAdminTrainerById(trainerId: string): Promise<Staff | 
   } catch {
     data = null
   }
-  return mapTrainerDetailRowToStaff(data)
+  const row = unwrapTrainerDetailPayload(data)
+  const mapped = mapTrainerDetailRowToStaff(row)
+  if (mapped) return mapped
+  if (listFallback && String(listFallback.id) === String(trainerId)) {
+    const merged = mergeTrainerDetailFromPartialRow(row, listFallback, trainerId)
+    if (merged) return merged
+    return listFallback
+  }
+  return null
 }
 
 /**
