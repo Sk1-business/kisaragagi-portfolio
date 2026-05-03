@@ -136,12 +136,13 @@ export function AdminStaffPage() {
   useEffect(() => {
     if (!formOpen || formOpen === "add" || !("edit" in formOpen)) return
     const id = formOpen.edit.id
+    const listRow = formOpen.edit
     let cancelled = false
     void (async () => {
       setTrainerDetailLoading(true)
       setTrainerDetailError("")
       try {
-        const detail = await fetchAdminTrainerById(id)
+        const detail = await fetchAdminTrainerById(id, listRow)
         if (cancelled) return
         if (!detail) {
           setTrainerDetailError("スタッフ詳細を取得できませんでした。")
@@ -159,6 +160,19 @@ export function AdminStaffPage() {
         if (cancelled) return
         if (e instanceof Error && e.message === "UNAUTHORIZED") {
           navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        /** 一覧行は既にフォームへ入っているため、詳細 GET が失敗しても編集可能にする */
+        if (String(listRow.id) === String(id)) {
+          setFormDescription(listRow.description ?? "")
+          setFormImageUrl(listRow.image_url ?? "")
+          setFormDisplayOrder(
+            listRow.display_order !== undefined && listRow.display_order !== null
+              ? String(listRow.display_order)
+              : "",
+          )
+          setSelectedMenuIds(listRow.menuIds ? [...listRow.menuIds] : [])
+          setTrainerDetailError("")
           return
         }
         setTrainerDetailError(
