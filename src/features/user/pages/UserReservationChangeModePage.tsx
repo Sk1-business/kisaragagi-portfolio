@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarDays, UserRound } from "lucide-react"
+import { CalendarDays } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -14,8 +14,7 @@ export function UserReservationChangeModePage() {
   const reservationId = usePersistentReservationId()
   const { reservation, isLoading } = useUserReservation(reservationId, shopId)
 
-  const nominationPath = buildPathWithShopId(ROUTES.userReservationNomination, shopId)
-  const omakasePath = buildPathWithShopId(ROUTES.userReservationSchedule, shopId)
+  const schedulePath = buildPathWithShopId(ROUTES.userReservationSchedule, shopId)
 
   if (!reservationId) {
     return (
@@ -33,7 +32,7 @@ export function UserReservationChangeModePage() {
 
   return (
     <section className="space-y-5">
-      <UserSectionCard title="予約変更（指名 / おまかせ）" headerTone="plain">
+      <UserSectionCard title="予約変更" headerTone="plain">
 
         <div className="space-y-4 p-5">
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
@@ -62,45 +61,30 @@ export function UserReservationChangeModePage() {
             )}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            変更できるのは日時のみです。指名トレーナーとメニューは変更できません。
+          </div>
+          <Button asChild size="lg" className="w-full rounded-xl">
             <Link
-              to={nominationPath}
+              to={schedulePath}
               state={
-                reservationId
-                  ? { reservationId, isUpdatingExistingReservation: true }
+                reservation
+                  ? {
+                      mode: reservation.mode,
+                      trainerId: reservation.trainerId ?? "",
+                      trainerName: reservation.trainerName ?? "",
+                      preferredMenuId: reservation.menuId ?? "",
+                      preferredMenuName: reservation.menuName ?? "",
+                      reservationId,
+                      isUpdatingExistingReservation: true,
+                    }
                   : undefined
               }
-              className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
             >
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-violet-50">
-                <UserRound className="size-5 text-violet-600" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-semibold text-foreground">指名で変更する</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">トレーナーを選択して変更</p>
-              </div>
-              <ArrowRight className="ml-auto size-4 text-muted-foreground opacity-50 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+              <CalendarDays className="size-4" />
+              日時を変更する
             </Link>
-
-            <Link
-              to={omakasePath}
-              state={
-                reservationId
-                  ? { mode: "omakase", reservationId, isUpdatingExistingReservation: true }
-                  : { mode: "omakase", isUpdatingExistingReservation: true }
-              }
-              className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
-            >
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-cyan-50">
-                <CalendarDays className="size-5 text-cyan-600" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-semibold text-foreground">おまかせで変更する</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">日時を選んで変更</p>
-              </div>
-              <ArrowRight className="ml-auto size-4 text-muted-foreground opacity-50 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
-            </Link>
-          </div>
+          </Button>
         </div>
       </UserSectionCard>
 

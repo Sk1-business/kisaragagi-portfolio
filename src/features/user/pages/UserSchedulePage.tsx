@@ -70,6 +70,7 @@ export function UserSchedulePage() {
     trainerName?: string
     preferredMenuId?: string
     preferredMenuName?: string
+    returnSearch?: string
     reservationId?: string
     isUpdatingExistingReservation?: boolean
   } | null) ?? null
@@ -78,6 +79,7 @@ export function UserSchedulePage() {
   const trainerName = state?.trainerName ?? ""
   const preferredMenuId = state?.preferredMenuId ?? ""
   const preferredMenuName = state?.preferredMenuName ?? ""
+  const returnSearch = state?.returnSearch ?? ""
   const isUpdateFlow = state?.isUpdatingExistingReservation === true
   const stateReservationId = (state?.reservationId ?? "").trim()
   const persistentReservationId = usePersistentReservationId()
@@ -325,22 +327,29 @@ export function UserSchedulePage() {
           size="lg"
           className="w-full rounded-xl text-base"
           onClick={() =>
-            navigate(buildPathWithShopId(ROUTES.userReservationInput, shopId), {
-              state: {
-                mode,
-                date: selectedDate,
-                time: selectedTime,
-                trainerId: trainerId || selectedTrainer?.id || "",
-                trainerName: trainerName || selectedTrainer?.name || "",
-                preferredMenuId: preferredMenuId || undefined,
-                preferredMenuName: preferredMenuName || undefined,
-                ...(isUpdateFlow && reservationId ? { reservationId } : {}),
-                isUpdatingExistingReservation: isUpdateFlow,
+            navigate(
+              buildPathWithShopId(
+                isUpdateFlow ? ROUTES.userReservationConfirm : ROUTES.userReservationInput,
+                shopId,
+              ),
+              {
+                state: {
+                  mode,
+                  date: selectedDate,
+                  time: selectedTime,
+                  trainerId: trainerId || selectedTrainer?.id || "",
+                  trainerName: trainerName || selectedTrainer?.name || "",
+                  preferredMenuId: preferredMenuId || undefined,
+                  preferredMenuName: preferredMenuName || undefined,
+                  returnSearch: returnSearch || undefined,
+                  ...(isUpdateFlow && reservationId ? { reservationId } : {}),
+                  isUpdatingExistingReservation: isUpdateFlow,
+                },
               },
-            })
+            )
           }
         >
-          予約情報入力へ進む
+          {isUpdateFlow ? "変更内容確認へ進む" : "予約情報入力へ進む"}
           <ArrowRight className="ml-1 size-4" />
         </Button>
       ) : null}

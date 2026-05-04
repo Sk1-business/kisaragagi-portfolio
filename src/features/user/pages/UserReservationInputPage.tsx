@@ -22,6 +22,7 @@ import {
   startPayPayCheckout,
   type ReservationCheckoutMenu,
 } from "@/features/user/api/userReservationApi"
+import { fetchSalonPage } from "@/features/user/api/userSalonApi"
 import { fetchUserProfile } from "@/features/user/api/userProfileApi"
 import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
 import {
@@ -46,6 +47,7 @@ import {
 
 export interface ReservationInputData {
   reservationId?: string
+  returnSearch?: string
   isUpdatingExistingReservation?: boolean
   mode: string
   date: string
@@ -84,6 +86,7 @@ export function UserReservationInputPage() {
     trainerId?: string
     trainerName?: string
     reservationId?: string
+    returnSearch?: string
     isUpdatingExistingReservation?: boolean
     date?: string
     time?: string
@@ -95,6 +98,7 @@ export function UserReservationInputPage() {
   const trainerName = state?.trainerName ?? ""
   const isUpdateFlow = state?.isUpdatingExistingReservation === true
   const stateReservationId = (state?.reservationId ?? "").trim()
+  const returnSearch = state?.returnSearch ?? ""
   const persistentReservationId = usePersistentReservationId()
   const reservationId = isUpdateFlow
     ? (stateReservationId || persistentReservationId).trim()
@@ -105,6 +109,7 @@ export function UserReservationInputPage() {
   const preferredMenuName = state?.preferredMenuName ?? ""
   const [resolvedMenu, setResolvedMenu] = useState<ReservationCheckoutMenu | null>(null)
   const [resolvedMenuLoading, setResolvedMenuLoading] = useState(true)
+  const [stripeConnectReady, setStripeConnectReady] = useState<boolean | null>(null)
 
   const [paymentMethod, setPaymentMethod] = useState<string>("credit")
   const [creditFlowError, setCreditFlowError] = useState("")
@@ -133,6 +138,7 @@ export function UserReservationInputPage() {
   const displayMenuName =
     mode === "nomination" ? preferredMenuName || resolvedMenu?.name || "未定" : resolvedMenu?.name ?? "未定"
   const isZeroPriceMenu = resolvedMenu !== null && resolvedMenu.price <= 0
+  const creditPaymentAvailable = stripeConnectReady !== false
   const expectedTimeRange = useMemo(() => {
     if (!time) return "未選択"
     const minutes = resolvedMenu?.duration_minutes
@@ -143,11 +149,34 @@ export function UserReservationInputPage() {
   const showInlineStripe =
     !isUpdateFlow &&
     paymentMethod === "credit" &&
-    !isZeroPriceMenu
+    !isZeroPriceMenu &&
+    creditPaymentAvailable
   const shouldRenderPersistentStripe =
     showInlineStripe &&
     !skipCardPaymentInline &&
     Boolean(stripeClientSecret && stripePublishableKey)
+
+  useEffect(() => {
+    let mounted = true
+    if (!shopId?.trim()) {
+      setStripeConnectReady(null)
+      return
+    }
+    void fetchSalonPage(shopId)
+      .then((page) => {
+        if (!mounted) return
+        setStripeConnectReady(page.stripe_connect_connected)
+        if (!page.stripe_connect_connected) {
+          setPaymentMethod((current) => (current === "credit" ? "paypay" : current))
+        }
+      })
+      .catch(() => {
+        if (mounted) setStripeConnectReady(null)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [shopId])
 
   useEffect(() => {
     let active = true
@@ -200,6 +229,7 @@ export function UserReservationInputPage() {
   }, [
     isUpdateFlow,
     showInlineStripe,
+    creditPaymentAvailable,
     resolvedMenu,
     date,
     time,
@@ -274,6 +304,7 @@ export function UserReservationInputPage() {
     const selectedMenuName = isNomination ? preferredMenuName || resolvedMenu.name : resolvedMenu.name
     return {
       ...(isUpdateFlow && reservationId ? { reservationId } : {}),
+      ...(returnSearch ? { returnSearch } : {}),
       isUpdatingExistingReservation: isUpdateFlow,
       mode,
       date,
@@ -645,7 +676,7 @@ export function UserReservationInputPage() {
             />
           </div>
 
-          {!isZeroPriceMenu ? (
+          {!isUpdateFlow && !isZeroPriceMenu ? (
             <div className="space-y-4 border-b border-slate-100 px-6 py-5">
               <div className="flex items-center gap-2">
                 <CreditCard className="size-4 text-muted-foreground" />
@@ -656,16 +687,23 @@ export function UserReservationInputPage() {
               <div className="grid gap-2 sm:grid-cols-2">
                 {PAYMENT_METHODS.map((method) => {
                   const isActive = paymentMethod === method.id
+                  const isDisabled = method.id === "credit" && !creditPaymentAvailable
                   const Icon = method.icon
                   return (
                     <button
                       key={method.id}
                       type="button"
-                      onClick={() => setPaymentMethod(method.id)}
+                      onClick={() => {
+                        if (isDisabled) return
+                        setPaymentMethod(method.id)
+                      }}
+                      disabled={isDisabled}
                       className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition ${
                         isActive
                           ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                          : "border-slate-200 bg-white text-foreground hover:bg-slate-50"
+                          : isDisabled
+                            ? "cursor-not-allowed border-slate-200 bg-slate-50 text-muted-foreground opacity-70"
+                            : "border-slate-200 bg-white text-foreground hover:bg-slate-50"
                       }`}
                     >
                       <Icon className="size-4" />
@@ -677,6 +715,11 @@ export function UserReservationInputPage() {
 
               {paymentMethod === "credit" && creditFlowError ? (
                 <p className="text-xs text-destructive">{creditFlowError}</p>
+              ) : null}
+              {!creditPaymentAvailable ? (
+                <p className="text-xs text-muted-foreground">
+                  この店舗では現在クレジットカード決済を利用できません。
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -705,7 +748,9 @@ export function UserReservationInputPage() {
         title={confirmDialogStep === "summary" ? "予約内容の確認" : "クレジットカード情報入力"}
         description={
           confirmDialogStep === "summary"
-            ? "日付・時間・料金をご確認のうえ、決済へ進んでください。"
+            ? isUpdateFlow
+              ? "変更内容をご確認のうえ、更新してください。"
+              : "日付・時間・料金をご確認のうえ、決済へ進んでください。"
             : "カード情報を入力して予約を確定してください。"
         }
         content={

@@ -111,6 +111,7 @@ interface ReservationOutResponse {
 
 interface ReservationDetailResponse {
   reservation_id: string
+  menu_id?: string
   menu_name: string
   start_at: string
   service_end_at?: string | null
@@ -134,6 +135,7 @@ interface ReservationDetailResponse {
   payment_currency?: string | null
   payment_record_status?: string | null
   payment_paid_at?: string | null
+  confirmation_token?: string | null
 }
 
 interface AvailabilityResponse {
@@ -317,8 +319,8 @@ function toReservation(
     trainerName: detail.trainer_name ?? meta?.trainerName ?? null,
     status: toStatus(detail.status),
     note: detail.notes ?? meta?.note ?? "",
-    confirmationToken: meta?.confirmationToken,
-    menuId: meta?.menuId,
+    confirmationToken: detail.confirmation_token ?? meta?.confirmationToken,
+    menuId: detail.menu_id ?? meta?.menuId,
     menuName: detail.menu_name || fallbackMenuName,
     customerName: detail.customer_name,
     customerEmail: detail.customer_email,
@@ -344,6 +346,17 @@ function loadReservationMeta() {
 
 function saveReservationMeta(meta: StoredReservationMeta[]) {
   safeWriteStorage(RESERVATION_STORAGE_KEY, meta)
+}
+
+function mergeReservationMeta(entries: StoredReservationMeta[]) {
+  if (entries.length === 0) return
+  const current = loadReservationMeta()
+  const merged = [...entries]
+  for (const item of current) {
+    if (merged.some((entry) => entry.id === item.id)) continue
+    merged.push(item)
+  }
+  saveReservationMeta(merged)
 }
 
 function toReservationStart(date: string, time: string) {
@@ -467,6 +480,40 @@ export async function fetchUserReservations(shopSlug?: string): Promise<UserRese
       .filter((reservation): reservation is UserReservation => reservation !== null)
       .sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`))
   }
+}
+
+export async function fetchReservationsByContact(payload: {
+  shopSlug?: string
+  email?: string
+  phone?: string
+}): Promise<UserReservation[]> {
+  const resolvedShopSlug = resolveShopSlug(payload.shopSlug)
+  if (!resolvedShopSlug) {
+    throw new Error("店舗情報が見つかりませんでした。")
+  }
+  const details = await apiRequest<ReservationDetailResponse[]>(
+    buildSalonApiPath(resolvedShopSlug, "/reservations/lookup"),
+    {
+      method: "POST",
+      body: {
+        email: payload.email?.trim() || undefined,
+        phone: payload.phone?.trim() || undefined,
+      },
+    },
+  )
+  const reservations = details.map((detail) => toReservation(detail))
+  mergeReservationMeta(
+    reservations.map((reservation) => ({
+      id: reservation.id,
+      confirmationToken: reservation.confirmationToken,
+      mode: reservation.mode,
+      trainerId: reservation.trainerId,
+      trainerName: reservation.trainerName,
+      note: reservation.note,
+      menuId: reservation.menuId,
+    })),
+  )
+  return reservations.sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
 }
 
 export async function fetchUserReservationById(
@@ -616,6 +663,7 @@ export function evaluateReservationUpdate(
 
 export async function cancelUserReservation(
   reservationId: string,
+  shopSlug?: string,
 ): Promise<{ ok: true; reservation: UserReservation } | { ok: false; error: string }> {
   try {
     const detail = await apiRequest<ReservationDetailResponse>(`/api/my/reservations/${reservationId}/cancel`, {
@@ -626,6 +674,27 @@ export async function cancelUserReservation(
     const updated = toReservation(detail, targetMeta)
     return { ok: true, reservation: updated }
   } catch (error) {
+    const resolvedShopSlug = resolveShopSlug(shopSlug)
+    const targetMeta = loadReservationMeta().find(
+      (reservation) => reservation.id === reservationId && !!reservation.confirmationToken,
+    )
+    if (resolvedShopSlug && targetMeta?.confirmationToken) {
+      try {
+        const detail = await apiRequest<ReservationDetailResponse>(
+          buildSalonApiPath(resolvedShopSlug, `/reservations/${targetMeta.confirmationToken}/cancel`),
+          {
+            method: "POST",
+            body: {},
+          },
+        )
+        return { ok: true, reservation: toReservation(detail, targetMeta) }
+      } catch (fallbackError) {
+        if (fallbackError instanceof ApiClientError) {
+          return { ok: false, error: fallbackError.message }
+        }
+        return { ok: false, error: "予約キャンセルに失敗しました。" }
+      }
+    }
     if (error instanceof ApiClientError) {
       return { ok: false, error: error.message }
     }
@@ -635,6 +704,7 @@ export async function cancelUserReservation(
 
 interface UpdateReservationPayload {
   reservationId: string
+  shopSlug?: string
   date: string
   time: string
   mode: string
@@ -675,9 +745,6 @@ export async function updateUserReservation(
         customer_email: payload.email || undefined,
         customer_phone: payload.phone || undefined,
         notes: payload.note || undefined,
-        booking_type: payload.mode === "nomination" ? "SHIMEI" : "OMAKASE",
-        trainer_id:
-          payload.mode === "nomination" ? (payload.trainerId?.trim() ? payload.trainerId : undefined) : null,
       },
     })
 
@@ -697,6 +764,43 @@ export async function updateUserReservation(
 
     return { ok: true, reservation: toReservation(detail, nextMeta) }
   } catch (error) {
+    const resolvedShopSlug = resolveShopSlug(payload.shopSlug)
+    if (resolvedShopSlug && targetMeta?.confirmationToken) {
+      try {
+        const detail = await apiRequest<ReservationDetailResponse>(
+          buildSalonApiPath(resolvedShopSlug, `/reservations/${targetMeta.confirmationToken}`),
+          {
+            method: "PUT",
+            body: {
+              start_at: toReservationStartIso(payload.date, payload.time),
+              customer_name: payload.fullName || undefined,
+              customer_email: payload.email || undefined,
+              customer_phone: payload.phone || undefined,
+              notes: payload.note || undefined,
+            },
+          },
+        )
+        const nextMeta: StoredReservationMeta = {
+          id: payload.reservationId,
+          confirmationToken: targetMeta.confirmationToken,
+          mode: payload.mode,
+          trainerId: payload.trainerId,
+          trainerName: payload.trainerName,
+          note: payload.note,
+          menuId: targetMeta?.menuId,
+        }
+        saveReservationMeta([
+          nextMeta,
+          ...allMeta.filter((item) => item.id !== payload.reservationId),
+        ])
+        return { ok: true, reservation: toReservation(detail, nextMeta) }
+      } catch (fallbackError) {
+        if (fallbackError instanceof ApiClientError) {
+          return { ok: false, error: fallbackError.message }
+        }
+        return { ok: false, error: "予約変更に失敗しました。" }
+      }
+    }
     if (error instanceof ApiClientError) {
       return { ok: false, error: error.message }
     }

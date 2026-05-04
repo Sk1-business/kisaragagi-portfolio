@@ -20,6 +20,8 @@ import { AdminMenusPage } from "@/features/admin/pages/AdminMenusPage"
 import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
+import { UserReservationDetailPage } from "@/features/user/pages/UserReservationDetailPage"
+import { UserReservationLookupPage } from "@/features/user/pages/UserReservationLookupPage"
 import { SalonPublicEntryPage } from "@/features/user/pages/SalonPublicEntryPage"
 import { UserReservationConfirmPage } from "@/features/user/pages/UserReservationConfirmPage"
 import { UserReservationChangeModePage } from "@/features/user/pages/UserReservationChangeModePage"
@@ -102,6 +104,9 @@ function App() {
         <Route path={ROUTES.salonPublic} element={<SalonPublicEntryPage />} />
         <Route element={<UserLayout />}>
           <Route path={ROUTES.userHome} element={<UserDashboardPage />} />
+          <Route path={ROUTES.userReservationLookup} element={<UserReservationLookupPage />} />
+          <Route path={ROUTES.userReservationList} element={<UserReservationLookupPage />} />
+          <Route path={ROUTES.userReservationDetail} element={<UserReservationDetailPage />} />
           <Route path={ROUTES.userReservationNomination} element={<UserNominationPage />} />
           <Route path={ROUTES.userReservationChangeMode} element={<UserReservationChangeModePage />} />
           <Route path={ROUTES.userReservationSchedule} element={<UserSchedulePage />} />

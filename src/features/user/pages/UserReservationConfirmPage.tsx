@@ -24,6 +24,7 @@ import {
   UserReservationStripePayment,
   type UserReservationStripePaymentHandle,
 } from "@/features/user/components/UserReservationStripePayment"
+import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 import {
@@ -31,6 +32,7 @@ import {
   readReservationUpdateIntent,
   usePersistentReservationId,
 } from "@/features/user/hooks/usePersistentReservationId"
+import { useUserReservation } from "@/features/user/hooks/useUserReservation"
 import type { ReservationInputData } from "@/features/user/pages/UserReservationInputPage"
 import { addMinutesToTimeString, formatDateLongWithWeekday } from "@/lib/dateFormat"
 import { isCompletePhoneSegments, joinPhoneSegments, parsePhoneToSegments } from "@/lib/phone"
@@ -54,6 +56,26 @@ export function UserReservationConfirmPage() {
   const persistentReservationId = usePersistentReservationId()
   const data = location.state as ReservationInputData | null
 
+  const defaultInput: ReservationInputData = {
+    mode: "omakase",
+    date: "",
+    time: "",
+    trainerId: "",
+    trainerName: "",
+    trainerRating: 0,
+    menuName: "",
+    fullName: "",
+    email: "",
+    phone: "",
+    note: "",
+    paymentMethod: "credit",
+    cardNumber: "",
+    cardExpiry: "",
+    cardCvc: "",
+    menuDurationMinutes: null,
+    menuPrice: null,
+  }
+
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -66,27 +88,7 @@ export function UserReservationConfirmPage() {
   const stripePaymentRef = useRef<UserReservationStripePaymentHandle>(null)
 
   const hasData = Boolean(data)
-  const input: ReservationInputData =
-    data ??
-    ({
-      mode: "omakase",
-      date: "",
-      time: "",
-      trainerId: "",
-      trainerName: "",
-      trainerRating: 0,
-      menuName: "",
-      fullName: "",
-      email: "",
-      phone: "",
-      note: "",
-      paymentMethod: "credit",
-      cardNumber: "",
-      cardExpiry: "",
-      cardCvc: "",
-      menuDurationMinutes: null,
-      menuPrice: null,
-    } satisfies ReservationInputData)
+  const input: ReservationInputData = data ? { ...defaultInput, ...data } : defaultInput
 
   const treatAsReservationUpdateFlow =
     input.isUpdatingExistingReservation === true ||
@@ -96,7 +98,14 @@ export function UserReservationConfirmPage() {
     (treatAsReservationUpdateFlow ? persistentReservationId : "")
   ).trim()
   const isReservationUpdate = treatAsReservationUpdateFlow && Boolean(effectiveReservationId)
+  const returnSearch = input.returnSearch ?? ""
+  const lookupTarget = `${buildPathWithShopId(ROUTES.userReservationLookup, shopId)}${returnSearch}`
+  const { reservation: currentReservation, isLoading: isCurrentReservationLoading } = useUserReservation(
+    isReservationUpdate ? effectiveReservationId : "",
+    shopId,
+  )
   const isCreditPayment = input.paymentMethod === "credit" && !isReservationUpdate
+  const [isUpdateCompleteOpen, setIsUpdateCompleteOpen] = useState(false)
 
   const menuPrice = input.menuPrice ?? null
   /** 入力画面で free 選択、または 0 円メニュー（API で skip 含む） */
@@ -184,15 +193,16 @@ export function UserReservationConfirmPage() {
       setIsSubmitting(true)
       const result = await updateUserReservation({
         reservationId: effectiveReservationId,
+        shopSlug: shopId,
         date: input.date,
         time: input.time,
         mode: input.mode,
         trainerId: input.mode === "nomination" ? input.trainerId || null : null,
         trainerName: input.mode === "nomination" ? input.trainerName || null : null,
-        note: input.note,
-        fullName: input.fullName,
-        email: input.email,
-        phone: input.phone,
+        note: currentReservation?.note ?? input.note,
+        fullName: currentReservation?.customerName ?? input.fullName,
+        email: currentReservation?.customerEmail ?? input.email,
+        phone: currentReservation?.customerPhone ?? input.phone,
       })
       if (!result.ok) {
         setSubmitError(result.error)
@@ -201,7 +211,7 @@ export function UserReservationConfirmPage() {
       }
       clearReservationUpdateIntent()
       setIsSubmitting(false)
-      setIsSubmitted(true)
+      setIsUpdateCompleteOpen(true)
       return
     }
 
@@ -287,8 +297,12 @@ export function UserReservationConfirmPage() {
         <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-emerald-100">
           <CheckCircle2 className="size-8 text-emerald-600" />
         </div>
-        <h2 className="text-xl font-bold text-foreground">予約が完了しました</h2>
-        <p className="mt-2 text-sm text-muted-foreground">予約が完了しました。</p>
+        <h2 className="text-xl font-bold text-foreground">
+          {isReservationUpdate ? "予約を変更しました" : "予約が完了しました"}
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {isReservationUpdate ? "予約内容の更新が完了しました。" : "予約が完了しました。"}
+        </p>
         <Button asChild size="lg" className="mt-6 rounded-xl">
           <Link to={buildPathWithShopId(ROUTES.userHome, shopId)}>ホームへ</Link>
         </Button>
@@ -307,69 +321,152 @@ export function UserReservationConfirmPage() {
     )
   }
 
+  if (isReservationUpdate && isCurrentReservationLoading) {
+    return (
+      <section className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">変更前の予約情報を読み込み中...</p>
+      </section>
+    )
+  }
+
+  if (isReservationUpdate && !currentReservation) {
+    return (
+      <section className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">変更対象の予約情報が見つかりませんでした。</p>
+        <Button asChild variant="outline" size="sm" className="mt-4 rounded-lg">
+          <Link to={lookupTarget}>予約照会へ戻る</Link>
+        </Button>
+      </section>
+    )
+  }
+
   return (
     <section className="space-y-5">
-      <UserSectionCard title="予約内容の確認" subtitle="内容をご確認のうえ、確定してください。">
+      <UserSectionCard
+        title={isReservationUpdate ? "変更内容の確認" : "予約内容の確認"}
+        subtitle={
+          isReservationUpdate
+            ? "変更前と変更後の内容をご確認のうえ、更新してください。"
+            : "内容をご確認のうえ、確定してください。"
+        }
+      >
         <div className="space-y-1 border-b border-slate-100 px-6 py-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{"予約情報"}</p>
-          <div className="mt-2 grid gap-3 sm:grid-cols-2">
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">{"日付"}</p>
-                <p className="text-sm font-semibold text-foreground">
-                  {input.date ? formatDateLongWithWeekday(input.date) : "未選択"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <Clock className="size-4 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">{"想定時間"}</p>
-                <p className="text-sm font-semibold text-foreground">{expectedTimeRange}</p>
-              </div>
-            </div>
-          </div>
-          {input.mode === "nomination" ? (
-            <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100">
-                <UserRound className="size-5 text-slate-400" />
-              </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground">{"指名トレーナー"}</p>
-                <p className="text-sm font-semibold text-foreground">
-                  {input.trainerName?.trim() || "未入力"}
-                </p>
+          {isReservationUpdate && currentReservation ? (
+            <div className="space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{"変更内容"}</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-bold text-foreground">変更前</p>
+                  <div className="mt-3 space-y-3 text-sm">
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">日時</p>
+                      <p className="font-semibold text-foreground">
+                        {currentReservation.date ? formatDateLongWithWeekday(currentReservation.date) : "未選択"}
+                      </p>
+                      <p className="text-muted-foreground">{currentReservation.time}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">メニュー</p>
+                      <p className="font-semibold text-foreground">{currentReservation.menuName || "未設定"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">担当</p>
+                      <p className="font-semibold text-foreground">
+                        {currentReservation.trainerName ||
+                          (currentReservation.mode === "nomination" ? "未設定" : "おまかせ")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-sm font-bold text-foreground">変更後</p>
+                  <div className="mt-3 space-y-3 text-sm">
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">日時</p>
+                      <p className="font-semibold text-foreground">
+                        {input.date ? formatDateLongWithWeekday(input.date) : "未選択"}
+                      </p>
+                      <p className="text-muted-foreground">{expectedTimeRange}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">メニュー</p>
+                      <p className="font-semibold text-foreground">{currentReservation.menuName || "未設定"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">担当</p>
+                      <p className="font-semibold text-foreground">
+                        {currentReservation.trainerName ||
+                          (currentReservation.mode === "nomination" ? "未設定" : "おまかせ")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
-            <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">{"予約モード"}</p>
-                <p className="text-sm font-semibold text-foreground">{"おまかせ"}</p>
+            <>
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{"予約情報"}</p>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">{"日付"}</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {input.date ? formatDateLongWithWeekday(input.date) : "未選択"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <Clock className="size-4 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">{"想定時間"}</p>
+                    <p className="text-sm font-semibold text-foreground">{expectedTimeRange}</p>
+                  </div>
+                </div>
               </div>
-            </div>
+              {input.mode === "nomination" ? (
+                <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100">
+                    <UserRound className="size-5 text-slate-400" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">{"指名トレーナー"}</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {input.trainerName?.trim() || "未入力"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">{"予約モード"}</p>
+                    <p className="text-sm font-semibold text-foreground">{"おまかせ"}</p>
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-muted-foreground">{"メニュー"}</p>
+                    <p className="truncate text-sm font-semibold text-foreground">{displayMenuName}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <CreditCard className="size-4 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">{"料金"}</p>
+                    <p className="text-sm font-semibold text-foreground">{displayPriceText}</p>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0">
-                <p className="text-[11px] text-muted-foreground">{"メニュー"}</p>
-                <p className="truncate text-sm font-semibold text-foreground">{displayMenuName}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <CreditCard className="size-4 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">{"料金"}</p>
-                <p className="text-sm font-semibold text-foreground">{displayPriceText}</p>
-              </div>
-            </div>
-          </div>
         </div>
 
-        <div className="space-y-5 border-b border-slate-100 px-6 py-5">
+        {!isReservationUpdate ? (
+          <div className="space-y-5 border-b border-slate-100 px-6 py-5">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{"予約者情報"}</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -413,9 +510,11 @@ export function UserReservationConfirmPage() {
               )}
             </div>
           </div>
-        </div>
+          </div>
+        ) : null}
 
-        <div className="space-y-4 border-b border-slate-100 px-6 py-5">
+        {!isReservationUpdate ? (
+          <div className="space-y-4 border-b border-slate-100 px-6 py-5">
           <div className="flex items-center gap-2">
             <MessageSquare className="size-4 text-muted-foreground" />
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -425,9 +524,10 @@ export function UserReservationConfirmPage() {
           <div className="min-h-[4.5rem] w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-foreground">
             {input.note?.trim() ? input.note : "（なし）"}
           </div>
-        </div>
+          </div>
+        ) : null}
 
-        {!isPayAtVenue ? (
+        {!isReservationUpdate && !isPayAtVenue ? (
           <div className="space-y-4 border-b border-slate-100 px-6 py-5">
             <div className="flex items-center gap-2">
               <CreditCard className="size-4 text-muted-foreground" />
@@ -488,13 +588,28 @@ export function UserReservationConfirmPage() {
               (isCreditPayment && !isPayAtVenue && !isStripeReady)
             }
           >
-            {isSubmitting ? "送信中..." : "予約を確定する"}
+            {isSubmitting ? "送信中..." : isReservationUpdate ? "予約を変更する" : "予約を確定する"}
           </Button>
         </div>
         {submitError ? (
           <p className="px-6 pb-5 text-sm text-destructive">{submitError}</p>
         ) : null}
       </UserSectionCard>
+      <UserConfirmDialog
+        open={isUpdateCompleteOpen}
+        title="変更が完了しました"
+        description="予約内容の更新が完了しました。"
+        onCancel={() => {
+          setIsUpdateCompleteOpen(false)
+          navigate(lookupTarget)
+        }}
+        onConfirm={async () => {
+          setIsUpdateCompleteOpen(false)
+          navigate(lookupTarget)
+        }}
+        confirmLabel="予約照会へ戻る"
+        showCancelButton={false}
+      />
     </section>
   )
 }

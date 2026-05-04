@@ -3,10 +3,14 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
+import { useSalonName } from "@/features/user/hooks/useSalonName"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 
 function getPageTitle(pathname: string): string {
   if (pathname === ROUTES.userHome) return "トップページ"
+  if (pathname === ROUTES.userReservationLookup) return "予約照会"
+  if (pathname === ROUTES.userReservationList) return "予約照会"
+  if (pathname.startsWith("/user/reservations/")) return "予約詳細"
   if (pathname === ROUTES.userReservationNomination) return "トレーナー・メニュー選択"
   if (pathname === ROUTES.userReservationChangeMode) return "予約変更"
   if (pathname === ROUTES.userReservationSchedule) return "日時選択"
@@ -20,6 +24,7 @@ export function UserLayout() {
   const shopId = useShopId()
   const navigate = useNavigate()
   const location = useLocation()
+  const salonName = useSalonName(shopId)
 
   const isTopLevel = location.pathname === ROUTES.userHome
   const pageTitle = getPageTitle(location.pathname)
@@ -35,7 +40,7 @@ export function UserLayout() {
   return (
     <main className="min-h-dvh bg-white">
       <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
+        <div className="relative mx-auto grid h-14 max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 sm:px-6">
           <div className="flex items-center gap-3">
             {!isTopLevel ? (
               <Button
@@ -49,13 +54,21 @@ export function UserLayout() {
                 <ArrowLeft className="size-4" />
               </Button>
             ) : null}
-            <Link to={buildPathWithShopId(ROUTES.userHome, shopId)} className="flex items-center gap-2">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-slate-900">
-                <Dumbbell className="size-4 text-white" />
-              </div>
-              <span className="text-sm font-semibold text-foreground">{pageTitle}</span>
-            </Link>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-slate-900">
+              <Dumbbell className="size-4 text-white" />
+            </div>
           </div>
+          <Link
+            to={buildPathWithShopId(ROUTES.userHome, shopId)}
+            className="min-w-0 justify-self-center rounded-md px-2 py-1 text-center transition-colors hover:bg-slate-100"
+          >
+            <span className="block max-w-[52vw] truncate text-sm font-semibold text-foreground sm:max-w-sm">
+              {salonName}
+            </span>
+          </Link>
+          <span className="min-w-0 truncate text-right text-sm font-medium text-muted-foreground">
+            {pageTitle}
+          </span>
         </div>
       </header>
       <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">

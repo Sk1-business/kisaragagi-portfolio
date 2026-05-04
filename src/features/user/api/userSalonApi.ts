@@ -16,6 +16,7 @@ export interface SalonPageResponse {
   address: string | null
   business_hours_summary: string | null
   booking_page_message: string | null
+  stripe_connect_connected: boolean
   menus: SalonPageMenu[]
 }
 
