@@ -378,6 +378,13 @@ export interface AdminReservationOut {
   source?: string | null
   payment_status?: string | null
   payment_method?: string | null
+  payment_id?: string | null
+  payment_provider?: string | null
+  payment_amount_yen?: number | null
+  payment_currency?: string | null
+  payment_record_status?: string | null
+  payment_refund_amount?: number | null
+  payment_paid_at?: string | null
   created_at?: string
 }
 
@@ -478,6 +485,17 @@ export function mapApiReservationRowToReservation(
     trainerId: tid ? tid : undefined,
     trainerName: trainerName || undefined,
     memo: memo ? memo : undefined,
+    paymentId: row.payment_id ? String(row.payment_id) : undefined,
+    paymentProvider: row.payment_provider ?? undefined,
+    paymentMethod: row.payment_method ?? undefined,
+    paymentStatus: row.payment_status ?? undefined,
+    paymentAmountYen:
+      typeof row.payment_amount_yen === "number" ? row.payment_amount_yen : undefined,
+    paymentCurrency: row.payment_currency ?? undefined,
+    paymentRecordStatus: row.payment_record_status ?? undefined,
+    paymentRefundAmount:
+      typeof row.payment_refund_amount === "number" ? row.payment_refund_amount : undefined,
+    paymentPaidAt: row.payment_paid_at ?? undefined,
     createdAt: String(row.created_at ?? row.start_at),
   }
 }
@@ -688,18 +706,32 @@ export async function putAdminReservationNotes(
 export async function patchAdminReservationStatus(
   reservationId: string,
   status: AdminReservationApiStatus,
+  options?: { refundPayment?: boolean },
 ): Promise<void> {
   const url = `${ADMIN_RESERVATIONS_LIST_PATH}/${encodeURIComponent(reservationId)}/status`
   const res = await apiFetch(url, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, refund_payment: options?.refundPayment === true }),
   })
   if (res.status === 401) {
     throw new Error("UNAUTHORIZED")
   }
   if (!res.ok) {
     throw new Error("FETCH_FAILED")
+  }
+}
+
+export async function postAdminPaymentRefund(paymentId: string): Promise<void> {
+  const res = await apiFetch(`/api/admin/payments/${encodeURIComponent(paymentId)}/refund`, {
+    method: "POST",
+  })
+  if (res.status === 401) {
+    throw new Error("UNAUTHORIZED")
+  }
+  if (!res.ok) {
+    const detail = await parseAdminApiErrorDetail(res)
+    throw new Error(detail ?? "FETCH_FAILED")
   }
 }
 

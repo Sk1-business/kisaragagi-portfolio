@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react"
 import { ArrowRight, CheckCircle2, ChevronDown, Dumbbell, Eye, EyeOff, X } from "lucide-react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,6 +19,7 @@ import { AUTH_AUDIENCE_TEXT, AUTH_TEXT } from "@/features/auth/constants"
 import { useAuthNavigation } from "@/features/auth/hooks/useAuthNavigation"
 import type { AuthFormCardProps, Gender, MockUser } from "@/features/auth/types/auth"
 import { fetchSalonPage } from "@/features/user/api/userSalonApi"
+import lineBrandIcon from "@/assets/LINE_Brand_icon.png"
 import { persistShopSlug, resolveShopSlug } from "@/lib/shopSlug"
 import {
   isCompletePhoneSegments,
@@ -54,8 +55,22 @@ const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: "not_specified", label: "回答しない" },
 ]
 
+const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/
+
+function validateSalonSlug(slug: string, label: string): string {
+  if (!slug) return `${label}を入力してください。`
+  if (slug.length < 3) return `${label}は3文字以上で入力してください。`
+  if (slug.length > 100) return `${label}は100文字以内で入力してください。`
+  if (!SLUG_PATTERN.test(slug)) {
+    return `${label}は、小文字英数字とハイフンのみで入力してください。先頭と末尾は小文字英数字にしてください。`
+  }
+  return ""
+}
+
 export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   const [searchParams] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
   const text = AUTH_TEXT[mode]
   const audienceText = AUTH_AUDIENCE_TEXT[audience]
   const { submit } = useAuthNavigation(audience, mode)
@@ -69,12 +84,32 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   const [phoneSegments, setPhoneSegments] = useState<PhoneSegments>(["", "", ""])
   const [gender, setGender] = useState<Gender | "">("")
   const [birthDateInput, setBirthDateInput] = useState("")
+  const [backofficeSignupRole, setBackofficeSignupRole] = useState<Exclude<UserRole, "CUSTOMER">>("ADMIN")
+  const [initialInviteToken] = useState(() => searchParams.get("inviteToken")?.trim() ?? "")
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [showTermsModal, setShowTermsModal] = useState(false)
   const isDev = import.meta.env.DEV
   const developmentUsers = (mockUsers as MockUser[]).filter((user) =>
     VISIBLE_ROLES[audience].includes(user.role),
   )
+
+  useEffect(() => {
+    const queryShopId = searchParams.get("shopId")?.trim()
+    if (!queryShopId) return
+    persistShopSlug(queryShopId)
+    const nextParams = new URLSearchParams(location.search)
+    nextParams.delete("shopId")
+    const nextSearch = nextParams.toString()
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${location.hash}`, {
+      replace: true,
+    })
+  }, [location.hash, location.pathname, location.search, navigate, searchParams])
+
+  useEffect(() => {
+    if (mode === "signup" && !isCustomerPortal && initialInviteToken) {
+      setBackofficeSignupRole("STAFF")
+    }
+  }, [initialInviteToken, isCustomerPortal, mode])
 
   useEffect(() => {
     if (!isCustomerPortal || !shopSlug) return
@@ -93,8 +128,8 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
           ? "ログインしてください。"
           : null
 
-  function withShopId(path: string) {
-    if (shopSlug) return `${path}?shopId=${encodeURIComponent(shopSlug)}`
+  function withShopSlug(path: string) {
+    if (shopSlug) persistShopSlug(shopSlug)
     return path
   }
 
@@ -111,8 +146,16 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
 
     const lastName = String(formData.get("lastName") ?? "")
     const firstName = String(formData.get("firstName") ?? "")
+    const adminName = String(formData.get("adminName") ?? "").trim()
+    const signupSalonName = String(formData.get("salonName") ?? "").trim()
+    const backofficeSalonSlug = String(formData.get("salonSlug") ?? "").trim().toLowerCase()
+    const inviteToken = String(formData.get("inviteToken") ?? "").trim()
     const phone = joinPhoneSegments(phoneSegments)
-    const name = lastName && firstName ? `${lastName} ${firstName}` : undefined
+    const name = isCustomerPortal
+      ? lastName && firstName
+        ? `${lastName} ${firstName}`
+        : undefined
+      : adminName || undefined
     const resolvedShopSlug = shopSlug.trim() || undefined
 
     const birthDate = birthDateInput.trim()
@@ -120,6 +163,27 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
     if (mode === "signup" && password !== passwordConfirm) {
       setLoginError("パスワードが一致しません。")
       return
+    }
+    if (mode === "signup" && !isCustomerPortal && !adminName) {
+      setLoginError("氏名を入力してください。")
+      return
+    }
+    if (mode === "signup" && !isCustomerPortal && signupRole === "ADMIN") {
+      if (!signupSalonName) {
+        setLoginError("サロン名を入力してください。")
+        return
+      }
+      const slugError = validateSalonSlug(backofficeSalonSlug, "予約ページURL slug")
+      if (slugError) {
+        setLoginError(slugError)
+        return
+      }
+    }
+    if (mode === "signup" && !isCustomerPortal && signupRole === "STAFF") {
+      if (!inviteToken) {
+        setLoginError("招待トークンを入力してください。")
+        return
+      }
     }
     if (mode === "signup" && isCustomerPortal && !isCompletePhoneSegments(phoneSegments)) {
       setLoginError("電話番号は数字のみで3-4-4桁を入力してください。")
@@ -150,7 +214,13 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
       signupRole,
       name,
       phone: phone || undefined,
-      shopSlug: resolvedShopSlug,
+      shopSlug:
+        !isCustomerPortal && signupRole === "STAFF"
+          ? undefined
+          : resolvedShopSlug,
+      inviteToken: !isCustomerPortal && signupRole === "STAFF" ? inviteToken : undefined,
+      salonName: !isCustomerPortal && signupRole === "ADMIN" ? signupSalonName : undefined,
+      salonSlug: !isCustomerPortal && signupRole === "ADMIN" ? backofficeSalonSlug : undefined,
       gender: gender || undefined,
       birthDate: birthDate ? birthDate.replace(/\//g, "-") : undefined,
     })
@@ -161,6 +231,10 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
     }
 
     if (mode === "login") {
+      if (result.message) {
+        setLoginError(result.message)
+        return
+      }
       if (
         audience === "BACKOFFICE_PORTAL" &&
         result.reason === "unauthorized"
@@ -171,6 +245,11 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
           "ログインに失敗しました。メールアドレスまたはパスワードを確認してください。",
         )
       }
+      return
+    }
+
+    if (result.message) {
+      setLoginError(result.message)
     }
   }
 
@@ -445,12 +524,62 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               ) : null}
 
               {mode === "signup" && !isCustomerPortal ? (
+                <>
+                  <FieldGroup label="氏名">
+                    <Input
+                      id="adminName"
+                      name="adminName"
+                      placeholder="山田 太郎"
+                      required
+                      className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                    />
+                  </FieldGroup>
+                  {backofficeSignupRole === "ADMIN" ? (
+                    <FieldGroup label="サロン名">
+                      <Input
+                        id="salonName"
+                        name="salonName"
+                        placeholder="Sample Salon"
+                        required
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      />
+                    </FieldGroup>
+                  ) : null}
+                  {backofficeSignupRole === "ADMIN" ? (
+                    <FieldGroup label="予約ページURL slug">
+                      <Input
+                        id="salonSlug"
+                        name="salonSlug"
+                        placeholder="sample-salon-2026"
+                        required
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      />
+                    </FieldGroup>
+                  ) : (
+                    <FieldGroup label="招待トークン">
+                      <Input
+                        id="inviteToken"
+                        name="inviteToken"
+                        defaultValue={initialInviteToken}
+                        placeholder="招待URLに含まれるトークン"
+                        required
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      />
+                    </FieldGroup>
+                  )}
+                </>
+              ) : null}
+
+              {mode === "signup" && !isCustomerPortal ? (
                 <FieldGroup label="ロール">
                   <select
                     id="role"
                     name="role"
                     className="h-11 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm outline-none transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
-                    defaultValue="ADMIN"
+                    value={backofficeSignupRole}
+                    onChange={(event) =>
+                      setBackofficeSignupRole(event.target.value as Exclude<UserRole, "CUSTOMER">)
+                    }
                   >
                     {ROLE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -484,7 +613,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               <div className="text-sm text-neutral-500">
                 <span>{text.switchLabel}</span>
                 <Link
-                  to={withShopId(SWITCH_PATH[audience][mode])}
+                  to={withShopSlug(SWITCH_PATH[audience][mode])}
                   className="ml-1 font-semibold text-black underline decoration-neutral-300 underline-offset-4 transition-colors hover:decoration-black"
                 >
                   {text.switchLinkText}
@@ -658,7 +787,7 @@ function LineLoginButton({ shopSlug, onError }: { shopSlug?: string; onError: (m
       onClick={handleClick}
       className="group flex h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-[#06C755] text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#05b34e] hover:shadow-md active:scale-[0.98] disabled:opacity-60"
     >
-      <img src="/LINE_Brand_icon.png" alt="" className="size-5" />
+      <img src={lineBrandIcon} alt="" className="size-5" />
       {loading ? "リダイレクト中…" : "LINEでログイン / 新規登録"}
     </button>
   )

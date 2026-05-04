@@ -12,6 +12,7 @@ import {
 import { fetchAdminMenus } from "@/features/admin/api/menusApi"
 import { fetchAdminTrainerById } from "@/features/admin/api/trainersApi"
 import { isStaffNameTaken } from "@/features/admin/api/staffApi"
+import { postAdminStaffInvite, type AdminStaffInviteOut } from "@/features/admin/api/staffInvitesApi"
 import { useAdminStaff } from "@/features/admin/context/AdminStaffContext"
 import { ROUTES } from "@/constants/routes"
 import type { Staff } from "@/features/admin/types/staff"
@@ -72,6 +73,36 @@ export function AdminStaffPage() {
   const [pageError, setPageError] = useState("")
   const [deleteWorking, setDeleteWorking] = useState(false)
   const [deletePrecheckLoading, setDeletePrecheckLoading] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteSaving, setInviteSaving] = useState(false)
+  const [inviteResult, setInviteResult] = useState<AdminStaffInviteOut | null>(null)
+  const [inviteError, setInviteError] = useState("")
+
+  const createInvite = async () => {
+    const email = inviteEmail.trim()
+    if (!email) {
+      setInviteError("招待するメールアドレスを入力してください。")
+      return
+    }
+    setInviteSaving(true)
+    setInviteError("")
+    setInviteResult(null)
+    try {
+      const invite = await postAdminStaffInvite(email)
+      setInviteResult(invite)
+      setInviteEmail("")
+    } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
+      setInviteError(
+        e instanceof Error ? e.message : "スタッフ招待の作成に失敗しました。",
+      )
+    } finally {
+      setInviteSaving(false)
+    }
+  }
 
   const openAdd = () => {
     setFormError("")
@@ -482,6 +513,51 @@ export function AdminStaffPage() {
       {deletePrecheckLoading && (
         <p className="text-sm text-muted-foreground">予約状況を確認しています...</p>
       )}
+
+      <Card className="border-border shadow-xs">
+        <CardHeader>
+          <CardTitle className="text-lg">スタッフ招待</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <div className="space-y-2">
+              <Label htmlFor="staff-invite-email">メールアドレス</Label>
+              <Input
+                id="staff-invite-email"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => {
+                  setInviteEmail(e.target.value)
+                  setInviteError("")
+                }}
+                placeholder="staff@example.com"
+              />
+            </div>
+            <Button
+              type="button"
+              className="self-end rounded-md"
+              disabled={inviteSaving}
+              onClick={() => void createInvite()}
+            >
+              {inviteSaving ? "作成中..." : "招待を作成"}
+            </Button>
+          </div>
+          {inviteError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {inviteError}
+            </p>
+          ) : null}
+          {inviteResult ? (
+            <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
+              <p className="font-medium">招待URLを作成しました。</p>
+              <p className="mt-1 break-all font-mono text-xs">{inviteResult.signup_url}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                有効期限: {new Date(inviteResult.expires_at).toLocaleString("ja-JP")}
+              </p>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Card className="border-border shadow-xs">
         <CardHeader>

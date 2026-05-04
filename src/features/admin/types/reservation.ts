@@ -18,5 +18,14 @@ export interface Reservation {
   /** API の trainer_name（スタッフ一覧に無い場合の色分け・絞り込み用） */
   trainerName?: string
   memo?: string
+  paymentId?: string
+  paymentProvider?: string
+  paymentMethod?: string
+  paymentStatus?: string
+  paymentAmountYen?: number
+  paymentCurrency?: string
+  paymentRecordStatus?: string
+  paymentRefundAmount?: number
+  paymentPaidAt?: string
   createdAt: string
 }
