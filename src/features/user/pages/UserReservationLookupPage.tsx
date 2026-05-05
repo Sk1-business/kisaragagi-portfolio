@@ -30,14 +30,18 @@ export function UserReservationLookupPage() {
   const currentSearch = params.toString()
 
   useEffect(() => {
-    setEmail(currentEmail)
-    setPhone(currentPhone)
+    queueMicrotask(() => {
+      setEmail(currentEmail)
+      setPhone(currentPhone)
+    })
   }, [currentEmail, currentPhone])
 
   useEffect(() => {
     if (!currentEmail && !currentPhone) {
-      setReservations([])
-      setIsLoading(false)
+      queueMicrotask(() => {
+        setReservations([])
+        setIsLoading(false)
+      })
       return
     }
     let mounted = true

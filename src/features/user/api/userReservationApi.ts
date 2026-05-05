@@ -450,38 +450,6 @@ export async function fetchReservationMenus(
   }))
 }
 
-export async function fetchUserReservations(shopSlug?: string): Promise<UserReservation[]> {
-  const resolvedShopSlug = resolveShopSlug(shopSlug)
-  try {
-    const allMeta = loadReservationMeta()
-    const details = await apiRequest<ReservationDetailResponse[]>("/api/my/reservations")
-    return details
-      .map((detail) =>
-        toReservation(detail, allMeta.find((meta) => meta.id === detail.reservation_id)),
-      )
-      .sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`))
-  } catch {
-    const allMeta = loadReservationMeta().filter((meta) => !!meta.confirmationToken)
-    if (allMeta.length === 0) return []
-    if (!resolvedShopSlug) return []
-    const reservations = await Promise.all(
-      allMeta.map(async (meta) => {
-        try {
-          const detail = await apiRequest<ReservationDetailResponse>(
-            buildSalonApiPath(resolvedShopSlug, `/reservations/${meta.confirmationToken}`),
-          )
-          return toReservation(detail, meta)
-        } catch {
-          return null
-        }
-      }),
-    )
-    return reservations
-      .filter((reservation): reservation is UserReservation => reservation !== null)
-      .sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`))
-  }
-}
-
 export async function fetchReservationsByContact(payload: {
   shopSlug?: string
   email?: string

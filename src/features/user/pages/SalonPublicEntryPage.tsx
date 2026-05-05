@@ -13,7 +13,7 @@ export function SalonPublicEntryPage() {
 
   useEffect(() => {
     if (!slug) {
-      setError("サロンが見つかりません。")
+      queueMicrotask(() => setError("サロンが見つかりません。"))
       return
     }
 

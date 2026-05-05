@@ -194,7 +194,7 @@ export function UserSchedulePage() {
 
   useEffect(() => {
     if (assignMode !== "nomination") {
-      setSelectedTrainerId("")
+      queueMicrotask(() => setSelectedTrainerId(""))
     }
   }, [assignMode])
 
@@ -207,14 +207,19 @@ export function UserSchedulePage() {
       !selectedMenu?.id ||
       trainers.length === 0
     ) {
-      setAvailableTrainerIds(null)
-      setIsLoadingAvailableTrainers(false)
+      queueMicrotask(() => {
+        if (!mounted) return
+        setAvailableTrainerIds(null)
+        setIsLoadingAvailableTrainers(false)
+      })
       return () => {
         mounted = false
       }
     }
 
-    setIsLoadingAvailableTrainers(true)
+    queueMicrotask(() => {
+      if (mounted) setIsLoadingAvailableTrainers(true)
+    })
     void Promise.all(
       trainers.map(async (trainer) => {
         const slots = await fetchAvailableTimeSlots(
@@ -250,7 +255,7 @@ export function UserSchedulePage() {
     if (!selectedTrainerId) return
     if (!availableTrainerIds) return
     if (availableTrainerIds.has(selectedTrainerId)) return
-    setSelectedTrainerId("")
+    queueMicrotask(() => setSelectedTrainerId(""))
   }, [selectedTrainerId, availableTrainerIds])
 
   const canProceed = Boolean(

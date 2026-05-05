@@ -6,7 +6,6 @@ import {
   Clock,
   CreditCard,
   MessageSquare,
-  QrCode,
   UserRound,
 } from "lucide-react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
@@ -26,6 +25,7 @@ import {
 } from "@/features/user/components/UserReservationStripePayment"
 import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
+import { USER_PAYMENT_METHODS } from "@/features/user/constants/paymentMethods"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 import {
   clearReservationUpdateIntent,
@@ -36,11 +36,6 @@ import { useUserReservation } from "@/features/user/hooks/useUserReservation"
 import type { ReservationInputData } from "@/features/user/pages/UserReservationInputPage"
 import { addMinutesToTimeString, formatDateLongWithWeekday } from "@/lib/dateFormat"
 import { isCompletePhoneSegments, joinPhoneSegments, parsePhoneToSegments } from "@/lib/phone"
-
-const PAYMENT_METHODS = [
-  { id: "credit", label: "クレジットカード", icon: CreditCard },
-  { id: "paypay", label: "PayPay", icon: QrCode },
-] as const
 
 function splitFullName(fullName: string): { lastName: string; firstName: string } {
   const trimmed = fullName.trim()
@@ -536,7 +531,7 @@ export function UserReservationConfirmPage() {
               </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              {PAYMENT_METHODS.map((method) => {
+              {USER_PAYMENT_METHODS.map((method) => {
                 const isActive = input.paymentMethod === method.id
                 const Icon = method.icon
                 return (

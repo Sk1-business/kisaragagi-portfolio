@@ -97,14 +97,19 @@ export function UserNominationPage() {
       !selectedMenu?.id ||
       trainers.length === 0
     ) {
-      setAvailableTrainerIds(null)
-      setIsLoadingAvailableTrainers(false)
+      queueMicrotask(() => {
+        if (!mounted) return
+        setAvailableTrainerIds(null)
+        setIsLoadingAvailableTrainers(false)
+      })
       return () => {
         mounted = false
       }
     }
 
-    setIsLoadingAvailableTrainers(true)
+    queueMicrotask(() => {
+      if (mounted) setIsLoadingAvailableTrainers(true)
+    })
     void Promise.all(
       trainers.map(async (trainer) => {
         const slots = await fetchAvailableTimeSlots(
@@ -140,7 +145,7 @@ export function UserNominationPage() {
     if (!selectedTrainerId) return
     if (!availableTrainerIds) return
     if (availableTrainerIds.has(selectedTrainerId)) return
-    setSelectedTrainerId("")
+    queueMicrotask(() => setSelectedTrainerId(""))
   }, [selectedTrainerId, availableTrainerIds])
 
   function handleBack() {
@@ -291,13 +296,15 @@ export function UserNominationPage() {
           if (!selectedMenu || !assignMode || !selectedDate || !selectedTime) return
           const isNomination = assignMode === "nomination"
           if (isNomination && !selectedTrainer) return
+          const nominatedTrainerId = isNomination && selectedTrainer ? selectedTrainer.id : ""
+          const nominatedTrainerName = isNomination && selectedTrainer ? selectedTrainer.name : ""
           navigate(buildPathWithShopId(ROUTES.userReservationInput, shopId), {
             state: {
               mode: isNomination ? "nomination" : "omakase",
               date: selectedDate,
               time: selectedTime,
-              trainerId: isNomination ? selectedTrainer.id : "",
-              trainerName: isNomination ? selectedTrainer.name : "",
+              trainerId: nominatedTrainerId,
+              trainerName: nominatedTrainerName,
               preferredMenuId: selectedMenu.id,
               preferredMenuName: selectedMenu.name,
               ...(returnSearch ? { returnSearch } : {}),

@@ -5,7 +5,6 @@ import {
   Clock,
   CreditCard,
   MessageSquare,
-  QrCode,
   UserRound,
 } from "lucide-react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
@@ -29,6 +28,7 @@ import {
   type UserReservationStripePaymentHandle,
 } from "@/features/user/components/UserReservationStripePayment"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
+import { USER_PAYMENT_METHODS } from "@/features/user/constants/paymentMethods"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 import {
   clearReservationUpdateIntent,
@@ -67,11 +67,6 @@ export interface ReservationInputData {
   menuDurationMinutes?: number | null
   menuPrice?: number | null
 }
-
-const PAYMENT_METHODS = [
-  { id: "credit", label: "クレジットカード", icon: CreditCard },
-  { id: "paypay", label: "PayPay", icon: QrCode },
-] as const
 
 export function UserReservationInputPage() {
   type ConfirmDialogStep = "summary" | "card"
@@ -157,7 +152,9 @@ export function UserReservationInputPage() {
   useEffect(() => {
     let mounted = true
     if (!shopId?.trim()) {
-      setStripeConnectReady(null)
+      queueMicrotask(() => {
+        if (mounted) setStripeConnectReady(null)
+      })
       return
     }
     void fetchSalonPage(shopId)
@@ -666,7 +663,7 @@ export function UserReservationInputPage() {
                 </p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                {PAYMENT_METHODS.map((method) => {
+                {USER_PAYMENT_METHODS.map((method) => {
                   const isActive = paymentMethod === method.id
                   const isDisabled = method.id === "credit" && !creditPaymentAvailable
                   const Icon = method.icon
