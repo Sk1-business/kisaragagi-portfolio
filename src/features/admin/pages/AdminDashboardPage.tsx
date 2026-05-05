@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
 import { AdminSalonSlugCard } from "@/features/admin/components/AdminSalonSlugCard"
+import { AdminStripeConnectCard } from "@/features/admin/components/AdminStripeConnectCard"
 import { AdminWelcomeCard } from "@/features/admin/components/AdminWelcomeCard"
 import { TodayReservationsCard } from "@/features/admin/components/TodayReservationsCard"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
@@ -98,6 +99,7 @@ export function AdminDashboardPage() {
         staffList={staffList}
         updatedAtLabel={updatedLabel || undefined}
       />
+      <AdminStripeConnectCard />
       <AdminSalonSlugCard />
     </div>
   )

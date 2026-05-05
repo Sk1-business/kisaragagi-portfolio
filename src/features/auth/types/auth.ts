@@ -9,6 +9,9 @@ export interface AuthFormValues {
   name?: string
   phone?: string
   shopSlug?: string
+  inviteToken?: string
+  salonName?: string
+  salonSlug?: string
   gender?: Gender
   birthDate?: string
 }

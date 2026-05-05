@@ -25,6 +25,26 @@ import {
 } from "@/features/admin/api/reservationsApi"
 import { X } from "lucide-react"
 
+function formatYen(amount?: number): string {
+  if (typeof amount !== "number") return "-"
+  return amount.toLocaleString("ja-JP", { style: "currency", currency: "JPY" })
+}
+
+function paymentProviderLabel(provider?: string): string {
+  if (provider === "stripe") return "クレジットカード"
+  if (provider === "credit") return "クレジットカード"
+  if (provider === "paypay") return "PayPay"
+  return provider || "-"
+}
+
+function paymentStatusLabel(status?: string): string {
+  if (status === "succeeded") return "支払い済み"
+  if (status === "refunded") return "返金済み"
+  if (status === "pending") return "処理中"
+  if (status === "failed") return "失敗"
+  return status || "-"
+}
+
 interface ReservationDetailCardProps {
   reservation: Reservation
   staffList?: Staff[]
@@ -37,13 +57,18 @@ interface ReservationDetailCardProps {
    * 指定時はステータスを編集可能（変更時は確認後に呼ぶ）。
    * `PATCH /api/admin/reservations/{id}/status` 用の値（BOOKED / DONE / NOSHOW / CANCELED）
    */
-  onUpdateStatus?: (status: AdminReservationApiStatus) => void | Promise<void>
+  onUpdateStatus?: (
+    status: AdminReservationApiStatus,
+    options?: { refundPayment?: boolean },
+  ) => void | Promise<void>
+  onRefundPayment?: (paymentId: string) => void | Promise<void>
   /** 指定時は担当者を編集可能（非同期可・失敗時は確認を閉じない） */
   onUpdateAssignee?: (assigneeId: string) => void | Promise<void>
   /** メモ保存 API 実行中 */
   memoSaving?: boolean
   /** ステータス変更 API 実行中 */
   statusSaving?: boolean
+  refundSaving?: boolean
   /** 担当者変更 API 実行中 */
   assigneeSaving?: boolean
   /**
@@ -64,9 +89,11 @@ export function ReservationDetailCard({
   onClose,
   onUpdateMemo,
   onUpdateStatus,
+  onRefundPayment,
   onUpdateAssignee,
   memoSaving = false,
   statusSaving = false,
+  refundSaving = false,
   assigneeSaving = false,
   shiftCoverageByStaffId,
   shiftCoverageLoading = false,
@@ -80,6 +107,10 @@ export function ReservationDetailCard({
   const endMs = new Date(reservation.endAt).getTime()
   const reservationNotStarted = Number.isFinite(startMs) && startMs > nowMs
   const reservationEnded = Number.isFinite(endMs) && endMs < nowMs
+  const refundable =
+    Boolean(reservation.paymentId) &&
+    reservation.paymentRecordStatus === "succeeded" &&
+    (reservation.paymentRefundAmount ?? 0) <= 0
 
   const canSelectStatus = (status: AdminReservationApiStatus): boolean => {
     if (reservationNotStarted) {
@@ -143,6 +174,8 @@ export function ReservationDetailCard({
   )
   const [statusRuleError, setStatusRuleError] = useState("")
   const [statusConfirm, setStatusConfirm] = useState<AdminReservationApiStatus | null>(null)
+  const [refundOnCancel, setRefundOnCancel] = useState(false)
+  const [refundConfirm, setRefundConfirm] = useState(false)
   const [editingAssignee, setEditingAssignee] = useState(false)
   const [assigneeDraft, setAssigneeDraft] = useState(() =>
     resolveReservationStaffIdForUi(reservation, staffList),
@@ -514,6 +547,43 @@ export function ReservationDetailCard({
             <p>{adminReservationApiStatusLabel(currentApiStatus)}</p>
           )}
         </div>
+        <div className="rounded-md border border-border bg-muted/20 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-muted-foreground">決済情報</p>
+            {onRefundPayment && refundable ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 rounded-md px-2 text-xs"
+                disabled={refundSaving}
+                onClick={() => setRefundConfirm(true)}
+              >
+                返金
+              </Button>
+            ) : null}
+          </div>
+          {reservation.paymentId ? (
+            <dl className="grid grid-cols-[88px_1fr] gap-x-3 gap-y-1 text-xs">
+              <dt className="text-muted-foreground">方法</dt>
+              <dd>{paymentProviderLabel(reservation.paymentProvider ?? reservation.paymentMethod)}</dd>
+              <dt className="text-muted-foreground">状態</dt>
+              <dd>{paymentStatusLabel(reservation.paymentRecordStatus ?? reservation.paymentStatus)}</dd>
+              <dt className="text-muted-foreground">金額</dt>
+              <dd>{formatYen(reservation.paymentAmountYen)}</dd>
+              <dt className="text-muted-foreground">返金額</dt>
+              <dd>{formatYen(reservation.paymentRefundAmount ?? 0)}</dd>
+              {reservation.paymentPaidAt ? (
+                <>
+                  <dt className="text-muted-foreground">支払日時</dt>
+                  <dd>{new Date(reservation.paymentPaidAt).toLocaleString("ja-JP")}</dd>
+                </>
+              ) : null}
+            </dl>
+          ) : (
+            <p className="text-xs text-muted-foreground">この予約に紐づく決済はありません。</p>
+          )}
+        </div>
         <div>
           <div className="mb-1 flex items-center justify-between gap-2">
             <p className="text-xs font-medium text-muted-foreground">メモ</p>
@@ -615,6 +685,22 @@ export function ReservationDetailCard({
                 </strong>
                 」に変更しますか？
               </p>
+              {statusConfirm === "CANCELED" && refundable ? (
+                <label className="flex items-start gap-2 rounded-md border border-border p-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1 size-4"
+                    checked={refundOnCancel}
+                    onChange={(e) => setRefundOnCancel(e.target.checked)}
+                  />
+                  <span>
+                    <span className="block font-medium">同時に返金する</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {formatYen(reservation.paymentAmountYen)} の決済を返金します。
+                    </span>
+                  </span>
+                </label>
+              ) : null}
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"
@@ -631,9 +717,14 @@ export function ReservationDetailCard({
                   onClick={async () => {
                     if (!statusConfirm || !onUpdateStatus) return
                     try {
-                      await Promise.resolve(onUpdateStatus(statusConfirm))
+                      await Promise.resolve(
+                        onUpdateStatus(statusConfirm, {
+                          refundPayment: statusConfirm === "CANCELED" && refundOnCancel,
+                        }),
+                      )
                       setStatusConfirm(null)
                       setEditingStatus(false)
+                      setRefundOnCancel(false)
                     } catch {
                       /* 親がエラー表示 */
                     }
@@ -646,6 +737,58 @@ export function ReservationDetailCard({
           </Card>
         </div>
       )}
+
+      {refundConfirm && onRefundPayment && reservation.paymentId ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="refund-confirm-title"
+          onClick={() => setRefundConfirm(false)}
+        >
+          <Card
+            className="w-full max-w-md border-border shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader>
+              <CardTitle id="refund-confirm-title" className="text-base">
+                返金の確認
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm">
+                {formatYen(reservation.paymentAmountYen)} の決済を返金します。
+              </p>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-md"
+                  onClick={() => setRefundConfirm(false)}
+                >
+                  いいえ
+                </Button>
+                <Button
+                  type="button"
+                  className="rounded-md"
+                  disabled={refundSaving}
+                  onClick={async () => {
+                    if (!reservation.paymentId) return
+                    try {
+                      await Promise.resolve(onRefundPayment(reservation.paymentId))
+                      setRefundConfirm(false)
+                    } catch {
+                      /* parent shows error */
+                    }
+                  }}
+                >
+                  {refundSaving ? "処理中..." : "返金する"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
 
       {assigneeConfirm && onUpdateAssignee && (
         <div

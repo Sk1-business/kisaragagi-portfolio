@@ -13,6 +13,7 @@ import {
   fetchAllReservationsForAdmin,
   fetchAdminReservationById,
   patchAdminReservationStatus,
+  postAdminPaymentRefund,
   putAdminReservationNotes,
   putAdminReservationTrainerId,
 } from "@/features/admin/api/reservationsApi"
@@ -79,6 +80,7 @@ export function AdminReservationDetailPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [memoSaving, setMemoSaving] = useState(false)
   const [statusSaving, setStatusSaving] = useState(false)
+  const [refundSaving, setRefundSaving] = useState(false)
   const [assigneeSaving, setAssigneeSaving] = useState(false)
   const [assigneeValidationReservations, setAssigneeValidationReservations] = useState<
     Reservation[]
@@ -292,7 +294,10 @@ export function AdminReservationDetailPage() {
     }
   }
 
-  const handleUpdateStatus = async (apiStatus: AdminReservationApiStatus) => {
+  const handleUpdateStatus = async (
+    apiStatus: AdminReservationApiStatus,
+    options?: { refundPayment?: boolean },
+  ) => {
     if (!detail || !id) return
     const nowMs = Date.now()
     const startMs = new Date(detail.startAt).getTime()
@@ -310,7 +315,7 @@ export function AdminReservationDetailPage() {
     setSaveError(null)
     setStatusSaving(true)
     try {
-      await patchAdminReservationStatus(detail.id, apiStatus)
+      await patchAdminReservationStatus(detail.id, apiStatus, options)
       const fresh = await fetchAdminReservationById(id, staffList)
       if (!fresh) {
         throw new Error("FETCH_FAILED")
@@ -337,6 +342,43 @@ export function AdminReservationDetailPage() {
       throw e
     } finally {
       setStatusSaving(false)
+    }
+  }
+
+  const handleRefundPayment = async (paymentId: string) => {
+    if (!detail || !id) return
+    setSaveError(null)
+    setRefundSaving(true)
+    try {
+      await postAdminPaymentRefund(paymentId)
+      const fresh = await fetchAdminReservationById(id, staffList)
+      if (!fresh) {
+        throw new Error("FETCH_FAILED")
+      }
+      setDetail(fresh)
+      mergeReservationIntoList(fresh)
+      const actor = profile.name.trim() || "管理者"
+      const log: ReservationEventLog = {
+        timestamp: new Date().toISOString(),
+        actor,
+        action: "status_changed",
+        message: "決済を返金しました",
+      }
+      appendReservationEventLog(detail.id, log)
+      setEventLogs((prev) => [log, ...prev].slice(0, 200))
+    } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
+      setSaveError(
+        e instanceof Error && e.message && e.message !== "FETCH_FAILED"
+          ? `返金に失敗しました: ${e.message}`
+          : "返金に失敗しました。通信またはサーバーを確認してください。",
+      )
+      throw e
+    } finally {
+      setRefundSaving(false)
     }
   }
 
@@ -410,9 +452,11 @@ export function AdminReservationDetailPage() {
         onClose={() => navigate(-1)}
         onUpdateMemo={handleUpdateMemo}
         onUpdateStatus={handleUpdateStatus}
+        onRefundPayment={handleRefundPayment}
         onUpdateAssignee={handleUpdateAssignee}
         memoSaving={memoSaving}
         statusSaving={statusSaving}
+        refundSaving={refundSaving}
         assigneeSaving={assigneeSaving}
         shiftCoverageByStaffId={shiftCoverageByStaffId}
         shiftCoverageLoading={shiftCoverageLoading}

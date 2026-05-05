@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom"
 
-import { postAdminLogin } from "@/features/auth/api/adminLoginApi"
+import { postAdminLogin, postAdminSignup } from "@/features/auth/api/adminLoginApi"
 import { loginCustomer, registerCustomer } from "@/features/auth/api/customerAuthApi"
 import { submitMockAuth } from "@/features/auth/api/mockAuthApi"
 import type { AuthFormValues } from "@/features/auth/types/auth"
@@ -61,6 +61,27 @@ export function useAuthNavigation(audience: AuthAudience, mode: AuthMode) {
         return { ok: false, reason: "unauthorized" }
       }
       return { ok: false, reason: "generic" }
+    }
+
+    if (audience === "BACKOFFICE_PORTAL" && mode === "signup") {
+      if (values.signupRole !== "ADMIN" && values.signupRole !== "STAFF") {
+        return { ok: false, reason: "generic", message: "ロールを選択してください。" }
+      }
+      const result = await postAdminSignup({
+        email: values.email,
+        password: values.password,
+        name: values.name ?? "",
+        role: values.signupRole,
+        salonName: values.salonName,
+        salonSlug: values.salonSlug,
+        shopSlug: values.shopSlug,
+        inviteToken: values.inviteToken,
+      })
+      if (!result.ok) {
+        return { ok: false, reason: "generic", message: result.error }
+      }
+      navigate(ROUTES.adminHome)
+      return { ok: true }
     }
 
     const result = await submitMockAuth(audience, mode, values)

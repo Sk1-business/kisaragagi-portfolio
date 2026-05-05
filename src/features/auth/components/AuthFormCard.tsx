@@ -55,6 +55,18 @@ const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: "not_specified", label: "回答しない" },
 ]
 
+const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/
+
+function validateSalonSlug(slug: string, label: string): string {
+  if (!slug) return `${label}を入力してください。`
+  if (slug.length < 3) return `${label}は3文字以上で入力してください。`
+  if (slug.length > 100) return `${label}は100文字以内で入力してください。`
+  if (!SLUG_PATTERN.test(slug)) {
+    return `${label}は、小文字英数字とハイフンのみで入力してください。先頭と末尾は小文字英数字にしてください。`
+  }
+  return ""
+}
+
 export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   const [searchParams] = useSearchParams()
   const location = useLocation()
@@ -72,6 +84,8 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   const [phoneSegments, setPhoneSegments] = useState<PhoneSegments>(["", "", ""])
   const [gender, setGender] = useState<Gender | "">("")
   const [birthDateInput, setBirthDateInput] = useState("")
+  const [backofficeSignupRole, setBackofficeSignupRole] = useState<Exclude<UserRole, "CUSTOMER">>("ADMIN")
+  const [initialInviteToken] = useState(() => searchParams.get("inviteToken")?.trim() ?? "")
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [showTermsModal, setShowTermsModal] = useState(false)
   const isDev = import.meta.env.DEV
@@ -90,6 +104,12 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
       replace: true,
     })
   }, [location.hash, location.pathname, location.search, navigate, searchParams])
+
+  useEffect(() => {
+    if (mode === "signup" && !isCustomerPortal && initialInviteToken) {
+      setBackofficeSignupRole("STAFF")
+    }
+  }, [initialInviteToken, isCustomerPortal, mode])
 
   useEffect(() => {
     if (!isCustomerPortal || !shopSlug) return
@@ -126,8 +146,16 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
 
     const lastName = String(formData.get("lastName") ?? "")
     const firstName = String(formData.get("firstName") ?? "")
+    const adminName = String(formData.get("adminName") ?? "").trim()
+    const signupSalonName = String(formData.get("salonName") ?? "").trim()
+    const backofficeSalonSlug = String(formData.get("salonSlug") ?? "").trim().toLowerCase()
+    const inviteToken = String(formData.get("inviteToken") ?? "").trim()
     const phone = joinPhoneSegments(phoneSegments)
-    const name = lastName && firstName ? `${lastName} ${firstName}` : undefined
+    const name = isCustomerPortal
+      ? lastName && firstName
+        ? `${lastName} ${firstName}`
+        : undefined
+      : adminName || undefined
     const resolvedShopSlug = shopSlug.trim() || undefined
 
     const birthDate = birthDateInput.trim()
@@ -135,6 +163,27 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
     if (mode === "signup" && password !== passwordConfirm) {
       setLoginError("パスワードが一致しません。")
       return
+    }
+    if (mode === "signup" && !isCustomerPortal && !adminName) {
+      setLoginError("氏名を入力してください。")
+      return
+    }
+    if (mode === "signup" && !isCustomerPortal && signupRole === "ADMIN") {
+      if (!signupSalonName) {
+        setLoginError("サロン名を入力してください。")
+        return
+      }
+      const slugError = validateSalonSlug(backofficeSalonSlug, "予約ページURL slug")
+      if (slugError) {
+        setLoginError(slugError)
+        return
+      }
+    }
+    if (mode === "signup" && !isCustomerPortal && signupRole === "STAFF") {
+      if (!inviteToken) {
+        setLoginError("招待トークンを入力してください。")
+        return
+      }
     }
     if (mode === "signup" && isCustomerPortal && !isCompletePhoneSegments(phoneSegments)) {
       setLoginError("電話番号は数字のみで3-4-4桁を入力してください。")
@@ -165,7 +214,13 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
       signupRole,
       name,
       phone: phone || undefined,
-      shopSlug: resolvedShopSlug,
+      shopSlug:
+        !isCustomerPortal && signupRole === "STAFF"
+          ? undefined
+          : resolvedShopSlug,
+      inviteToken: !isCustomerPortal && signupRole === "STAFF" ? inviteToken : undefined,
+      salonName: !isCustomerPortal && signupRole === "ADMIN" ? signupSalonName : undefined,
+      salonSlug: !isCustomerPortal && signupRole === "ADMIN" ? backofficeSalonSlug : undefined,
       gender: gender || undefined,
       birthDate: birthDate ? birthDate.replace(/\//g, "-") : undefined,
     })
@@ -469,12 +524,62 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               ) : null}
 
               {mode === "signup" && !isCustomerPortal ? (
+                <>
+                  <FieldGroup label="氏名">
+                    <Input
+                      id="adminName"
+                      name="adminName"
+                      placeholder="山田 太郎"
+                      required
+                      className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                    />
+                  </FieldGroup>
+                  {backofficeSignupRole === "ADMIN" ? (
+                    <FieldGroup label="サロン名">
+                      <Input
+                        id="salonName"
+                        name="salonName"
+                        placeholder="Sample Salon"
+                        required
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      />
+                    </FieldGroup>
+                  ) : null}
+                  {backofficeSignupRole === "ADMIN" ? (
+                    <FieldGroup label="予約ページURL slug">
+                      <Input
+                        id="salonSlug"
+                        name="salonSlug"
+                        placeholder="sample-salon-2026"
+                        required
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      />
+                    </FieldGroup>
+                  ) : (
+                    <FieldGroup label="招待トークン">
+                      <Input
+                        id="inviteToken"
+                        name="inviteToken"
+                        defaultValue={initialInviteToken}
+                        placeholder="招待URLに含まれるトークン"
+                        required
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      />
+                    </FieldGroup>
+                  )}
+                </>
+              ) : null}
+
+              {mode === "signup" && !isCustomerPortal ? (
                 <FieldGroup label="ロール">
                   <select
                     id="role"
                     name="role"
                     className="h-11 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm outline-none transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
-                    defaultValue="ADMIN"
+                    value={backofficeSignupRole}
+                    onChange={(event) =>
+                      setBackofficeSignupRole(event.target.value as Exclude<UserRole, "CUSTOMER">)
+                    }
                   >
                     {ROLE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
