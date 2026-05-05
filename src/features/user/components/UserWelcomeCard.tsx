@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarSearch, CalendarDays, Clock3, MapPin, UserRound } from "lucide-react"
+import { ArrowRight, CalendarSearch, Clock3, MapPin, UserRound } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
@@ -12,8 +12,7 @@ interface UserWelcomeCardProps {
 }
 
 export function UserWelcomeCard({ summary, shopId, reservationId }: UserWelcomeCardProps) {
-  const nominationPath = buildPathWithShopId(ROUTES.userReservationNomination, shopId)
-  const omakasePath = buildPathWithShopId(ROUTES.userReservationSchedule, shopId)
+  const schedulePath = buildPathWithShopId(ROUTES.userReservationSchedule, shopId)
   const lookupPath = buildPathWithShopId(ROUTES.userReservationLookup, shopId)
 
   return (
@@ -65,15 +64,17 @@ export function UserWelcomeCard({ summary, shopId, reservationId }: UserWelcomeC
       <div className="rounded-2xl bg-white shadow-lg">
         <div className="border-b border-slate-100 px-6 py-5">
           <h3 className="text-lg font-bold text-foreground">予約メニュー</h3>
-          <p className="mt-1 text-sm text-muted-foreground">新規予約または既存予約の確認・変更を選択してください。</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            新規予約または既存予約の確認・変更を選択してください。
+          </p>
         </div>
         <div className="grid gap-4 p-6">
           <Link
-            to={nominationPath}
+            to={schedulePath}
             state={
               reservationId
-                ? { reservationId, isUpdatingExistingReservation: true }
-                : { isUpdatingExistingReservation: false }
+                ? { mode: "nomination", reservationId, isUpdatingExistingReservation: true }
+                : { mode: "nomination", isUpdatingExistingReservation: false }
             }
             className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
           >
@@ -81,26 +82,8 @@ export function UserWelcomeCard({ summary, shopId, reservationId }: UserWelcomeC
               <UserRound className="size-5 text-violet-600" />
             </div>
             <div className="min-w-0">
-              <p className="font-semibold text-foreground">指名で予約</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">お気に入りのトレーナーを選べます</p>
-            </div>
-            <ArrowRight className="ml-auto size-4 text-muted-foreground opacity-50 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
-          </Link>
-          <Link
-            to={omakasePath}
-            state={
-              reservationId
-                ? { mode: "omakase", reservationId, isUpdatingExistingReservation: true }
-                : { mode: "omakase", isUpdatingExistingReservation: false }
-            }
-            className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
-          >
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-cyan-50">
-              <CalendarDays className="size-5 text-cyan-600" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-foreground">おまかせ</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">日付から空き枠を探します</p>
+              <p className="font-semibold text-foreground">新規予約</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">日時→メニュー→担当スタッフの順で選択します</p>
             </div>
             <ArrowRight className="ml-auto size-4 text-muted-foreground opacity-50 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
           </Link>

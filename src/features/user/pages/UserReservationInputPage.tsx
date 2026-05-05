@@ -5,7 +5,7 @@ import {
   Clock,
   CreditCard,
   MessageSquare,
-  Phone,
+  QrCode,
   UserRound,
 } from "lucide-react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
@@ -23,7 +23,6 @@ import {
   type ReservationCheckoutMenu,
 } from "@/features/user/api/userReservationApi"
 import { fetchSalonPage } from "@/features/user/api/userSalonApi"
-import { fetchUserProfile } from "@/features/user/api/userProfileApi"
 import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
 import {
   UserReservationStripePayment,
@@ -40,7 +39,6 @@ import { addMinutesToTimeString, formatDateLongWithWeekday } from "@/lib/dateFor
 import {
   isCompletePhoneSegments,
   joinPhoneSegments,
-  parsePhoneToSegments,
   updatePhoneSegment,
   type PhoneSegments,
 } from "@/lib/phone"
@@ -72,7 +70,7 @@ export interface ReservationInputData {
 
 const PAYMENT_METHODS = [
   { id: "credit", label: "クレジットカード", icon: CreditCard },
-  { id: "paypay", label: "PayPay", icon: Phone },
+  { id: "paypay", label: "PayPay", icon: QrCode },
 ] as const
 
 export function UserReservationInputPage() {
@@ -243,23 +241,6 @@ export function UserReservationInputPage() {
       setCreditFlowError("")
     })
   }, [paymentMethod])
-
-  useEffect(() => {
-    let isMounted = true
-    void fetchUserProfile().then((profile) => {
-      if (!isMounted) return
-      queueMicrotask(() => {
-        const [parsedLastName, ...restName] = profile.fullName.trim().split(/\s+/)
-        setLastName(parsedLastName ?? "")
-        setFirstName(restName.join(" "))
-        setEmail(profile.email)
-        setPhoneSegments(parsePhoneToSegments(profile.phone))
-      })
-    })
-    return () => {
-      isMounted = false
-    }
-  }, [])
 
   useEffect(() => {
     let isMounted = true

@@ -6,7 +6,7 @@ import {
   Clock,
   CreditCard,
   MessageSquare,
-  Phone,
+  QrCode,
   UserRound,
 } from "lucide-react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
@@ -39,7 +39,7 @@ import { isCompletePhoneSegments, joinPhoneSegments, parsePhoneToSegments } from
 
 const PAYMENT_METHODS = [
   { id: "credit", label: "クレジットカード", icon: CreditCard },
-  { id: "paypay", label: "PayPay", icon: Phone },
+  { id: "paypay", label: "PayPay", icon: QrCode },
 ] as const
 
 function splitFullName(fullName: string): { lastName: string; firstName: string } {

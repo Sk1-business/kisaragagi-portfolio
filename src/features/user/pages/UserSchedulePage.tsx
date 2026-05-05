@@ -4,6 +4,11 @@ import { useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
+import {
+  fetchAvailableTimeSlots,
+  fetchReservationMenus,
+  type ReservationMenuOption,
+} from "@/features/user/api/userReservationApi"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { useAvailableTimeSlots } from "@/features/user/hooks/useAvailableTimeSlots"
 import { useCustomerBookingRules } from "@/features/user/hooks/useCustomerBookingRules"
@@ -65,20 +70,10 @@ export function UserSchedulePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const state = (location.state as {
-    mode?: string
-    trainerId?: string
-    trainerName?: string
-    preferredMenuId?: string
-    preferredMenuName?: string
     returnSearch?: string
     reservationId?: string
     isUpdatingExistingReservation?: boolean
   } | null) ?? null
-  const mode = state?.mode ?? "omakase"
-  const trainerId = state?.trainerId ?? ""
-  const trainerName = state?.trainerName ?? ""
-  const preferredMenuId = state?.preferredMenuId ?? ""
-  const preferredMenuName = state?.preferredMenuName ?? ""
   const returnSearch = state?.returnSearch ?? ""
   const isUpdateFlow = state?.isUpdatingExistingReservation === true
   const stateReservationId = (state?.reservationId ?? "").trim()
@@ -86,27 +81,46 @@ export function UserSchedulePage() {
   const reservationId = isUpdateFlow ? (stateReservationId || persistentReservationId).trim() : ""
   const { trainers } = useUserTrainers(shopId)
   const { reservation: currentReservation } = useUserReservation(reservationId, shopId)
-  const selectedTrainer =
-    mode === "nomination" ? trainers.find((trainer) => trainer.id === trainerId) : undefined
 
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [selectedTime, setSelectedTime] = useState<string>("")
   const [displayMonth, setDisplayMonth] = useState<Date>(new Date())
   const [currentReservationDate, setCurrentReservationDate] = useState("")
   const [currentReservationTime, setCurrentReservationTime] = useState("")
+  const [menuOptions, setMenuOptions] = useState<ReservationMenuOption[]>([])
+  const [selectedMenuId, setSelectedMenuId] = useState("")
+  const [isLoadingMenus, setIsLoadingMenus] = useState(false)
+  const [menuLoadError, setMenuLoadError] = useState("")
+  const [assignMode, setAssignMode] = useState<"nomination" | "omakase" | "">("")
+  const [selectedTrainerId, setSelectedTrainerId] = useState("")
+  const [availableTrainerIds, setAvailableTrainerIds] = useState<Set<string> | null>(null)
+  const [isLoadingAvailableTrainers, setIsLoadingAvailableTrainers] = useState(false)
   const bookingRules = useCustomerBookingRules(shopId)
+  const selectedMenu = useMemo(
+    () => menuOptions.find((menu) => menu.id === selectedMenuId),
+    [menuOptions, selectedMenuId],
+  )
+  const selectedTrainer = useMemo(
+    () => trainers.find((trainer) => trainer.id === selectedTrainerId),
+    [trainers, selectedTrainerId],
+  )
+  const visibleTrainers = useMemo(() => {
+    const sorted = trainers.slice().sort((a, b) => b.rating - a.rating)
+    if (!availableTrainerIds) return sorted
+    return sorted.filter((trainer) => availableTrainerIds.has(trainer.id))
+  }, [trainers, availableTrainerIds])
   const shiftAvailableDates = useShiftAvailableDates(
     displayMonth,
     shopId,
-    preferredMenuId || undefined,
-    mode === "nomination" ? trainerId : undefined,
+    selectedMenu?.id,
+    assignMode === "nomination" ? selectedTrainerId || undefined : undefined,
     isUpdateFlow && reservationId ? reservationId : undefined,
   )
   const availableTimeSlots = useAvailableTimeSlots(
     selectedDate,
     shopId,
-    preferredMenuId || undefined,
-    mode === "nomination" ? trainerId : undefined,
+    selectedMenu?.id,
+    assignMode === "nomination" ? selectedTrainerId || undefined : undefined,
     isUpdateFlow && reservationId ? reservationId : undefined,
   )
 
@@ -130,6 +144,33 @@ export function UserSchedulePage() {
   const monthLabel = `${displayMonth.getFullYear()}年${displayMonth.getMonth() + 1}月`
 
   useEffect(() => {
+    let mounted = true
+    queueMicrotask(() => {
+      setIsLoadingMenus(true)
+      setMenuLoadError("")
+    })
+    void fetchReservationMenus(shopId)
+      .then((menus) => {
+        if (!mounted) return
+        setMenuOptions(menus)
+        setSelectedMenuId((current) => (menus.some((menu) => menu.id === current) ? current : ""))
+      })
+      .catch(() => {
+        if (!mounted) return
+        setMenuOptions([])
+        setSelectedMenuId("")
+        setMenuLoadError("メニューの取得に失敗しました。")
+      })
+      .finally(() => {
+        if (!mounted) return
+        setIsLoadingMenus(false)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [shopId])
+
+  useEffect(() => {
     if (!reservationId) {
       queueMicrotask(() => {
         setCurrentReservationDate("")
@@ -145,10 +186,80 @@ export function UserSchedulePage() {
       setSelectedDate(currentReservation.date)
       setSelectedTime("")
       setDisplayMonth(new Date(`${currentReservation.date}T00:00:00`))
+      setAssignMode(currentReservation.mode === "nomination" ? "nomination" : "omakase")
+      setSelectedTrainerId(currentReservation.trainerId ?? "")
+      setSelectedMenuId(currentReservation.menuId ?? "")
     })
   }, [reservationId, currentReservation])
 
-  const canProceed = Boolean(selectedDate && selectedTime)
+  useEffect(() => {
+    if (assignMode !== "nomination") {
+      setSelectedTrainerId("")
+    }
+  }, [assignMode])
+
+  useEffect(() => {
+    let mounted = true
+    if (
+      assignMode !== "nomination" ||
+      !selectedDate ||
+      !selectedTime ||
+      !selectedMenu?.id ||
+      trainers.length === 0
+    ) {
+      setAvailableTrainerIds(null)
+      setIsLoadingAvailableTrainers(false)
+      return () => {
+        mounted = false
+      }
+    }
+
+    setIsLoadingAvailableTrainers(true)
+    void Promise.all(
+      trainers.map(async (trainer) => {
+        const slots = await fetchAvailableTimeSlots(
+          selectedDate,
+          shopId,
+          selectedMenu.id,
+          trainer.id,
+          isUpdateFlow && reservationId ? reservationId : undefined,
+        )
+        const matched = slots.some((slot) => slot.time === selectedTime && slot.selectable)
+        return matched ? trainer.id : null
+      }),
+    )
+      .then((ids) => {
+        if (!mounted) return
+        setAvailableTrainerIds(new Set(ids.filter((id): id is string => Boolean(id))))
+      })
+      .catch(() => {
+        if (!mounted) return
+        setAvailableTrainerIds(new Set())
+      })
+      .finally(() => {
+        if (!mounted) return
+        setIsLoadingAvailableTrainers(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [assignMode, selectedDate, selectedTime, selectedMenu?.id, trainers, shopId, isUpdateFlow, reservationId])
+
+  useEffect(() => {
+    if (!selectedTrainerId) return
+    if (!availableTrainerIds) return
+    if (availableTrainerIds.has(selectedTrainerId)) return
+    setSelectedTrainerId("")
+  }, [selectedTrainerId, availableTrainerIds])
+
+  const canProceed = Boolean(
+    selectedDate &&
+      selectedTime &&
+      selectedMenu &&
+      assignMode &&
+      (assignMode === "omakase" || selectedTrainer),
+  )
 
   function handleDateSelect(dateKey: string) {
     setSelectedDate(dateKey)
@@ -166,23 +277,6 @@ export function UserSchedulePage() {
 
   return (
     <section className="space-y-5">
-      {selectedTrainer ? (
-        <div className="rounded-2xl bg-white p-5 shadow-lg">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            指名トレーナー
-          </p>
-          <div className="flex items-center gap-4">
-            <div className="flex size-16 shrink-0 items-center justify-center rounded-full border-2 border-slate-100 bg-slate-100 shadow-sm">
-              <UserRound className="size-7 text-slate-400" />
-            </div>
-            <div>
-              <p className="text-lg font-bold text-foreground">{selectedTrainer.name}</p>
-              <p className="text-sm text-muted-foreground">{selectedTrainer.specialty}</p>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <UserSectionCard title="日時選択">
         <div className="p-5">
           <div className="mb-4 flex items-center justify-between">
@@ -321,6 +415,123 @@ export function UserSchedulePage() {
         </div>
       </div>
 
+      <UserSectionCard title="メニューを選択" headerTone="plain">
+        <div className="space-y-3 p-5">
+          {menuLoadError ? <p className="text-sm text-destructive">{menuLoadError}</p> : null}
+          {isLoadingMenus ? (
+            <p className="text-sm text-muted-foreground">メニューを読み込み中です...</p>
+          ) : menuOptions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">選択できるメニューがありません。</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {menuOptions.map((menu) => {
+                const isSelectedMenu = selectedMenuId === menu.id
+                return (
+                  <button
+                    key={menu.id}
+                    type="button"
+                    onClick={() => setSelectedMenuId(menu.id)}
+                    className={`rounded-xl border px-4 py-3 text-left text-sm transition ${
+                      isSelectedMenu
+                        ? "border-black ring-2 ring-slate-500"
+                        : "border-slate-200 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    <p className="font-semibold text-foreground">{menu.name}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                      <span className="font-semibold tabular-nums text-foreground">
+                        ¥{menu.price.toLocaleString()}
+                      </span>
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Clock className="size-3.5 shrink-0" aria-hidden />
+                        <span>所要時間 {menu.durationMinutes}分</span>
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </UserSectionCard>
+
+      <UserSectionCard title="予約方法を選択" headerTone="plain">
+        <div className="grid gap-3 p-5 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setAssignMode("omakase")}
+            className={`rounded-xl border px-4 py-4 text-left text-sm transition ${
+              assignMode === "omakase"
+                ? "border-black ring-2 ring-slate-500 bg-white"
+                : "border-slate-200 bg-white hover:bg-slate-50"
+            }`}
+          >
+            <p className="font-semibold text-foreground">おまかせ</p>
+            <p className="mt-1 text-xs text-muted-foreground">担当スタッフを指定しない</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAssignMode("nomination")}
+            className={`rounded-xl border px-4 py-4 text-left text-sm transition ${
+              assignMode === "nomination"
+                ? "border-black ring-2 ring-slate-500 bg-white"
+                : "border-slate-200 bg-white hover:bg-slate-50"
+            }`}
+          >
+            <p className="font-semibold text-foreground">指名</p>
+            <p className="mt-1 text-xs text-muted-foreground">担当スタッフを選択する</p>
+          </button>
+        </div>
+      </UserSectionCard>
+
+      {assignMode === "nomination" ? (
+        <UserSectionCard title="担当スタッフを選択" headerTone="plain">
+          <div className="grid gap-4 p-5 md:grid-cols-2 lg:grid-cols-3">
+            {!selectedDate || !selectedTime ? (
+              <p className="col-span-full text-sm text-muted-foreground">
+                先に日時を選択してください。
+              </p>
+            ) : !selectedMenu ? (
+              <p className="col-span-full text-sm text-muted-foreground">
+                先にメニューを選択してください。
+              </p>
+            ) : isLoadingAvailableTrainers ? (
+              <p className="col-span-full text-sm text-muted-foreground">
+                選択日時で予約可能なスタッフを確認中です...
+              </p>
+            ) : visibleTrainers.length === 0 ? (
+              <p className="col-span-full text-sm text-muted-foreground">
+                選択した日時にシフト登録しているスタッフがいません。
+              </p>
+            ) : (
+              visibleTrainers.map((trainer) => {
+                const isSelected = selectedTrainerId === trainer.id
+                return (
+                  <button
+                    key={trainer.id}
+                    type="button"
+                    onClick={() => setSelectedTrainerId(trainer.id)}
+                    className={`group relative overflow-hidden rounded-2xl border transition hover:-translate-y-1 hover:shadow-lg ${
+                      isSelected ? "border-black ring-2 ring-slate-500 bg-white" : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex flex-col items-center px-5 pb-4 pt-6">
+                      <div className="relative mb-3">
+                        <div className="flex size-20 items-center justify-center rounded-full border-2 border-slate-100 bg-slate-100 shadow-sm">
+                          <UserRound className="size-9 text-slate-400" />
+                        </div>
+                      </div>
+                      <p className="text-base font-bold text-foreground">{trainer.name}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{trainer.specialty}</p>
+                    </div>
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </UserSectionCard>
+      ) : null}
+
       {canProceed ? (
         <Button
           type="button"
@@ -334,13 +545,13 @@ export function UserSchedulePage() {
               ),
               {
                 state: {
-                  mode,
+                  mode: assignMode,
                   date: selectedDate,
                   time: selectedTime,
-                  trainerId: trainerId || selectedTrainer?.id || "",
-                  trainerName: trainerName || selectedTrainer?.name || "",
-                  preferredMenuId: preferredMenuId || undefined,
-                  preferredMenuName: preferredMenuName || undefined,
+                  trainerId: assignMode === "nomination" ? selectedTrainer?.id || "" : "",
+                  trainerName: assignMode === "nomination" ? selectedTrainer?.name || "" : "",
+                  preferredMenuId: selectedMenu?.id,
+                  preferredMenuName: selectedMenu?.name,
                   returnSearch: returnSearch || undefined,
                   ...(isUpdateFlow && reservationId ? { reservationId } : {}),
                   isUpdatingExistingReservation: isUpdateFlow,
@@ -349,7 +560,7 @@ export function UserSchedulePage() {
             )
           }
         >
-          {isUpdateFlow ? "変更内容確認へ進む" : "予約情報入力へ進む"}
+          {isUpdateFlow ? "変更内容確認へ進む" : "予約者情報入力へ進む"}
           <ArrowRight className="ml-1 size-4" />
         </Button>
       ) : null}
