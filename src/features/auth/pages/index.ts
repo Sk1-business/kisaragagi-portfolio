@@ -1,4 +1,8 @@
 export { BackofficeLoginPage } from "@/features/auth/pages/BackofficeLoginPage"
 export { BackofficeSignupPage } from "@/features/auth/pages/BackofficeSignupPage"
+export { BackofficeSignupEmailPage } from "@/features/auth/pages/BackofficeSignupEmailPage"
+export { BackofficeSignupVerifySentPage } from "@/features/auth/pages/BackofficeSignupVerifySentPage"
+export { BackofficeSignupVerifyPage } from "@/features/auth/pages/BackofficeSignupVerifyPage"
+export { BackofficeInitialSetupPage } from "@/features/auth/pages/BackofficeInitialSetupPage"
 export { CustomerLoginPage } from "@/features/auth/pages/CustomerLoginPage"
 export { CustomerSignupPage } from "@/features/auth/pages/CustomerSignupPage"

@@ -4,6 +4,12 @@ export const ROUTES = {
   customerSignup: "/customer/signup",
   backofficeLogin: "/backoffice/login",
   backofficeSignup: "/backoffice/signup",
+  /** 認証メール送信完了案内（5分カウントダウン） */
+  backofficeSignupVerifySent: "/backoffice/signup/verify-sent",
+  /** メール内リンクから飛んでくるトークン検証画面 */
+  backofficeSignupVerify: "/backoffice/signup/verify",
+  /** 認証完了後に遷移する初期設定画面 */
+  backofficeInitialSetup: "/backoffice/setup/initial",
   userHome: "/user",
   userReservationNomination: "/user/reservation/nomination",
   userReservationChangeMode: "/user/reservation/change-mode",

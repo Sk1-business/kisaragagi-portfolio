@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ROUTES } from "@/constants/routes"
 import {
+  BackofficeInitialSetupPage,
   BackofficeLoginPage,
   BackofficeSignupPage,
+  BackofficeSignupVerifyPage,
+  BackofficeSignupVerifySentPage,
   CustomerLoginPage,
   CustomerSignupPage,
 } from "@/features/auth/pages"
@@ -109,6 +112,18 @@ function App() {
         <Route path={ROUTES.customerSignup} element={<CustomerSignupPage />} />
         <Route path={ROUTES.backofficeLogin} element={<BackofficeLoginPage />} />
         <Route path={ROUTES.backofficeSignup} element={<BackofficeSignupPage />} />
+        <Route
+          path={ROUTES.backofficeSignupVerifySent}
+          element={<BackofficeSignupVerifySentPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSignupVerify}
+          element={<BackofficeSignupVerifyPage />}
+        />
+        <Route
+          path={ROUTES.backofficeInitialSetup}
+          element={<BackofficeInitialSetupPage />}
+        />
         <Route element={<UserLayout />}>
           <Route path={ROUTES.userHome} element={<UserDashboardPage />} />
           <Route path={ROUTES.userReservationNomination} element={<UserNominationPage />} />
