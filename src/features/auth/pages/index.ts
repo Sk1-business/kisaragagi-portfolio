@@ -4,5 +4,7 @@ export { BackofficeSignupEmailPage } from "@/features/auth/pages/BackofficeSignu
 export { BackofficeSignupVerifySentPage } from "@/features/auth/pages/BackofficeSignupVerifySentPage"
 export { BackofficeSignupVerifyPage } from "@/features/auth/pages/BackofficeSignupVerifyPage"
 export { BackofficeInitialSetupPage } from "@/features/auth/pages/BackofficeInitialSetupPage"
+export { BackofficeSetupBusinessHoursPage } from "@/features/auth/pages/BackofficeSetupBusinessHoursPage"
+export { BackofficeSetupDonePage } from "@/features/auth/pages/BackofficeSetupDonePage"
 export { CustomerLoginPage } from "@/features/auth/pages/CustomerLoginPage"
 export { CustomerSignupPage } from "@/features/auth/pages/CustomerSignupPage"

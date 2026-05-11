@@ -1,15 +1,18 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
-import { postAdminLogout } from "@/features/auth/api/adminLoginApi"
+import { putAdminProfile } from "@/features/admin/api/adminProfileApi"
+import { postAdminLogout, postAdminSignup } from "@/features/auth/api/adminLoginApi"
 import { clearSignupVerification } from "@/features/auth/lib/signupVerification"
 
 type InitialSetupDraft = {
   email: string
+  password: string
+  passwordConfirm: string
   address: string
   phone: string
   salonName: string
@@ -20,10 +23,11 @@ type InitialSetupDraft = {
   instagramUrl: string
   lineOfficialUrl: string
   websiteUrl: string
-  brandColor: string
 }
 
 const STORAGE_KEY = "backoffice_initial_setup_draft_v1"
+const PASSWORD_MIN = 6
+const PASSWORD_MAX = 200
 
 function validateOptionalUrl(value: string, label: string): string | null {
   const v = value.trim()
@@ -43,6 +47,8 @@ function validateOptionalUrl(value: string, label: string): string | null {
 function toInitialSetupDraft(form: FormData, email: string): InitialSetupDraft {
   return {
     email,
+    password: String(form.get("password") ?? ""),
+    passwordConfirm: String(form.get("passwordConfirm") ?? ""),
     address: String(form.get("address") ?? "").trim(),
     phone: String(form.get("phone") ?? "").trim(),
     salonName: String(form.get("salonName") ?? "").trim(),
@@ -55,9 +61,18 @@ function toInitialSetupDraft(form: FormData, email: string): InitialSetupDraft {
     instagramUrl: String(form.get("instagramUrl") ?? "").trim(),
     lineOfficialUrl: String(form.get("lineOfficialUrl") ?? "").trim(),
     websiteUrl: String(form.get("websiteUrl") ?? "").trim(),
-    brandColor: String(form.get("brandColor") ?? "#111827").trim() || "#111827",
   }
 }
+
+/** `localStorage` に下書きを残すときは平文パスワードを除外する。 */
+function toPersistedDraft(draft: InitialSetupDraft): Omit<InitialSetupDraft, "password" | "passwordConfirm"> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { password, passwordConfirm, ...rest } = draft
+  return rest
+}
+
+const BACK_NAV_BLOCKED_MESSAGE =
+  "ブラウザの戻るボタンはご利用いただけません。セッション整合のため、この画面では履歴による前のページへの戻り移動を行っていません。"
 
 export function BackofficeInitialSetupPage() {
   const navigate = useNavigate()
@@ -65,12 +80,16 @@ export function BackofficeInitialSetupPage() {
   const [error, setError] = useState("")
   const [saving, setSaving] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [backNavigateNotice, setBackNavigateNotice] = useState("")
+  const restoreStateRef = useRef<unknown>(null)
 
   const navState = location.state as
     | { fromSignup?: boolean; email?: string }
     | null
   const fromSignup = Boolean(navState?.fromSignup)
   const email = typeof navState?.email === "string" ? navState.email : ""
+
+  restoreStateRef.current = location.state
 
   // 直接アクセス（state 無し）の場合は新規登録画面に戻す
   useEffect(() => {
@@ -79,11 +98,41 @@ export function BackofficeInitialSetupPage() {
     }
   }, [fromSignup, email, navigate])
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  // BrowserRouter では useBlocker が使えないため、popstate を capture で先取りし、
+  // React Router より先に履歴を元の初期設定へ戻す（戻る／左スワイプの POP 対策）。
+  useLayoutEffect(() => {
+    if (!fromSignup && !email) return
+
+    function onPopState(e: PopStateEvent) {
+      e.stopImmediatePropagation()
+      setBackNavigateNotice(BACK_NAV_BLOCKED_MESSAGE)
+      navigate(ROUTES.backofficeInitialSetup, {
+        replace: true,
+        state: restoreStateRef.current ?? { fromSignup, email },
+      })
+    }
+
+    window.addEventListener("popstate", onPopState, { capture: true })
+    return () => window.removeEventListener("popstate", onPopState, { capture: true })
+  }, [fromSignup, email, navigate])
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const draft = toInitialSetupDraft(form, email)
 
+    if (!draft.password) {
+      setError("パスワードは必須です。")
+      return
+    }
+    if (draft.password.length < PASSWORD_MIN || draft.password.length > PASSWORD_MAX) {
+      setError(`パスワードは${PASSWORD_MIN}文字以上${PASSWORD_MAX}文字以内で入力してください。`)
+      return
+    }
+    if (draft.password !== draft.passwordConfirm) {
+      setError("パスワード（確認用）が一致しません。")
+      return
+    }
     if (!draft.address) {
       setError("住所は必須です。")
       return
@@ -120,6 +169,11 @@ export function BackofficeInitialSetupPage() {
       setError("公開URL用スラッグは小文字英数字とハイフンのみ使用できます。")
       return
     }
+    // バックエンドのスラッグ正規表現（先頭末尾は英数字）に合わせる
+    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(draft.publicSlug) || draft.publicSlug.length < 3) {
+      setError("公開URL用スラッグは3文字以上で、先頭と末尾は小文字英数字にしてください。")
+      return
+    }
     const igErr = validateOptionalUrl(draft.instagramUrl, "Instagram URL")
     if (igErr) {
       setError(igErr)
@@ -139,8 +193,86 @@ export function BackofficeInitialSetupPage() {
     setError("")
     setSaving(true)
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
-      navigate(ROUTES.adminHome, { replace: true })
+      // 1. POST /api/admin/signup — admin_users + salons + salon_profiles(slug+tz) を作成
+      const signupResult = await postAdminSignup({
+        email: draft.email,
+        password: draft.password,
+        name: draft.salonName, // 管理者表示名はサロン名を流用
+        salon_name: draft.salonName,
+        salon_slug: draft.publicSlug,
+      })
+      if (signupResult.kind === "duplicate_email") {
+        setError(
+          signupResult.message ||
+            "このメールアドレスは既に登録されています。ログイン画面からログインしてください。",
+        )
+        return
+      }
+      if (signupResult.kind === "duplicate_slug") {
+        setError(
+          signupResult.message ||
+            "この公開URL用スラッグは既に他のサロンで使用されています。別のスラッグを入力してください。",
+        )
+        return
+      }
+      if (signupResult.kind === "validation") {
+        setError(
+          signupResult.message
+            ? `入力内容に誤りがあります: ${signupResult.message}`
+            : "入力内容に誤りがあります。各項目をご確認ください。",
+        )
+        return
+      }
+      if (signupResult.kind === "error") {
+        setError(
+          signupResult.message
+            ? `新規登録に失敗しました（${signupResult.message}）。時間をおいて再度お試しください。`
+            : "新規登録に失敗しました。時間をおいて再度お試しください。",
+        )
+        return
+      }
+
+      // 2. PUT /api/admin/profile — salon_profiles に詳細情報を反映
+      //    （phone/address/SNS/メッセージ/紹介文/ポリシー）
+      const profilePayload: Parameters<typeof putAdminProfile>[0] = {
+        phone: draft.phone,
+        address: draft.address,
+      }
+      if (draft.salonMessage) profilePayload.booking_page_message = draft.salonMessage
+      if (draft.salonDescription) profilePayload.description = draft.salonDescription
+      if (draft.cancelPolicy) profilePayload.cancellation_policy_text = draft.cancelPolicy
+      if (draft.instagramUrl) profilePayload.instagram_url = draft.instagramUrl
+      if (draft.lineOfficialUrl) profilePayload.line_url = draft.lineOfficialUrl
+      if (draft.websiteUrl) profilePayload.website_url = draft.websiteUrl
+
+      const profileResult = await putAdminProfile(profilePayload)
+      if (profileResult.kind !== "ok") {
+        const msg =
+          profileResult.kind === "conflict"
+            ? profileResult.message ||
+              "サロン情報の保存で競合が発生しました。値をご確認ください。"
+            : profileResult.kind === "unauthorized"
+              ? "認証セッションの確立に失敗しました。お手数ですがログイン画面から再度ログインしてください。"
+              : profileResult.message
+                ? `サロン情報の保存に失敗しました（${profileResult.message}）。`
+                : "サロン情報の保存に失敗しました。時間をおいて再度お試しください。"
+        setError(msg)
+        return
+      }
+
+      // 下書きを localStorage に保存（パスワードは除外）
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(toPersistedDraft(draft)))
+      } catch {
+        // ignore storage 失敗（QuotaExceededError 等）
+      }
+      // 認証メールリンクの記録は役目を終えたので破棄
+      clearSignupVerification()
+
+      navigate(ROUTES.backofficeSetupBusinessHours, {
+        replace: true,
+        state: { fromInitialSetup: true, email: draft.email },
+      })
     } finally {
       setSaving(false)
     }
@@ -160,10 +292,29 @@ export function BackofficeInitialSetupPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 py-8 sm:px-6">
+      {backNavigateNotice ? (
+        <div
+          role="alert"
+          className="mb-4 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p>{backNavigateNotice}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 border-amber-300 bg-white"
+            onClick={() => setBackNavigateNotice("")}
+          >
+            閉じる
+          </Button>
+        </div>
+      ) : null}
+
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">初期設定</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          サロン情報を入力してください。住所・電話番号・サロン名・公開URL用スラッグは必須です。
+          サロン情報とログイン用パスワードを入力してください。
+          パスワード・住所・電話番号・サロン名・公開URL用スラッグは必須です。
         </p>
         {fromSignup ? (
           <div
@@ -181,6 +332,32 @@ export function BackofficeInitialSetupPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        <Field label="パスワード※" htmlFor="initial-password">
+          <Input
+            id="initial-password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={PASSWORD_MIN}
+            maxLength={PASSWORD_MAX}
+            placeholder={`${PASSWORD_MIN}文字以上`}
+          />
+        </Field>
+
+        <Field label="パスワード（確認用）※" htmlFor="initial-password-confirm">
+          <Input
+            id="initial-password-confirm"
+            name="passwordConfirm"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={PASSWORD_MIN}
+            maxLength={PASSWORD_MAX}
+            placeholder="同じパスワードを入力"
+          />
+        </Field>
+
         <Field label="住所※1" htmlFor="initial-address">
           <textarea
             id="initial-address"
@@ -262,16 +439,6 @@ export function BackofficeInitialSetupPage() {
           <Input id="initial-website-url" name="websiteUrl" maxLength={500} />
         </Field>
 
-        <Field label="ブランドカラー" htmlFor="initial-brand-color">
-          <input
-            id="initial-brand-color"
-            name="brandColor"
-            type="color"
-            defaultValue="#111827"
-            className="size-10 cursor-pointer rounded border border-input bg-background"
-          />
-        </Field>
-
         {error ? (
           <p className="text-sm text-destructive" role="alert">
             {error}
@@ -288,7 +455,7 @@ export function BackofficeInitialSetupPage() {
             戻る
           </Button>
           <Button type="submit" disabled={saving}>
-            {saving ? "保存中..." : "初期設定を保存"}
+            {saving ? "登録中..." : "初期設定を保存"}
           </Button>
         </div>
       </form>

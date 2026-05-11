@@ -8,8 +8,12 @@ export const ROUTES = {
   backofficeSignupVerifySent: "/backoffice/signup/verify-sent",
   /** メール内リンクから飛んでくるトークン検証画面 */
   backofficeSignupVerify: "/backoffice/signup/verify",
-  /** 認証完了後に遷移する初期設定画面 */
+  /** 認証完了後に遷移する初期設定画面（サロン情報） */
   backofficeInitialSetup: "/backoffice/setup/initial",
+  /** 初期設定の続き: 営業日・営業時間登録画面 */
+  backofficeSetupBusinessHours: "/backoffice/setup/business-hours",
+  /** 初期設定の暫定完了画面（次ステップ準備中） */
+  backofficeSetupDone: "/backoffice/setup/done",
   userHome: "/user",
   userReservationNomination: "/user/reservation/nomination",
   userReservationChangeMode: "/user/reservation/change-mode",

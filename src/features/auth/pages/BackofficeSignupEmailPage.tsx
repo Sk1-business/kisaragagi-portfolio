@@ -1,18 +1,21 @@
-import { useEffect, useState, type FormEvent } from "react"
-import { useNavigate } from "react-router-dom"
-import { ArrowRight, Dumbbell, Mail } from "lucide-react"
+import { useEffect, useState, type FormEvent, type ReactNode } from "react"
+import { Link, useNavigate } from "react-router-dom"
+import { ArrowRight, Mail } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import { checkAdminEmailExists } from "@/features/auth/api/adminLoginApi"
+import { AuthBrandingPanel, AuthMobileBrandingHeader } from "@/features/auth/components/AuthBrandingPanel"
+import { AUTH_AUDIENCE_TEXT } from "@/features/auth/constants"
 import {
   buildSignupVerificationUrl,
   issueSignupVerification,
 } from "@/features/auth/lib/signupVerification"
 
 const REDIRECT_DELAY_MS = 2500
+const audienceText = AUTH_AUDIENCE_TEXT.BACKOFFICE_PORTAL
 
 export function BackofficeSignupEmailPage() {
   const navigate = useNavigate()
@@ -81,35 +84,31 @@ export function BackofficeSignupEmailPage() {
       className="flex min-h-dvh bg-white"
       style={{ fontFamily: "'SF Pro Text', 'SF Pro Display', 'Noto Sans JP', sans-serif" }}
     >
+      <AuthBrandingPanel
+        audienceTitle={audienceText.title}
+        audienceDescription={audienceText.description}
+      />
+
+      {/* --- Right form panel (新規登録専用) --- */}
       <div className="flex flex-1 flex-col">
-        <div className="flex items-center gap-3 border-b border-neutral-100 px-6 py-4 lg:hidden">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-black">
-            <Dumbbell className="size-4 text-white" />
-          </div>
-          <span className="text-xs font-medium tracking-widest text-neutral-400">
-            予約ポータル
-          </span>
-        </div>
+        <AuthMobileBrandingHeader />
 
         <div className="flex flex-1 items-center justify-center px-6 py-10 sm:px-10">
-          <div className="w-full max-w-[420px]">
+          <div className="w-full max-w-[400px]">
             <div className="mb-8">
               <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-400">
-                管理者・スタッフ用
+                {audienceText.title}
               </p>
               <h2 className="mt-2 text-2xl font-bold tracking-tight text-neutral-900">
                 新規登録
               </h2>
-              <p className="mt-2 text-sm text-neutral-500">
+              <p className="mt-1 text-sm text-neutral-500">
                 ご利用のメールアドレスを入力してください。認証メールをお送りします。
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signup-email" className="text-sm font-medium text-neutral-700">
-                  メールアドレス
-                </Label>
+              <FieldGroup label="メールアドレス">
                 <Input
                   id="signup-email"
                   name="email"
@@ -126,7 +125,7 @@ export function BackofficeSignupEmailPage() {
                   required
                   className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
                 />
-              </div>
+              </FieldGroup>
 
               <Button
                 type="submit"
@@ -141,32 +140,51 @@ export function BackofficeSignupEmailPage() {
               {duplicateNotice ? (
                 <div
                   role="alert"
-                  className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                  className="rounded-lg border border-red-200 bg-red-50 px-4 py-3"
                 >
-                  {duplicateNotice}
+                  <p className="text-sm text-red-700">{duplicateNotice}</p>
                 </div>
               ) : null}
 
               {error ? (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="whitespace-pre-line text-sm text-red-700">{error}</p>
                 </div>
               ) : null}
             </form>
 
-            <div className="mt-6 border-t border-neutral-100 pt-5 text-sm text-neutral-500">
-              すでにアカウントをお持ちの方は
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.backofficeLogin)}
-                className="ml-1 font-semibold text-black underline decoration-neutral-300 underline-offset-4 transition-colors hover:decoration-black"
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-5">
+              <div className="text-sm text-neutral-500">
+                <span>すでにアカウントをお持ちの方</span>
+                <Link
+                  to={ROUTES.backofficeLogin}
+                  className="ml-1 font-semibold text-black underline decoration-neutral-300 underline-offset-4 transition-colors hover:decoration-black"
+                >
+                  ログインへ
+                </Link>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <Link
+                to={ROUTES.landing}
+                className="text-sm text-neutral-500 underline decoration-neutral-300 underline-offset-4 transition-colors hover:text-neutral-800"
               >
-                ログインへ
-              </button>
+                トップへ戻る
+              </Link>
             </div>
           </div>
         </div>
       </div>
     </main>
+  )
+}
+
+function FieldGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-neutral-700">{label}</Label>
+      {children}
+    </div>
   )
 }

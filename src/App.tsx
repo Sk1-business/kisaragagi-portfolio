@@ -7,6 +7,8 @@ import { ROUTES } from "@/constants/routes"
 import {
   BackofficeInitialSetupPage,
   BackofficeLoginPage,
+  BackofficeSetupBusinessHoursPage,
+  BackofficeSetupDonePage,
   BackofficeSignupPage,
   BackofficeSignupVerifyPage,
   BackofficeSignupVerifySentPage,
@@ -123,6 +125,14 @@ function App() {
         <Route
           path={ROUTES.backofficeInitialSetup}
           element={<BackofficeInitialSetupPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSetupBusinessHours}
+          element={<BackofficeSetupBusinessHoursPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSetupDone}
+          element={<BackofficeSetupDonePage />}
         />
         <Route element={<UserLayout />}>
           <Route path={ROUTES.userHome} element={<UserDashboardPage />} />

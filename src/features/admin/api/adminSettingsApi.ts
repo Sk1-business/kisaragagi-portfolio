@@ -71,3 +71,112 @@ export async function fetchAdminSettings(): Promise<AdminSettingsOut> {
   }
   return { business_hours, holidays }
 }
+
+/** `PUT /api/admin/settings/business-hours` のリクエストアイテム。 */
+export type BusinessHoursUpdateItem = BusinessHoursItem
+
+export type BusinessHoursUpdateResult =
+  | { kind: "ok" }
+  | { kind: "unauthorized" }
+  | { kind: "error"; status?: number; message?: string }
+
+function readableDetail(detail: unknown): string | undefined {
+  if (typeof detail === "string") return detail
+  if (Array.isArray(detail)) {
+    for (const item of detail) {
+      if (item && typeof item === "object") {
+        const m = (item as { msg?: unknown }).msg
+        if (typeof m === "string" && m.trim()) return m
+      }
+    }
+  }
+  return undefined
+}
+
+/**
+ * `PUT /api/admin/settings/business-hours` — 曜日ごとの営業時間を一括 upsert。
+ * バックエンド: `app/api/admin/settings.py::update_business_hours`
+ *
+ * 仕様メモ:
+ * - `hours` は7曜日（月〜日）分すべてを送るのが想定
+ * - 既存があれば UPDATE、無ければ INSERT
+ */
+export async function putBusinessHours(
+  hours: BusinessHoursUpdateItem[],
+): Promise<BusinessHoursUpdateResult> {
+  try {
+    const res = await apiFetch(`${ADMIN_SETTINGS_PATH}/business-hours`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hours }),
+    })
+    if (res.ok) return { kind: "ok" }
+    if (res.status === 401) return { kind: "unauthorized" }
+    let detailString: string | undefined
+    try {
+      const data = (await res.clone().json()) as { detail?: unknown } | null
+      detailString = readableDetail(data?.detail)
+    } catch {
+      // non-JSON body
+    }
+    return { kind: "error", status: res.status, message: detailString }
+  } catch {
+    return { kind: "error" }
+  }
+}
+
+export type HolidayCreateInput = {
+  /** YYYY-MM-DD */
+  date: string
+  description?: string | null
+}
+
+export type HolidayCreated = {
+  id: string
+  date: string
+  description: string | null
+}
+
+export type HolidayCreateResult =
+  | { kind: "ok"; holiday: HolidayCreated }
+  | { kind: "unauthorized" }
+  | { kind: "error"; status?: number; message?: string }
+
+/**
+ * `POST /api/admin/settings/holidays` — 個別の休業日を1件作成。
+ * バックエンド: `app/api/admin/settings.py::create_holiday`
+ */
+export async function postHoliday(
+  input: HolidayCreateInput,
+): Promise<HolidayCreateResult> {
+  try {
+    const res = await apiFetch(`${ADMIN_SETTINGS_PATH}/holidays`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: input.date,
+        description: input.description?.trim() ? input.description.trim() : null,
+      }),
+    })
+    let detailString: string | undefined
+    try {
+      const data = (await res.clone().json()) as
+        | { detail?: unknown; id?: unknown; date?: unknown; description?: unknown }
+        | null
+      detailString = readableDetail(data?.detail)
+      if (res.ok && data) {
+        const id = typeof data.id === "string" ? data.id : ""
+        const date = typeof data.date === "string" ? data.date.slice(0, 10) : input.date
+        const description =
+          typeof data.description === "string" ? data.description : null
+        return { kind: "ok", holiday: { id, date, description } }
+      }
+    } catch {
+      // non-JSON body
+    }
+    if (res.status === 401) return { kind: "unauthorized" }
+    return { kind: "error", status: res.status, message: detailString }
+  } catch {
+    return { kind: "error" }
+  }
+}

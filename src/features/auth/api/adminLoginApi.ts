@@ -36,7 +36,7 @@ export async function postAdminLogout(): Promise<void> {
   }
 }
 
-const ADMIN_SIGNUP_PROBE_PATH = "/api/admin/signup" as const
+const ADMIN_SIGNUP_PROBE_PATH = ADMIN_AUTH_PATHS.signup
 
 export type AdminEmailCheckResult =
   | { kind: "available" }
@@ -118,6 +118,69 @@ export async function checkAdminEmailExists(email: string): Promise<AdminEmailCh
       // 想定外: 200 が返ったら、サロン情報無しで登録できた = 既存仕様外。
       // 安全側に倒して取得済みとして扱わない。
       return { kind: "error", status: res.status, message: detailString }
+    }
+    return { kind: "error", status: res.status, message: detailString }
+  } catch {
+    return { kind: "error" }
+  }
+}
+
+/**
+ * `POST /api/admin/signup` の本実装。
+ * バックエンド: `app/api/admin/auth.py::signup`
+ *
+ * - 成功時: Set-Cookie で `access_token` が発行され、以降の `/api/admin/...` が認証通る
+ * - 副作用: `salons` / `salon_profiles`(slug+timezone のみ) / `admin_users`(owner) / `trainers` に INSERT
+ */
+export type AdminSignupSubmitResult =
+  | { kind: "ok" }
+  | { kind: "duplicate_email"; message?: string }
+  | { kind: "duplicate_slug"; message?: string }
+  | { kind: "validation"; message?: string }
+  | { kind: "error"; status?: number; message?: string }
+
+function detailLooksLikeSlugConflict(detail: string): boolean {
+  return /slug|スラッグ|予約ページURL|予約ページ url/i.test(detail)
+}
+
+export async function postAdminSignup(payload: {
+  email: string
+  password: string
+  name: string
+  salon_name: string
+  salon_slug: string
+}): Promise<AdminSignupSubmitResult> {
+  try {
+    const res = await apiFetch(ADMIN_AUTH_PATHS.signup, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: payload.email.trim(),
+        password: payload.password,
+        name: payload.name.trim(),
+        role: "ADMIN",
+        salon_name: payload.salon_name.trim(),
+        salon_slug: payload.salon_slug.trim().toLowerCase(),
+      }),
+    })
+
+    let detailString: string | undefined
+    try {
+      const data = (await res.clone().json()) as { detail?: unknown } | null
+      detailString = readableDetail(data?.detail)
+    } catch {
+      // 非 JSON レスポンスでも fallthrough
+    }
+
+    if (res.ok) return { kind: "ok" }
+    if (res.status === 409) {
+      if (detailString && detailLooksLikeSlugConflict(detailString)) {
+        return { kind: "duplicate_slug", message: detailString }
+      }
+      return { kind: "duplicate_email", message: detailString }
+    }
+    if (res.status === 400 || res.status === 422) {
+      return { kind: "validation", message: detailString }
     }
     return { kind: "error", status: res.status, message: detailString }
   } catch {
