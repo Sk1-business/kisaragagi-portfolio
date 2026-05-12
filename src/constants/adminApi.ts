@@ -21,6 +21,13 @@ export const ADMIN_PROFILE_PATH = "/api/admin/profile" as const
 /** Struct `app/api/admin/trainers.py` — `GET /trainers`（prefix `/api/admin`） */
 export const ADMIN_TRAINERS_LIST_PATH = "/api/admin/trainers" as const
 
+/**
+ * Struct `app/api/admin/admin_users.py` —
+ * `GET/POST /api/admin/admin-users` … 管理者/スタッフアカウント（admin_users）の作成・一覧。
+ * オーナー権限が必要。
+ */
+export const ADMIN_USERS_LIST_PATH = "/api/admin/admin-users" as const
+
 /** `GET/POST …/trainers/{trainer_id}/shifts` */
 export function adminTrainerShiftsPath(trainerId: string): string {
   return `${ADMIN_TRAINERS_LIST_PATH}/${encodeURIComponent(trainerId)}/shifts`

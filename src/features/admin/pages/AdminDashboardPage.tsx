@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
+import { AdminOwnerFeatureHub } from "@/features/admin/components/AdminOwnerFeatureHub"
 import { AdminWelcomeCard } from "@/features/admin/components/AdminWelcomeCard"
 import { TodayReservationsCard } from "@/features/admin/components/TodayReservationsCard"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import { useAdminDashboardSummary } from "@/features/admin/hooks/useAdminDashboardSummary"
 import { useStaff } from "@/features/admin/hooks/useStaff"
+import { useAdminProfile } from "@/features/auth/context/AdminProfileContext"
 import {
   ADMIN_CALENDAR_TIME_ZONE,
   getDateKeyInTimeZone,
@@ -16,6 +18,7 @@ import type { Reservation } from "@/features/admin/types/reservation"
 
 export function AdminDashboardPage() {
   const navigate = useNavigate()
+  const profile = useAdminProfile()
   const summary = useAdminDashboardSummary()
   const { staffList, loading: staffLoading } = useStaff()
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -91,7 +94,11 @@ export function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <AdminWelcomeCard summary={summary} />
+      {profile.role === "owner" ? <AdminOwnerFeatureHub /> : null}
+      <AdminWelcomeCard
+        summary={summary}
+        showInlineBookingActions={profile.role === "owner"}
+      />
       <TodayReservationsCard
         reservations={todayReservations}
         staffList={staffList}

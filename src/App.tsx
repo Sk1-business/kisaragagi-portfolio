@@ -36,6 +36,7 @@ import { UserReservationDetailPage } from "@/features/user/pages/UserReservation
 import { UserPayPayReturnPage } from "@/features/user/pages/UserPayPayReturnPage"
 import { UserSchedulePage } from "@/features/user/pages/UserSchedulePage"
 import { AdminLayout } from "./layouts/AdminLayout"
+import { OwnerOnlyRoute } from "./layouts/OwnerOnlyRoute"
 import { UserLayout } from "./layouts/UserLayout"
 
 function LandingPage() {
@@ -157,8 +158,22 @@ function App() {
             path={ROUTES.adminCancelled}
             element={<Navigate to={ROUTES.adminHome} replace />}
           />
-          <Route path={ROUTES.adminStaff} element={<AdminStaffPage />} />
-          <Route path={ROUTES.adminMenus} element={<AdminMenusPage />} />
+          <Route
+            path={ROUTES.adminStaff}
+            element={
+              <OwnerOnlyRoute>
+                <AdminStaffPage />
+              </OwnerOnlyRoute>
+            }
+          />
+          <Route
+            path={ROUTES.adminMenus}
+            element={
+              <OwnerOnlyRoute>
+                <AdminMenusPage />
+              </OwnerOnlyRoute>
+            }
+          />
           <Route
             path={ROUTES.adminNewReservationConfirm}
             element={<AdminNewReservationConfirmPage />}

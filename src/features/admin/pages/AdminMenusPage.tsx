@@ -352,7 +352,7 @@ export function AdminMenusPage() {
       <div className="flex flex-wrap justify-end gap-2">
         <Button type="button" size="sm" className="rounded-md" onClick={openAdd}>
           <Plus className="mr-1 size-4" />
-          メニュー一覧に追加
+          メニュー新規登録
         </Button>
       </div>
 

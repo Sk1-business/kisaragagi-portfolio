@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { NavLink, Outlet, useNavigate } from "react-router-dom"
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
@@ -19,6 +19,9 @@ import {
 function AdminLayoutContent() {
   const profile = useAdminProfile()
   const navigate = useNavigate()
+  const location = useLocation()
+  const isOwner = profile.role === "owner"
+  const onAdminHome = location.pathname === ROUTES.adminHome
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -72,48 +75,62 @@ function AdminLayoutContent() {
             ) : null}
           </div>
         </div>
-        <nav className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminHome} end>
-              ダッシュボード
-            </NavLink>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminCalendar}>予約カレンダー</NavLink>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="rounded-md"
-            onClick={() =>
-              navigate(ROUTES.adminNewReservation, {
-                state: { bookingNotBeforeIso: new Date().toISOString() },
-              })
-            }
-          >
-            新規予約
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminShiftCalendar}>シフトカレンダー</NavLink>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminStaff}>スタッフ管理</NavLink>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminMenus}>メニュー管理</NavLink>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="ml-2 rounded-md"
-            disabled={loggingOut}
-            onClick={openLogoutConfirm}
-          >
-            ログアウト
-          </Button>
-        </nav>
+        {isOwner ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {!onAdminHome ? (
+              <Button asChild variant="ghost" size="sm" className="rounded-md">
+                <Link to={ROUTES.adminHome}>ダッシュボードへ</Link>
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-md"
+              disabled={loggingOut}
+              onClick={openLogoutConfirm}
+            >
+              ログアウト
+            </Button>
+          </div>
+        ) : (
+          <nav className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="ghost" size="sm" className="rounded-md">
+              <NavLink to={ROUTES.adminHome} end>
+                ダッシュボード
+              </NavLink>
+            </Button>
+            <Button asChild variant="ghost" size="sm" className="rounded-md">
+              <NavLink to={ROUTES.adminCalendar}>予約カレンダー</NavLink>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="rounded-md"
+              onClick={() =>
+                navigate(ROUTES.adminNewReservation, {
+                  state: { bookingNotBeforeIso: new Date().toISOString() },
+                })
+              }
+            >
+              新規予約
+            </Button>
+            <Button asChild variant="ghost" size="sm" className="rounded-md">
+              <NavLink to={ROUTES.adminShiftCalendar}>シフトカレンダー</NavLink>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-2 rounded-md"
+              disabled={loggingOut}
+              onClick={openLogoutConfirm}
+            >
+              ログアウト
+            </Button>
+          </nav>
+        )}
       </header>
       <Outlet />
     </main>

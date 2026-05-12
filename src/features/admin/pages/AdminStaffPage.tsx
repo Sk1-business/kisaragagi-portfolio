@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Pencil, Plus, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -34,6 +34,23 @@ function normalizeHex(c: string): string {
   return t
 }
 
+/**
+ * 簡易メールアドレス形式チェック（@含む・空白なし・大文字不可）。
+ * バックエンドの `admin_users.email` は登録時に必ず小文字化されるため、
+ * ログイン時の大文字小文字不一致による 401 を未然に防ぐ目的で、
+ * スタッフ登録フォームでは大文字メールを受け付けない。
+ */
+function looksLikeEmail(v: string): boolean {
+  const s = v.trim()
+  if (!s) return false
+  if (/\s/.test(s)) return false
+  if (/[A-Z]/.test(s)) return false
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)
+}
+
+const STAFF_PASSWORD_MIN = 6
+const STAFF_PASSWORD_MAX = 200
+
 export function AdminStaffPage() {
   const navigate = useNavigate()
   const {
@@ -43,6 +60,7 @@ export function AdminStaffPage() {
     refetchStaff,
     addStaff,
     updateStaff,
+    swapStaffDisplayOrder,
     deleteStaff,
   } = useAdminStaff()
 
@@ -52,6 +70,12 @@ export function AdminStaffPage() {
   const [formImageUrl, setFormImageUrl] = useState("")
   const [formDisplayOrder, setFormDisplayOrder] = useState("")
   const [formColor, setFormColor] = useState("#6366f1")
+  /** スタッフ追加フォーム専用: 管理者ログイン用のメール・パスワード */
+  const [formLoginEmail, setFormLoginEmail] = useState("")
+  const [formLoginPassword, setFormLoginPassword] = useState("")
+  const [formLoginPasswordConfirm, setFormLoginPasswordConfirm] = useState("")
+  /** 並べ替え中に多重クリックを抑止 */
+  const [reorderingId, setReorderingId] = useState<string | null>(null)
   /** 追加フォームのみ。`GET /api/admin/menus` の並びで POST 順を決める */
   const [salonMenus, setSalonMenus] = useState<Awaited<
     ReturnType<typeof fetchAdminMenus>
@@ -81,6 +105,9 @@ export function AdminStaffPage() {
     setFormImageUrl("")
     setFormDisplayOrder("")
     setFormColor(COLOR_PRESETS[staffList.length % COLOR_PRESETS.length])
+    setFormLoginEmail("")
+    setFormLoginPassword("")
+    setFormLoginPasswordConfirm("")
     setSelectedMenuIds([])
     setSalonMenus([])
     setMenusLoadError(false)
@@ -257,11 +284,52 @@ export function AdminStaffPage() {
         return
       }
     }
+    const email = formLoginEmail.trim()
+    if (!email) {
+      setFormError(
+        "ログイン用メールアドレスを入力してください（スタッフが管理者画面にログインするために必要）",
+      )
+      return
+    }
+    if (/[A-Z]/.test(email)) {
+      setFormError(
+        "ログイン用メールアドレスは小文字のみで入力してください（大文字は使用できません）",
+      )
+      return
+    }
+    if (!looksLikeEmail(email)) {
+      setFormError("ログイン用メールアドレスの形式が正しくありません")
+      return
+    }
+    if (email.length > 200) {
+      setFormError("ログイン用メールアドレスは200文字以内で入力してください")
+      return
+    }
+    if (!formLoginPassword) {
+      setFormError("ログイン用パスワードを入力してください")
+      return
+    }
+    if (formLoginPassword.length < STAFF_PASSWORD_MIN) {
+      setFormError(`パスワードは${STAFF_PASSWORD_MIN}文字以上で入力してください`)
+      return
+    }
+    if (formLoginPassword.length > STAFF_PASSWORD_MAX) {
+      setFormError(`パスワードは${STAFF_PASSWORD_MAX}文字以内で入力してください`)
+      return
+    }
+    if (formLoginPassword !== formLoginPasswordConfirm) {
+      setFormError("パスワードと確認用パスワードが一致しません")
+      return
+    }
     setFormError("")
     setAddConfirmOpen(true)
   }
 
-  /** 追加: 確認後に POST /api/admin/trainers */
+  /**
+   * 追加: 確認後に
+   * 1. `POST /api/admin/admin-users` で staff としてログインアカウントを作成
+   * 2. 続けて `POST /api/admin/trainers` でトレーナー（=スタッフ表示行）を作成
+   */
   const confirmRegisterStaff = () => {
     void (async () => {
       const color = normalizeHex(formColor)
@@ -277,16 +345,28 @@ export function AdminStaffPage() {
         const displayOrderParsed = doRaw
           ? Math.round(Number(doRaw))
           : undefined
-        const created = await addStaff({
+        const result = await addStaff({
           name: formName.trim(),
           color,
           description: formDescription.trim() || undefined,
           image_url: formImageUrl.trim() || undefined,
           display_order: displayOrderParsed,
           menuIds: orderedSelectedMenuIds,
+          loginEmail: formLoginEmail.trim(),
+          loginPassword: formLoginPassword,
         })
-        if (!created) {
-          setFormError("登録できませんでした。サーバーの設定を確認してください。")
+        if (result.kind === "admin_user_failed") {
+          setAddConfirmOpen(false)
+          setFormError(
+            `ログイン用アカウントの作成に失敗しました: ${result.message}`,
+          )
+          return
+        }
+        if (result.kind === "trainer_failed") {
+          setAddConfirmOpen(false)
+          setFormError(
+            `スタッフ情報の登録に失敗しました: ${result.message}（ログインアカウントは作成済みの可能性があります）`,
+          )
           return
         }
         setAddConfirmOpen(false)
@@ -299,6 +379,34 @@ export function AdminStaffPage() {
         setFormError("通信に失敗しました")
       } finally {
         setFormSaving(false)
+      }
+    })()
+  }
+
+  /** 一覧の表示順入れ替え。`Δ = -1`(上に) / `+1`(下に) */
+  const handleReorder = (target: Staff, delta: -1 | 1) => {
+    const idx = staffList.findIndex((s) => s.id === target.id)
+    if (idx < 0) return
+    const partnerIdx = idx + delta
+    if (partnerIdx < 0 || partnerIdx >= staffList.length) return
+    const partner = staffList[partnerIdx]
+    if (!partner) return
+    void (async () => {
+      setReorderingId(target.id)
+      setPageError("")
+      try {
+        const ok = await swapStaffDisplayOrder(target, partner)
+        if (!ok) {
+          setPageError("表示順の変更に失敗しました。時間をおいて再度お試しください。")
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setPageError("表示順の変更に失敗しました。時間をおいて再度お試しください。")
+      } finally {
+        setReorderingId(null)
       }
     })()
   }
@@ -486,11 +594,15 @@ export function AdminStaffPage() {
       <Card className="border-border shadow-xs">
         <CardHeader>
           <CardTitle className="text-lg">スタッフ一覧</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            ↑↓ ボタンで表示順を入れ替えできます。表示順は予約画面のスタッフ一覧などに反映されます。
+          </p>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[320px] text-sm">
+          <table className="w-full min-w-[360px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="pb-2 pr-2 font-medium" aria-label="並び替え" />
                 <th className="pb-2 pr-4 font-medium">色</th>
                 <th className="pb-2 pr-4 font-medium">名前</th>
                 <th className="pb-2 pr-4 font-medium">対応メニュー</th>
@@ -498,46 +610,79 @@ export function AdminStaffPage() {
               </tr>
             </thead>
             <tbody>
-              {staffList.map((s) => (
-                <tr key={s.id} className="border-b border-border/60">
-                  <td className="py-3 pr-4">
-                    <span
-                      className="inline-block size-6 rounded-full border border-border"
-                      style={{ backgroundColor: s.color }}
-                      title={s.color}
-                    />
-                  </td>
-                  <td className="py-3 pr-4 font-medium">{s.name}</td>
-                  <td className="py-3 pr-4 text-muted-foreground">
-                    {s.menuIds?.length ? `${s.menuIds.length} 件` : "—"}
-                  </td>
-                  <td className="py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="rounded-md"
-                        onClick={() => openEdit(s)}
-                      >
-                        <Pencil className="mr-1 size-3.5" />
-                        編集
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="rounded-md text-destructive hover:bg-destructive/10"
-                        disabled={deletePrecheckLoading}
-                        onClick={() => openDelete(s)}
-                      >
-                        <Trash2 className="mr-1 size-3.5" />
-                        削除
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {staffList.map((s, idx) => {
+                const isFirst = idx === 0
+                const isLast = idx === staffList.length - 1
+                const reorderingThis = reorderingId !== null
+                return (
+                  <tr key={s.id} className="border-b border-border/60">
+                    <td className="py-3 pr-2 align-middle">
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="size-7 rounded-md"
+                          disabled={isFirst || reorderingThis}
+                          aria-label={`${s.name} を上に移動`}
+                          title={isFirst ? "これ以上、上に移動できません" : "上に移動"}
+                          onClick={() => handleReorder(s, -1)}
+                        >
+                          <ArrowUp className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="size-7 rounded-md"
+                          disabled={isLast || reorderingThis}
+                          aria-label={`${s.name} を下に移動`}
+                          title={isLast ? "これ以上、下に移動できません" : "下に移動"}
+                          onClick={() => handleReorder(s, 1)}
+                        >
+                          <ArrowDown className="size-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span
+                        className="inline-block size-6 rounded-full border border-border"
+                        style={{ backgroundColor: s.color }}
+                        title={s.color}
+                      />
+                    </td>
+                    <td className="py-3 pr-4 font-medium">{s.name}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">
+                      {s.menuIds?.length ? `${s.menuIds.length} 件` : "—"}
+                    </td>
+                    <td className="py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-md"
+                          onClick={() => openEdit(s)}
+                        >
+                          <Pencil className="mr-1 size-3.5" />
+                          編集
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-md text-destructive hover:bg-destructive/10"
+                          disabled={deletePrecheckLoading}
+                          onClick={() => openDelete(s)}
+                        >
+                          <Trash2 className="mr-1 size-3.5" />
+                          削除
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </CardContent>
@@ -581,6 +726,70 @@ export function AdminStaffPage() {
                 />
                 <p className="text-xs text-muted-foreground">100文字以内（必須）</p>
               </div>
+              {formOpen === "add" && (
+                <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    管理者ログイン画面で本人がログインできるよう、admin_users
+                    に `role: "staff"` のアカウントを同時に作成します。
+                    本人にメールアドレスと初期パスワードを共有してください。
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="staff-login-email">ログイン用メールアドレス</Label>
+                    <Input
+                      id="staff-login-email"
+                      type="email"
+                      value={formLoginEmail}
+                      onChange={(e) =>
+                        setFormLoginEmail(
+                          /**
+                           * バックエンドの admin_users.email は小文字で保存されるため、
+                           * 大文字を入力された段階で自動的に除外（=入力できない）にする。
+                           */
+                          e.target.value.replace(/[A-Z]/g, "").replace(/\s+/g, ""),
+                        )
+                      }
+                      placeholder="example@your-salon.jp"
+                      maxLength={200}
+                      inputMode="email"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      className="rounded-md"
+                      autoComplete="off"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      小文字のみ・空白不可（大文字を入力するとブロックされます）
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="staff-login-password">初期パスワード</Label>
+                    <Input
+                      id="staff-login-password"
+                      type="password"
+                      value={formLoginPassword}
+                      onChange={(e) => setFormLoginPassword(e.target.value)}
+                      placeholder={`${STAFF_PASSWORD_MIN}文字以上`}
+                      maxLength={STAFF_PASSWORD_MAX}
+                      className="rounded-md"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="staff-login-password-confirm">
+                      初期パスワード（確認用）
+                    </Label>
+                    <Input
+                      id="staff-login-password-confirm"
+                      type="password"
+                      value={formLoginPasswordConfirm}
+                      onChange={(e) => setFormLoginPasswordConfirm(e.target.value)}
+                      placeholder="もう一度入力してください"
+                      maxLength={STAFF_PASSWORD_MAX}
+                      className="rounded-md"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </div>
+              )}
               {menuFormActive && (
                 <>
                   <div className="space-y-2">
@@ -901,6 +1110,14 @@ export function AdminStaffPage() {
                 <p>
                   <span className="text-muted-foreground">スタッフ名: </span>
                   <span className="font-medium">{formName.trim()}</span>
+                </p>
+                <p className="mt-2 break-all">
+                  <span className="text-muted-foreground">ログイン用メール: </span>
+                  <span className="font-medium">{formLoginEmail.trim()}</span>
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  role: <span className="font-mono">staff</span>（admin_users に
+                  登録、管理者ログイン画面からログイン可能）
                 </p>
                 <p className="mt-2 flex items-center gap-2">
                   <span className="text-muted-foreground">表示色: </span>
