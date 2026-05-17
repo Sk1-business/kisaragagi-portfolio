@@ -16,7 +16,6 @@ type InitialSetupDraft = {
   address: string
   phone: string
   salonName: string
-  publicSlug: string
   salonMessage: string
   salonDescription: string
   cancelPolicy: string
@@ -52,9 +51,6 @@ function toInitialSetupDraft(form: FormData, email: string): InitialSetupDraft {
     address: String(form.get("address") ?? "").trim(),
     phone: String(form.get("phone") ?? "").trim(),
     salonName: String(form.get("salonName") ?? "").trim(),
-    publicSlug: String(form.get("publicSlug") ?? "")
-      .trim()
-      .toLowerCase(),
     salonMessage: String(form.get("salonMessage") ?? "").trim(),
     salonDescription: String(form.get("salonDescription") ?? "").trim(),
     cancelPolicy: String(form.get("cancelPolicy") ?? "").trim(),
@@ -157,23 +153,6 @@ export function BackofficeInitialSetupPage() {
       setError("サロン名は200文字以内で入力してください。")
       return
     }
-    if (!draft.publicSlug) {
-      setError("公開URL用スラッグは必須です。")
-      return
-    }
-    if (draft.publicSlug.length > 100) {
-      setError("公開URL用スラッグは100文字以内で入力してください。")
-      return
-    }
-    if (!/^[a-z0-9-]+$/.test(draft.publicSlug)) {
-      setError("公開URL用スラッグは小文字英数字とハイフンのみ使用できます。")
-      return
-    }
-    // バックエンドのスラッグ正規表現（先頭末尾は英数字）に合わせる
-    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(draft.publicSlug) || draft.publicSlug.length < 3) {
-      setError("公開URL用スラッグは3文字以上で、先頭と末尾は小文字英数字にしてください。")
-      return
-    }
     const igErr = validateOptionalUrl(draft.instagramUrl, "Instagram URL")
     if (igErr) {
       setError(igErr)
@@ -193,25 +172,17 @@ export function BackofficeInitialSetupPage() {
     setError("")
     setSaving(true)
     try {
-      // 1. POST /api/admin/signup — admin_users + salons + salon_profiles(slug+tz) を作成
+      // 1. POST /api/admin/signup — admin_users + salons + salon_profiles(slug+tz) を作成（slug は API が自動採番）
       const signupResult = await postAdminSignup({
         email: draft.email,
         password: draft.password,
         name: draft.salonName, // 管理者表示名はサロン名を流用
         salon_name: draft.salonName,
-        salon_slug: draft.publicSlug,
       })
       if (signupResult.kind === "duplicate_email") {
         setError(
           signupResult.message ||
             "このメールアドレスは既に登録されています。ログイン画面からログインしてください。",
-        )
-        return
-      }
-      if (signupResult.kind === "duplicate_slug") {
-        setError(
-          signupResult.message ||
-            "この公開URL用スラッグは既に他のサロンで使用されています。別のスラッグを入力してください。",
         )
         return
       }
@@ -314,7 +285,10 @@ export function BackofficeInitialSetupPage() {
         <h1 className="text-2xl font-semibold tracking-tight">初期設定</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           サロン情報とログイン用パスワードを入力してください。
-          パスワード・住所・電話番号・サロン名・公開URL用スラッグは必須です。
+        </p>
+        <p className="mt-1 text-sm font-medium text-foreground">
+          <span className="text-destructive">※</span>
+          は入力必須の項目です。公開予約ページのURL用スラッグは登録時に自動で付与されます。
         </p>
         {fromSignup ? (
           <div
@@ -332,7 +306,7 @@ export function BackofficeInitialSetupPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Field label="パスワード※" htmlFor="initial-password">
+        <Field label="パスワード" htmlFor="initial-password" required>
           <Input
             id="initial-password"
             name="password"
@@ -345,7 +319,7 @@ export function BackofficeInitialSetupPage() {
           />
         </Field>
 
-        <Field label="パスワード（確認用）※" htmlFor="initial-password-confirm">
+        <Field label="パスワード（確認用）" htmlFor="initial-password-confirm" required>
           <Input
             id="initial-password-confirm"
             name="passwordConfirm"
@@ -358,7 +332,7 @@ export function BackofficeInitialSetupPage() {
           />
         </Field>
 
-        <Field label="住所※1" htmlFor="initial-address">
+        <Field label="住所" htmlFor="initial-address" required>
           <textarea
             id="initial-address"
             name="address"
@@ -368,7 +342,7 @@ export function BackofficeInitialSetupPage() {
           />
         </Field>
 
-        <Field label="電話番号※1" htmlFor="initial-phone">
+        <Field label="電話番号" htmlFor="initial-phone" required>
           <Input
             id="initial-phone"
             name="phone"
@@ -380,24 +354,8 @@ export function BackofficeInitialSetupPage() {
           />
         </Field>
 
-        <Field label="サロン名※2" htmlFor="initial-salon-name">
+        <Field label="サロン名" htmlFor="initial-salon-name" required>
           <Input id="initial-salon-name" name="salonName" required maxLength={200} />
-        </Field>
-
-        <Field label="公開URL用スラッグ" htmlFor="initial-public-slug">
-          <div className="space-y-1">
-            <Input
-              id="initial-public-slug"
-              name="publicSlug"
-              required
-              maxLength={100}
-              pattern="[a-z0-9-]+"
-              placeholder="sample-salon-2026"
-            />
-            <p className="text-xs text-muted-foreground">
-              公開URL: <code>/s/{"{slug}"}</code> / 使用可能文字: 小文字英数字・ハイフン
-            </p>
-          </div>
         </Field>
 
         <Field
@@ -525,15 +483,25 @@ function InitialSetupCancelConfirmModal({
 function Field({
   label,
   htmlFor,
+  required,
   children,
 }: {
   label: string
   htmlFor: string
+  /** 入力必須の場合、ラベルに赤い ※ を表示 */
+  required?: boolean
   children: ReactNode
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={htmlFor}>{label}</Label>
+      <Label htmlFor={htmlFor}>
+        {label}
+        {required ? (
+          <span className="ml-0.5 text-destructive" title="必須" aria-hidden>
+            ※
+          </span>
+        ) : null}
+      </Label>
       {children}
     </div>
   )

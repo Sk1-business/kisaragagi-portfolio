@@ -131,6 +131,7 @@ export async function checkAdminEmailExists(email: string): Promise<AdminEmailCh
  *
  * - 成功時: Set-Cookie で `access_token` が発行され、以降の `/api/admin/...` が認証通る
  * - 副作用: `salons` / `salon_profiles`(slug+timezone のみ) / `admin_users`(owner) / `trainers` に INSERT
+ * - `salon_slug` 省略時はサーバーが一意の slug を自動採番する
  */
 export type AdminSignupSubmitResult =
   | { kind: "ok" }
@@ -148,20 +149,25 @@ export async function postAdminSignup(payload: {
   password: string
   name: string
   salon_name: string
-  salon_slug: string
+  /** 省略時は API がサロン名などから一意の slug を自動採番 */
+  salon_slug?: string
 }): Promise<AdminSignupSubmitResult> {
   try {
+    const body: Record<string, unknown> = {
+      email: payload.email.trim(),
+      password: payload.password,
+      name: payload.name.trim(),
+      role: "ADMIN",
+      salon_name: payload.salon_name.trim(),
+    }
+    const slug = payload.salon_slug?.trim().toLowerCase()
+    if (slug) {
+      body.salon_slug = slug
+    }
     const res = await apiFetch(ADMIN_AUTH_PATHS.signup, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: payload.email.trim(),
-        password: payload.password,
-        name: payload.name.trim(),
-        role: "ADMIN",
-        salon_name: payload.salon_name.trim(),
-        salon_slug: payload.salon_slug.trim().toLowerCase(),
-      }),
+      body: JSON.stringify(body),
     })
 
     let detailString: string | undefined
