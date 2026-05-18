@@ -4,6 +4,8 @@ interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
   body?: unknown
   signal?: AbortSignal
+  /** Bearer トークン（予約照会 OTP 認証後など） */
+  bearerToken?: string
 }
 
 interface ErrorResponse {
@@ -85,6 +87,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...(options.bearerToken ? { Authorization: `Bearer ${options.bearerToken}` } : {}),
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     signal: options.signal,

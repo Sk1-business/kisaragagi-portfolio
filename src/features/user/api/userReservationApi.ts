@@ -450,10 +450,94 @@ export async function fetchReservationMenus(
   }))
 }
 
-export async function fetchReservationsByContact(payload: {
+const RESERVATION_LOOKUP_TOKEN_KEY = "user:reservation-lookup-token"
+
+export function getReservationLookupToken(shopSlug?: string): string | null {
+  const resolvedShopSlug = resolveShopSlug(shopSlug)
+  if (!resolvedShopSlug) return null
+  try {
+    return sessionStorage.getItem(`${RESERVATION_LOOKUP_TOKEN_KEY}:${resolvedShopSlug}`)
+  } catch {
+    return null
+  }
+}
+
+export function setReservationLookupToken(shopSlug: string | undefined, token: string): void {
+  const resolvedShopSlug = resolveShopSlug(shopSlug)
+  if (!resolvedShopSlug) return
+  try {
+    sessionStorage.setItem(`${RESERVATION_LOOKUP_TOKEN_KEY}:${resolvedShopSlug}`, token)
+  } catch {
+    // ignore
+  }
+}
+
+export function clearReservationLookupToken(shopSlug?: string): void {
+  const resolvedShopSlug = resolveShopSlug(shopSlug)
+  if (!resolvedShopSlug) return
+  try {
+    sessionStorage.removeItem(`${RESERVATION_LOOKUP_TOKEN_KEY}:${resolvedShopSlug}`)
+  } catch {
+    // ignore
+  }
+}
+
+interface ReservationLookupOtpRequestResponse {
+  challenge_id: string
+  masked_destination: string
+  message: string
+}
+
+interface ReservationLookupOtpVerifyResponse {
+  lookup_token: string
+  expires_in_minutes: number
+}
+
+export async function requestReservationLookupOtp(payload: {
   shopSlug?: string
   email?: string
   phone?: string
+}): Promise<ReservationLookupOtpRequestResponse> {
+  const resolvedShopSlug = resolveShopSlug(payload.shopSlug)
+  if (!resolvedShopSlug) {
+    throw new Error("店舗情報が見つかりませんでした。")
+  }
+  return apiRequest<ReservationLookupOtpRequestResponse>(
+    buildSalonApiPath(resolvedShopSlug, "/reservations/lookup/request-otp"),
+    {
+      method: "POST",
+      body: {
+        email: payload.email?.trim() || undefined,
+        phone: payload.phone?.trim() || undefined,
+      },
+    },
+  )
+}
+
+export async function verifyReservationLookupOtp(payload: {
+  shopSlug?: string
+  challengeId: string
+  code: string
+}): Promise<ReservationLookupOtpVerifyResponse> {
+  const resolvedShopSlug = resolveShopSlug(payload.shopSlug)
+  if (!resolvedShopSlug) {
+    throw new Error("店舗情報が見つかりませんでした。")
+  }
+  return apiRequest<ReservationLookupOtpVerifyResponse>(
+    buildSalonApiPath(resolvedShopSlug, "/reservations/lookup/verify-otp"),
+    {
+      method: "POST",
+      body: {
+        challenge_id: payload.challengeId,
+        code: payload.code.trim(),
+      },
+    },
+  )
+}
+
+export async function fetchReservationsByContact(payload: {
+  shopSlug?: string
+  lookupToken: string
 }): Promise<UserReservation[]> {
   const resolvedShopSlug = resolveShopSlug(payload.shopSlug)
   if (!resolvedShopSlug) {
@@ -462,11 +546,8 @@ export async function fetchReservationsByContact(payload: {
   const details = await apiRequest<ReservationDetailResponse[]>(
     buildSalonApiPath(resolvedShopSlug, "/reservations/lookup"),
     {
-      method: "POST",
-      body: {
-        email: payload.email?.trim() || undefined,
-        phone: payload.phone?.trim() || undefined,
-      },
+      method: "GET",
+      bearerToken: payload.lookupToken,
     },
   )
   const reservations = details.map((detail) => toReservation(detail))
