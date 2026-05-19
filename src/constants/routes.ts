@@ -12,7 +12,9 @@ export const ROUTES = {
   backofficeInitialSetup: "/backoffice/setup/initial",
   /** 初期設定の続き: 営業日・営業時間登録画面 */
   backofficeSetupBusinessHours: "/backoffice/setup/business-hours",
-  /** 初期設定の暫定完了画面（次ステップ準備中） */
+  /** 初期設定の続き: 予約ルール登録画面 */
+  backofficeSetupBookingRules: "/backoffice/setup/booking-rules",
+  /** 初期設定の完了画面 */
   backofficeSetupDone: "/backoffice/setup/done",
   userHome: "/user",
   userReservationNomination: "/user/reservation/nomination",

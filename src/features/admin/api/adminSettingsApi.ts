@@ -146,6 +146,107 @@ export type HolidayCreateResult =
  * `POST /api/admin/settings/holidays` — 個別の休業日を1件作成。
  * バックエンド: `app/api/admin/settings.py::create_holiday`
  */
+/** `GET /api/admin/settings` の `booking_rules` 相当 */
+export type BookingRulesOut = {
+  allow_same_day: boolean
+  booking_deadline_minutes: number
+  buffer_minutes: number
+  slot_increment_minutes: number
+  cancellation_deadline_hours: number
+  max_advance_days: number
+}
+
+/** `PUT /api/admin/settings/booking-rules` のリクエストボディ */
+export type BookingRulesUpdateInput = {
+  allow_same_day?: boolean
+  booking_deadline_minutes?: number
+  buffer_minutes?: number
+  slot_increment_minutes?: number
+  cancellation_deadline_hours?: number
+  max_advance_days?: number
+}
+
+export type BookingRulesUpdateResult =
+  | { kind: "ok" }
+  | { kind: "unauthorized" }
+  | { kind: "error"; status?: number; message?: string }
+
+function parseBookingRules(raw: unknown): BookingRulesOut | null {
+  if (!raw || typeof raw !== "object") return null
+  const o = raw as Record<string, unknown>
+  const allow =
+    typeof o.allow_same_day === "boolean"
+      ? o.allow_same_day
+      : typeof o.allowSameDay === "boolean"
+        ? o.allowSameDay
+        : null
+  const deadline = o.booking_deadline_minutes ?? o.bookingDeadlineMinutes
+  const buffer = o.buffer_minutes ?? o.bufferMinutes ?? o.buffer_times
+  const slot = o.slot_increment_minutes ?? o.slotIncrementMinutes
+  const cancelH = o.cancellation_deadline_hours ?? o.cancellationDeadlineHours
+  const maxDays = o.max_advance_days ?? o.maxAdvanceDays
+  if (
+    allow === null ||
+    typeof deadline !== "number" ||
+    typeof buffer !== "number" ||
+    typeof slot !== "number" ||
+    typeof cancelH !== "number" ||
+    typeof maxDays !== "number"
+  ) {
+    return null
+  }
+  return {
+    allow_same_day: allow,
+    booking_deadline_minutes: deadline,
+    buffer_minutes: buffer,
+    slot_increment_minutes: slot,
+    cancellation_deadline_hours: cancelH,
+    max_advance_days: maxDays,
+  }
+}
+
+/** `GET /api/admin/settings` から予約ルールのみ取得（未設定時は null） */
+export async function fetchAdminBookingRules(): Promise<BookingRulesOut | null> {
+  try {
+    const res = await apiFetch(ADMIN_SETTINGS_PATH, { method: "GET" })
+    if (res.status === 401) throw new Error("UNAUTHORIZED")
+    if (res.status === 404) return null
+    if (!res.ok) return null
+    const data = (await res.json()) as { booking_rules?: unknown }
+    return parseBookingRules(data.booking_rules)
+  } catch (e) {
+    if (e instanceof Error && e.message === "UNAUTHORIZED") throw e
+    return null
+  }
+}
+
+/**
+ * `PUT /api/admin/settings/booking-rules` — 予約ルールを更新（未作成時は新規作成）。
+ */
+export async function putBookingRules(
+  payload: BookingRulesUpdateInput,
+): Promise<BookingRulesUpdateResult> {
+  try {
+    const res = await apiFetch(`${ADMIN_SETTINGS_PATH}/booking-rules`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) return { kind: "ok" }
+    if (res.status === 401) return { kind: "unauthorized" }
+    let detailString: string | undefined
+    try {
+      const data = (await res.clone().json()) as { detail?: unknown } | null
+      detailString = readableDetail(data?.detail)
+    } catch {
+      // non-JSON body
+    }
+    return { kind: "error", status: res.status, message: detailString }
+  } catch {
+    return { kind: "error" }
+  }
+}
+
 export async function postHoliday(
   input: HolidayCreateInput,
 ): Promise<HolidayCreateResult> {

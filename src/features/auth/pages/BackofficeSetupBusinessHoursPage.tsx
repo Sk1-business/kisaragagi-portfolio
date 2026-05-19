@@ -182,6 +182,7 @@ export function BackofficeSetupBusinessHoursPage() {
   })
   const [error, setError] = useState("")
   const [saving, setSaving] = useState(false)
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [backNavigateNotice, setBackNavigateNotice] = useState("")
   const restoreStateRef = useRef<unknown>(null)
@@ -240,9 +241,31 @@ export function BackofficeSetupBusinessHoursPage() {
     setError("")
   }
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
+  function buildSaveSummary(
+    cleanedHolidays: { date: string; description: string }[],
+  ): string[] {
+    const lines: string[] = []
+    for (const r of rows) {
+      const label =
+        DAY_OF_WEEK.find((d) => d.value === r.day_of_week)?.label ?? "曜日"
+      if (r.is_closed) {
+        lines.push(`${label}: 定休日`)
+      } else {
+        lines.push(`${label}: ${r.start_time} 〜 ${r.end_time}`)
+      }
+    }
+    if (cleanedHolidays.length === 0) {
+      lines.push("休業日: なし")
+    } else {
+      for (const h of cleanedHolidays) {
+        const desc = h.description ? `（${h.description}）` : ""
+        lines.push(`休業日: ${h.date}${desc}`)
+      }
+    }
+    return lines
+  }
 
+  function validateForm(): { cleanedHolidays: { date: string; description: string }[] } | null {
     // --- 営業時間バリデーション ---
     for (const r of rows) {
       const label =
@@ -292,7 +315,24 @@ export function BackofficeSetupBusinessHoursPage() {
       dateSet.add(h.date)
     }
 
+    return { cleanedHolidays }
+  }
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!validateForm()) return
     setError("")
+    setShowSaveConfirm(true)
+  }
+
+  async function confirmSave() {
+    const validated = validateForm()
+    if (!validated) {
+      setShowSaveConfirm(false)
+      return
+    }
+    const { cleanedHolidays } = validated
+
     setSaving(true)
     try {
       // 1) PUT /api/admin/settings/business-hours
@@ -355,18 +395,28 @@ export function BackofficeSetupBusinessHoursPage() {
         // ignore storage 失敗
       }
 
-      navigate(ROUTES.backofficeSetupDone, {
+      navigate(ROUTES.backofficeSetupBookingRules, {
         replace: true,
         state: {
           fromBusinessHours: true,
           email: initialEmail,
-          holidaysCreated: created.length,
         },
       })
     } finally {
       setSaving(false)
+      setShowSaveConfirm(false)
     }
   }
+
+  const saveSummaryLines = useMemo(() => {
+    const cleaned = holidays
+      .map((h) => ({
+        date: h.date.trim(),
+        description: h.description.trim(),
+      }))
+      .filter((h) => h.date.length > 0)
+    return buildSaveSummary(cleaned)
+  }, [rows, holidays])
 
   async function handleConfirmCancel() {
     setShowCancelConfirm(false)
@@ -403,7 +453,7 @@ export function BackofficeSetupBusinessHoursPage() {
 
       <div className="mb-6">
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-400">
-          初期設定 - ステップ 2 / 2
+          初期設定 - ステップ 2 / 3
         </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
           営業日・営業時間の登録
@@ -594,10 +644,20 @@ export function BackofficeSetupBusinessHoursPage() {
             登録をやめる
           </Button>
           <Button type="submit" disabled={saving}>
-            {saving ? "保存中..." : "営業日・営業時間・休業日を保存"}
+            {saving ? "保存中..." : "登録内容を確認"}
           </Button>
         </div>
       </form>
+
+      {showSaveConfirm ? (
+        <SetupSaveConfirmModal
+          title="営業日・営業時間の登録内容を確認"
+          lines={saveSummaryLines}
+          saving={saving}
+          onClose={() => !saving && setShowSaveConfirm(false)}
+          onConfirm={() => void confirmSave()}
+        />
+      ) : null}
 
       {showCancelConfirm ? (
         <SetupCancelConfirmModal
@@ -606,6 +666,66 @@ export function BackofficeSetupBusinessHoursPage() {
         />
       ) : null}
     </main>
+  )
+}
+
+function SetupSaveConfirmModal({
+  title,
+  lines,
+  saving,
+  onClose,
+  onConfirm,
+}: {
+  title: string
+  lines: string[]
+  saving: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  useEffect(() => {
+    function handleKeyDown(e: Event) {
+      if (e instanceof KeyboardEvent && e.key === "Escape" && !saving) onClose()
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+      document.body.style.overflow = ""
+    }
+  }, [onClose, saving])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !saving) onClose()
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="setup-save-confirm-title"
+    >
+      <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl">
+        <h3
+          id="setup-save-confirm-title"
+          className="text-base font-bold text-neutral-900"
+        >
+          {title}
+        </h3>
+        <ul className="mt-3 max-h-64 space-y-1.5 overflow-y-auto text-sm text-neutral-700">
+          {lines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+            キャンセル
+          </Button>
+          <Button type="button" onClick={onConfirm} disabled={saving}>
+            {saving ? "登録中..." : "はい、登録する"}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 

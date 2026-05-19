@@ -8,6 +8,7 @@ import {
   BackofficeInitialSetupPage,
   BackofficeLoginPage,
   BackofficeSetupBusinessHoursPage,
+  BackofficeSetupBookingRulesPage,
   BackofficeSetupDonePage,
   BackofficeSignupPage,
   BackofficeSignupVerifyPage,
@@ -130,6 +131,10 @@ function App() {
         <Route
           path={ROUTES.backofficeSetupBusinessHours}
           element={<BackofficeSetupBusinessHoursPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSetupBookingRules}
+          element={<BackofficeSetupBookingRulesPage />}
         />
         <Route
           path={ROUTES.backofficeSetupDone}

@@ -5,25 +5,22 @@ import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 
 /**
- * 初期設定（サロン情報→営業日・営業時間）の暫定完了画面。
- * 以降のステップ（メニュー/料金、スタッフ等）は未実装のため、
- * ここでは登録継続の導線を示すだけのプレースホルダー。
+ * 初期設定（サロン情報→営業日・営業時間→予約ルール）の完了画面。
  */
 export function BackofficeSetupDonePage() {
   const location = useLocation()
   const navigate = useNavigate()
   const navState = location.state as
-    | { fromBusinessHours?: boolean; email?: string }
+    | { fromBookingRules?: boolean; email?: string }
     | null
   const email = typeof navState?.email === "string" ? navState.email : ""
-  const fromBusinessHours = Boolean(navState?.fromBusinessHours)
+  const fromBookingRules = Boolean(navState?.fromBookingRules)
 
-  // 直接URLを叩いた場合は前ステップへ戻す
   useEffect(() => {
-    if (!fromBusinessHours) {
+    if (!fromBookingRules) {
       navigate(ROUTES.backofficeInitialSetup, { replace: true })
     }
-  }, [fromBusinessHours, navigate])
+  }, [fromBookingRules, navigate])
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col items-center justify-center px-4 py-8 sm:px-6">
@@ -44,12 +41,12 @@ export function BackofficeSetupDonePage() {
           </svg>
         </div>
         <h1 className="mt-4 text-xl font-semibold tracking-tight">
-          営業日・営業時間を保存しました
+          初期設定が完了しました
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          ここまでの初期設定はローカルに保存されました。
+          サロン情報・営業日/時間・予約ルールの登録が完了しました。
           <br />
-          以降のステップ（メニュー/料金、スタッフ登録など）は現在準備中です。
+          ログインして管理画面をご利用ください。
         </p>
         {email ? (
           <p className="mt-4 text-xs text-emerald-700">
@@ -62,13 +59,13 @@ export function BackofficeSetupDonePage() {
             type="button"
             variant="outline"
             onClick={() =>
-              navigate(ROUTES.backofficeSetupBusinessHours, {
+              navigate(ROUTES.backofficeSetupBookingRules, {
                 replace: true,
-                state: { fromInitialSetup: true, email },
+                state: { fromBusinessHours: true, email },
               })
             }
           >
-            営業日・営業時間を見直す
+            予約ルールを見直す
           </Button>
           <Button asChild type="button">
             <Link to={ROUTES.backofficeLogin}>ログイン画面へ</Link>
