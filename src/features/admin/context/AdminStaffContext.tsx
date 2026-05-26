@@ -251,8 +251,10 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
             color: normalized,
             description: descTrim || undefined,
             image_url: imgTrim || undefined,
-            display_order: input.display_order,
             menuIds: [...menuIds],
+            ...(input.display_order !== undefined
+              ? { display_order: input.display_order }
+              : {}),
           }
           return sortStaffByDisplayOrder(next)
         })

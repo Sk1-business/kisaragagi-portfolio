@@ -172,7 +172,7 @@ export function BackofficeInitialSetupPage() {
     setError("")
     setSaving(true)
     try {
-      // 1. POST /api/admin/signup — admin_users + salons + salon_profiles(slug+tz) を作成（slug は API が自動採番）
+      // 1. POST /api/admin/signup — salons + salon_profiles（slug 自動採番）+ admin_users を作成
       const signupResult = await postAdminSignup({
         email: draft.email,
         password: draft.password,

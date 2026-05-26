@@ -220,28 +220,61 @@ export async function fetchAdminBookingRules(): Promise<BookingRulesOut | null> 
   }
 }
 
+function isBookingRulesNotConfiguredMessage(message: string | undefined): boolean {
+  if (!message) return false
+  return message.includes("予約ルールが設定されていません")
+}
+
+async function requestBookingRules(
+  method: "PUT" | "POST",
+  payload: BookingRulesUpdateInput,
+): Promise<{ ok: boolean; status: number; detailString?: string }> {
+  const res = await apiFetch(`${ADMIN_SETTINGS_PATH}/booking-rules`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  let detailString: string | undefined
+  try {
+    const data = (await res.clone().json()) as { detail?: unknown } | null
+    detailString = readableDetail(data?.detail)
+  } catch {
+    // non-JSON body
+  }
+  return { ok: res.ok, status: res.status, detailString }
+}
+
 /**
- * `PUT /api/admin/settings/booking-rules` — 予約ルールを更新（未作成時は新規作成）。
+ * 予約ルールを保存する。
+ * - 既存行がある API: `PUT /api/admin/settings/booking-rules`
+ * - 未作成の API（Docker 実装など）: 初回は `POST`、2回目以降は `PUT`
  */
 export async function putBookingRules(
   payload: BookingRulesUpdateInput,
 ): Promise<BookingRulesUpdateResult> {
   try {
-    const res = await apiFetch(`${ADMIN_SETTINGS_PATH}/booking-rules`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-    if (res.ok) return { kind: "ok" }
-    if (res.status === 401) return { kind: "unauthorized" }
-    let detailString: string | undefined
-    try {
-      const data = (await res.clone().json()) as { detail?: unknown } | null
-      detailString = readableDetail(data?.detail)
-    } catch {
-      // non-JSON body
+    const put = await requestBookingRules("PUT", payload)
+    if (put.ok) return { kind: "ok" }
+    if (put.status === 401) return { kind: "unauthorized" }
+
+    if (put.status === 404 && isBookingRulesNotConfiguredMessage(put.detailString)) {
+      const post = await requestBookingRules("POST", payload)
+      if (post.ok) return { kind: "ok" }
+      if (post.status === 401) return { kind: "unauthorized" }
+      if (post.status === 409) {
+        const retryPut = await requestBookingRules("PUT", payload)
+        if (retryPut.ok) return { kind: "ok" }
+        if (retryPut.status === 401) return { kind: "unauthorized" }
+        return {
+          kind: "error",
+          status: retryPut.status,
+          message: retryPut.detailString,
+        }
+      }
+      return { kind: "error", status: post.status, message: post.detailString }
     }
-    return { kind: "error", status: res.status, message: detailString }
+
+    return { kind: "error", status: put.status, message: put.detailString }
   } catch {
     return { kind: "error" }
   }

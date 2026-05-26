@@ -54,20 +54,8 @@ export function BackofficeSetupDonePage() {
           </p>
         ) : null}
 
-        <div className="mt-6 flex flex-col items-stretch gap-2 sm:flex-row sm:justify-center">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              navigate(ROUTES.backofficeSetupBookingRules, {
-                replace: true,
-                state: { fromBusinessHours: true, email },
-              })
-            }
-          >
-            予約ルールを見直す
-          </Button>
-          <Button asChild type="button">
+        <div className="mt-6">
+          <Button asChild type="button" className="w-full sm:w-auto">
             <Link to={ROUTES.backofficeLogin}>ログイン画面へ</Link>
           </Button>
         </div>

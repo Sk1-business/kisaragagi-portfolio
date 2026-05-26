@@ -15,6 +15,8 @@ import { isStaffNameTaken } from "@/features/admin/api/staffApi"
 import { useAdminStaff } from "@/features/admin/context/AdminStaffContext"
 import { ROUTES } from "@/constants/routes"
 import type { Staff } from "@/features/admin/types/staff"
+import { StaffProfileImageField } from "@/features/admin/components/StaffProfileImageField"
+import { resolvePublicAssetUrl } from "@/lib/mediaUrl"
 
 const COLOR_PRESETS = [
   "#3b82f6",
@@ -68,7 +70,6 @@ export function AdminStaffPage() {
   const [formName, setFormName] = useState("")
   const [formDescription, setFormDescription] = useState("")
   const [formImageUrl, setFormImageUrl] = useState("")
-  const [formDisplayOrder, setFormDisplayOrder] = useState("")
   const [formColor, setFormColor] = useState("#6366f1")
   /** スタッフ追加フォーム専用: 管理者ログイン用のメール・パスワード */
   const [formLoginEmail, setFormLoginEmail] = useState("")
@@ -103,7 +104,6 @@ export function AdminStaffPage() {
     setFormName("")
     setFormDescription("")
     setFormImageUrl("")
-    setFormDisplayOrder("")
     setFormColor(COLOR_PRESETS[staffList.length % COLOR_PRESETS.length])
     setFormLoginEmail("")
     setFormLoginPassword("")
@@ -177,11 +177,6 @@ export function AdminStaffPage() {
         }
         setFormDescription(detail.description ?? "")
         setFormImageUrl(detail.image_url ?? "")
-        setFormDisplayOrder(
-          detail.display_order !== undefined && detail.display_order !== null
-            ? String(detail.display_order)
-            : "",
-        )
         setSelectedMenuIds(detail.menuIds ? [...detail.menuIds] : [])
       } catch (e) {
         if (cancelled) return
@@ -193,11 +188,6 @@ export function AdminStaffPage() {
         if (String(listRow.id) === String(id)) {
           setFormDescription(listRow.description ?? "")
           setFormImageUrl(listRow.image_url ?? "")
-          setFormDisplayOrder(
-            listRow.display_order !== undefined && listRow.display_order !== null
-              ? String(listRow.display_order)
-              : "",
-          )
           setSelectedMenuIds(listRow.menuIds ? [...listRow.menuIds] : [])
           setTrainerDetailError("")
           return
@@ -235,11 +225,6 @@ export function AdminStaffPage() {
     setFormColor(s.color)
     setFormDescription(s.description ?? "")
     setFormImageUrl(s.image_url ?? "")
-    setFormDisplayOrder(
-      s.display_order !== undefined && s.display_order !== null
-        ? String(s.display_order)
-        : "",
-    )
     setSelectedMenuIds(s.menuIds ? [...s.menuIds] : [])
     setEditConfirmOpen(false)
     setTrainerDetailLoading(false)
@@ -275,14 +260,6 @@ export function AdminStaffPage() {
     if (isStaffNameTaken(staffList, formName)) {
       setFormError("すでに登録されている名前です")
       return
-    }
-    const doRaw = formDisplayOrder.trim()
-    if (doRaw) {
-      const n = Number(doRaw)
-      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
-        setFormError("表示順序は0以上の整数で入力してください（未入力で省略）")
-        return
-      }
     }
     const email = formLoginEmail.trim()
     if (!email) {
@@ -341,16 +318,11 @@ export function AdminStaffPage() {
           setAddConfirmOpen(false)
           return
         }
-        const doRaw = formDisplayOrder.trim()
-        const displayOrderParsed = doRaw
-          ? Math.round(Number(doRaw))
-          : undefined
         const result = await addStaff({
           name: formName.trim(),
           color,
           description: formDescription.trim() || undefined,
           image_url: formImageUrl.trim() || undefined,
-          display_order: displayOrderParsed,
           menuIds: orderedSelectedMenuIds,
           loginEmail: formLoginEmail.trim(),
           loginPassword: formLoginPassword,
@@ -428,14 +400,6 @@ export function AdminStaffPage() {
       setFormError("名前は100文字以内で入力してください")
       return
     }
-    const doRaw = formDisplayOrder.trim()
-    if (doRaw) {
-      const n = Number(doRaw)
-      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
-        setFormError("表示順序は0以上の整数で入力してください（未入力で省略）")
-        return
-      }
-    }
     if (isStaffNameTaken(staffList, name, formOpen.edit.id)) {
       setFormError("すでに登録されている名前です")
       return
@@ -454,7 +418,6 @@ export function AdminStaffPage() {
       if (!formOpen || typeof formOpen !== "object" || !("edit" in formOpen)) return
       const color = normalizeHex(formColor)
       const name = formName.trim()
-      const doRaw = formDisplayOrder.trim()
       setFormSaving(true)
       setFormError("")
       try {
@@ -463,13 +426,11 @@ export function AdminStaffPage() {
           setEditConfirmOpen(false)
           return
         }
-        const displayOrderParsed = doRaw ? Math.round(Number(doRaw)) : undefined
         const ok = await updateStaff(formOpen.edit.id, {
           name,
           color,
           description: formDescription,
           image_url: formImageUrl,
-          display_order: displayOrderParsed,
           menuIds: orderedSelectedMenuIds,
         })
         if (!ok) {
@@ -712,7 +673,7 @@ export function AdminStaffPage() {
                 {formOpen === "add" ? "スタッフを追加" : "スタッフを編集"}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="staff-name">スタッフ名</Label>
                 <Input
@@ -727,12 +688,7 @@ export function AdminStaffPage() {
                 <p className="text-xs text-muted-foreground">100文字以内（必須）</p>
               </div>
               {formOpen === "add" && (
-                <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
-                  <p className="text-xs text-muted-foreground">
-                    管理者ログイン画面で本人がログインできるよう、admin_users
-                    に `role: "staff"` のアカウントを同時に作成します。
-                    本人にメールアドレスと初期パスワードを共有してください。
-                  </p>
+                <div className="space-y-4 rounded-md border border-border bg-muted/30 p-4">
                   <div className="space-y-2">
                     <Label htmlFor="staff-login-email">ログイン用メールアドレス</Label>
                     <Input
@@ -791,7 +747,7 @@ export function AdminStaffPage() {
                 </div>
               )}
               {menuFormActive && (
-                <>
+                <div className="space-y-6">
                   <div className="space-y-2">
                     <Label htmlFor="staff-description">メモ（description）</Label>
                     <textarea
@@ -807,47 +763,16 @@ export function AdminStaffPage() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="staff-image-url">イメージ画像のURL（image_url）</Label>
-                    <Input
-                      id="staff-image-url"
+                    <Label>イメージ画像（プロフィール画像）</Label>
+                    <StaffProfileImageField
                       value={formImageUrl}
-                      onChange={(e) => setFormImageUrl(e.target.value)}
-                      placeholder="https://..."
-                      className="rounded-md"
-                      autoComplete="off"
-                    />
-                    <p className="text-xs text-muted-foreground">未入力の場合は送りません</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="staff-display-order">表示順序（display_order）</Label>
-                    <Input
-                      id="staff-display-order"
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={formDisplayOrder}
-                      onChange={(e) => setFormDisplayOrder(e.target.value)}
-                      placeholder="未入力でサーバー採番"
-                      className="rounded-md max-w-[200px] font-mono text-sm"
+                      onChange={setFormImageUrl}
+                      disabled={formSaving}
+                      onUploadError={(msg) => setFormError(msg)}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>対応可能なメニュー</Label>
-                    <p className="text-xs text-muted-foreground">
-                      メニュー管理 API の GET /api/admin/menus から、未アーカイブのメニューを表示して選択します（アーカイブ済みは表示しません）。
-                      {formOpen === "add" ? (
-                        <>
-                          {" "}新規登録では POST /api/admin/trainers を1回だけ実行し、選択した
-                          メニューをまとめて送信します。
-                        </>
-                      ) : (
-                        <>
-                          {" "}
-                          編集では PUT /api/admin/trainers/&#123;trainer_id&#125;
-                          に対応メニューをまとめて送信します。
-                        </>
-                      )}
-                    </p>
                     {menusLoading ? (
                       <p className="text-sm text-muted-foreground">メニュー一覧を読み込み中...</p>
                     ) : menusLoadError ? (
@@ -885,7 +810,7 @@ export function AdminStaffPage() {
                       </ul>
                     )}
                   </div>
-                </>
+                </div>
               )}
               <div className="space-y-2">
                 <Label htmlFor="staff-color">表示色</Label>
@@ -1023,20 +948,16 @@ export function AdminStaffPage() {
                   <p className="mt-2 text-muted-foreground">メモ: （未入力）</p>
                 )}
                 {formImageUrl.trim() ? (
-                  <p className="mt-2 break-all text-xs">
-                    <span className="text-muted-foreground">画像URL: </span>
-                    {formImageUrl.trim()}
-                  </p>
+                  <div className="mt-2 space-y-2">
+                    <p className="text-sm text-muted-foreground">プロフィール画像</p>
+                    <img
+                      src={resolvePublicAssetUrl(formImageUrl)}
+                      alt=""
+                      className="h-16 w-16 rounded-md border border-border object-cover"
+                    />
+                  </div>
                 ) : (
-                  <p className="mt-2 text-muted-foreground">画像URL: （未入力）</p>
-                )}
-                {formDisplayOrder.trim() ? (
-                  <p className="mt-2 font-mono text-xs">
-                    <span className="text-muted-foreground">表示順序: </span>
-                    {formDisplayOrder.trim()}
-                  </p>
-                ) : (
-                  <p className="mt-2 text-muted-foreground">表示順序: （未入力・サーバー採番）</p>
+                  <p className="mt-2 text-muted-foreground">プロフィール画像: （未設定）</p>
                 )}
                 <p className="mt-2 text-sm">
                   <span className="text-muted-foreground">対応メニュー: </span>
@@ -1112,12 +1033,8 @@ export function AdminStaffPage() {
                   <span className="font-medium">{formName.trim()}</span>
                 </p>
                 <p className="mt-2 break-all">
-                  <span className="text-muted-foreground">ログイン用メール: </span>
+                  <span className="text-muted-foreground">メールアドレス: </span>
                   <span className="font-medium">{formLoginEmail.trim()}</span>
-                </p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  role: <span className="font-mono">staff</span>（admin_users に
-                  登録、管理者ログイン画面からログイン可能）
                 </p>
                 <p className="mt-2 flex items-center gap-2">
                   <span className="text-muted-foreground">表示色: </span>
@@ -1136,20 +1053,16 @@ export function AdminStaffPage() {
                   <p className="mt-2 text-muted-foreground">メモ: （未入力）</p>
                 )}
                 {formImageUrl.trim() ? (
-                  <p className="mt-2 break-all text-xs">
-                    <span className="text-muted-foreground">画像URL: </span>
-                    {formImageUrl.trim()}
-                  </p>
+                  <div className="mt-2 space-y-2">
+                    <p className="text-sm text-muted-foreground">プロフィール画像</p>
+                    <img
+                      src={resolvePublicAssetUrl(formImageUrl)}
+                      alt=""
+                      className="h-16 w-16 rounded-md border border-border object-cover"
+                    />
+                  </div>
                 ) : (
-                  <p className="mt-2 text-muted-foreground">画像URL: （未入力）</p>
-                )}
-                {formDisplayOrder.trim() ? (
-                  <p className="mt-2 font-mono text-xs">
-                    <span className="text-muted-foreground">表示順序: </span>
-                    {formDisplayOrder.trim()}
-                  </p>
-                ) : (
-                  <p className="mt-2 text-muted-foreground">表示順序: （未入力・サーバー採番）</p>
+                  <p className="mt-2 text-muted-foreground">プロフィール画像: （未設定）</p>
                 )}
                 <p className="mt-2 text-sm">
                   <span className="text-muted-foreground">対応メニュー: </span>

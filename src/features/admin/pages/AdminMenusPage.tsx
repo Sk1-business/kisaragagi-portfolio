@@ -547,9 +547,9 @@ export function AdminMenusPage() {
                     className="mt-1 size-4 shrink-0 rounded border border-input"
                   />
                   <span>
-                    <span className="font-medium">非表示リストに置く（公開オフ）</span>
+                    <span className="font-medium">非表示リストに追加する</span>
                     <span className="mt-1 block text-xs text-muted-foreground">
-                      チェックあり＝非表示リスト（公開しない）、なし＝メニュー一覧（公開する）。新規はデフォルトでチェックあり。保存時はアーカイブ状態を変えず、未アーカイブのままにします。
+                      チェックを入れると非表示リストにメニューが追加され、ユーザには見えません。
                     </span>
                   </span>
                 </label>
@@ -645,7 +645,7 @@ export function AdminMenusPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-foreground">
-                このメニューを非表示リストに追加しますか？
+                このメニューを非表示リストに移動しますか？
               </p>
               <p className="text-xs text-muted-foreground">
                 非表示リストへ移すため、公開を「いいえ」にします。アーカイブは変更しません。

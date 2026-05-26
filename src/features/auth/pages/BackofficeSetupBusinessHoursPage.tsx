@@ -651,7 +651,6 @@ export function BackofficeSetupBusinessHoursPage() {
 
       {showSaveConfirm ? (
         <SetupSaveConfirmModal
-          title="営業日・営業時間の登録内容を確認"
           lines={saveSummaryLines}
           saving={saving}
           onClose={() => !saving && setShowSaveConfirm(false)}
@@ -670,13 +669,11 @@ export function BackofficeSetupBusinessHoursPage() {
 }
 
 function SetupSaveConfirmModal({
-  title,
   lines,
   saving,
   onClose,
   onConfirm,
 }: {
-  title: string
   lines: string[]
   saving: boolean
   onClose: () => void
@@ -709,7 +706,7 @@ function SetupSaveConfirmModal({
           id="setup-save-confirm-title"
           className="text-base font-bold text-neutral-900"
         >
-          {title}
+          以下の情報で登録してよろしいですか？
         </h3>
         <ul className="mt-3 max-h-64 space-y-1.5 overflow-y-auto text-sm text-neutral-700">
           {lines.map((line) => (
@@ -718,10 +715,10 @@ function SetupSaveConfirmModal({
         </ul>
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
-            キャンセル
+            修正する
           </Button>
           <Button type="button" onClick={onConfirm} disabled={saving}>
-            {saving ? "登録中..." : "はい、登録する"}
+            {saving ? "登録中..." : "登録する"}
           </Button>
         </div>
       </div>

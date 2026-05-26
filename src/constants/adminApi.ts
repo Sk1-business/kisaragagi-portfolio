@@ -21,6 +21,10 @@ export const ADMIN_PROFILE_PATH = "/api/admin/profile" as const
 /** Struct `app/api/admin/trainers.py` — `GET /trainers`（prefix `/api/admin`） */
 export const ADMIN_TRAINERS_LIST_PATH = "/api/admin/trainers" as const
 
+/** `POST /api/admin/trainers/profile-image/upload` — プロフィール画像（multipart） */
+export const ADMIN_TRAINER_PROFILE_IMAGE_UPLOAD_PATH =
+  "/api/admin/trainers/profile-image/upload" as const
+
 /**
  * Struct `app/api/admin/admin_users.py` —
  * `GET/POST /api/admin/admin-users` … 管理者/スタッフアカウント（admin_users）の作成・一覧。

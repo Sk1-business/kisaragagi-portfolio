@@ -1,4 +1,5 @@
 import { ADMIN_AUTH_PATHS } from "@/constants/adminApi"
+import { generateSalonSlugForSignup } from "@/features/auth/lib/salonSlug"
 import { apiFetch } from "@/lib/api"
 
 export type AdminLoginResult = "ok" | "unauthorized" | "error"
@@ -131,7 +132,7 @@ export async function checkAdminEmailExists(email: string): Promise<AdminEmailCh
  *
  * - 成功時: Set-Cookie で `access_token` が発行され、以降の `/api/admin/...` が認証通る
  * - 副作用: `salons` / `salon_profiles`(slug+timezone のみ) / `admin_users`(owner) / `trainers` に INSERT
- * - `salon_slug` 省略時はサーバーが一意の slug を自動採番する
+ * - `salon_slug` 省略時はクライアントで採番して送信（旧 API の slug 必須にも対応）
  */
 export type AdminSignupSubmitResult =
   | { kind: "ok" }
@@ -149,46 +150,60 @@ export async function postAdminSignup(payload: {
   password: string
   name: string
   salon_name: string
-  /** 省略時は API がサロン名などから一意の slug を自動採番 */
+  /** 省略時はサロン名などから自動採番して送信 */
   salon_slug?: string
 }): Promise<AdminSignupSubmitResult> {
+  const salonName = payload.salon_name.trim()
+  const explicitSlug = payload.salon_slug?.trim().toLowerCase()
+
   try {
-    const body: Record<string, unknown> = {
-      email: payload.email.trim(),
-      password: payload.password,
-      name: payload.name.trim(),
-      role: "ADMIN",
-      salon_name: payload.salon_name.trim(),
-    }
-    const slug = payload.salon_slug?.trim().toLowerCase()
-    if (slug) {
-      body.salon_slug = slug
-    }
-    const res = await apiFetch(ADMIN_AUTH_PATHS.signup, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
+    const maxAttempts = explicitSlug ? 1 : 12
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const salon_slug =
+        explicitSlug ?? generateSalonSlugForSignup(salonName, attempt)
 
-    let detailString: string | undefined
-    try {
-      const data = (await res.clone().json()) as { detail?: unknown } | null
-      detailString = readableDetail(data?.detail)
-    } catch {
-      // 非 JSON レスポンスでも fallthrough
-    }
+      const res = await apiFetch(ADMIN_AUTH_PATHS.signup, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: payload.email.trim(),
+          password: payload.password,
+          name: payload.name.trim(),
+          role: "ADMIN",
+          salon_name: salonName,
+          salon_slug,
+        }),
+      })
 
-    if (res.ok) return { kind: "ok" }
-    if (res.status === 409) {
-      if (detailString && detailLooksLikeSlugConflict(detailString)) {
-        return { kind: "duplicate_slug", message: detailString }
+      let detailString: string | undefined
+      try {
+        const data = (await res.clone().json()) as { detail?: unknown } | null
+        detailString = readableDetail(data?.detail)
+      } catch {
+        // 非 JSON レスポンスでも fallthrough
       }
-      return { kind: "duplicate_email", message: detailString }
+
+      if (res.ok) return { kind: "ok" }
+      if (res.status === 409) {
+        if (
+          !explicitSlug &&
+          detailString &&
+          detailLooksLikeSlugConflict(detailString) &&
+          attempt < maxAttempts - 1
+        ) {
+          continue
+        }
+        if (detailString && detailLooksLikeSlugConflict(detailString)) {
+          return { kind: "duplicate_slug", message: detailString }
+        }
+        return { kind: "duplicate_email", message: detailString }
+      }
+      if (res.status === 400 || res.status === 422) {
+        return { kind: "validation", message: detailString }
+      }
+      return { kind: "error", status: res.status, message: detailString }
     }
-    if (res.status === 400 || res.status === 422) {
-      return { kind: "validation", message: detailString }
-    }
-    return { kind: "error", status: res.status, message: detailString }
+    return { kind: "error", message: "予約ページURL slug の採番に失敗しました。" }
   } catch {
     return { kind: "error" }
   }

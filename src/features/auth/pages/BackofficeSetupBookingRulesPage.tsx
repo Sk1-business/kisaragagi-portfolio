@@ -342,26 +342,39 @@ export function BackofficeSetupBookingRulesPage() {
       </div>
 
       <form onSubmit={handleRequestConfirm} className="space-y-5">
-        <div className="rounded-lg border border-border bg-card p-4">
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              checked={form.allow_same_day}
-              onChange={(e) => {
-                setForm((f) => ({ ...f, allow_same_day: e.target.checked }))
-                setError("")
-              }}
-              className="mt-0.5 size-4 rounded border-border accent-black"
-              disabled={saving}
-            />
-            <div>
-              <span className="text-sm font-medium text-foreground">当日予約を許可する</span>
-              <p className="mt-1 text-xs text-muted-foreground">
-                オフにすると、お客様は当日分の予約を行えません。
-              </p>
-            </div>
-          </label>
-        </div>
+        <fieldset className="space-y-2 border-0 p-0">
+          <legend className="text-sm font-medium leading-none">当日予約を許可しますか？</legend>
+          <div className="flex flex-wrap gap-6">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+              <input
+                type="radio"
+                name="allow-same-day"
+                className="size-4 accent-black"
+                checked={form.allow_same_day === true}
+                onChange={() => {
+                  setForm((f) => ({ ...f, allow_same_day: true }))
+                  setError("")
+                }}
+                disabled={saving}
+              />
+              許可する
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+              <input
+                type="radio"
+                name="allow-same-day"
+                className="size-4 accent-black"
+                checked={form.allow_same_day === false}
+                onChange={() => {
+                  setForm((f) => ({ ...f, allow_same_day: false }))
+                  setError("")
+                }}
+                disabled={saving}
+              />
+              許可しない
+            </label>
+          </div>
+        </fieldset>
 
         <div className="space-y-2">
           <Label htmlFor="booking-deadline">予約締切（分）</Label>
@@ -489,7 +502,6 @@ export function BackofficeSetupBookingRulesPage() {
 
       {showSaveConfirm ? (
         <SetupSaveConfirmModal
-          title="予約ルールの登録内容を確認"
           lines={summaryLines}
           saving={saving}
           onClose={() => !saving && setShowSaveConfirm(false)}
@@ -508,13 +520,11 @@ export function BackofficeSetupBookingRulesPage() {
 }
 
 function SetupSaveConfirmModal({
-  title,
   lines,
   saving,
   onClose,
   onConfirm,
 }: {
-  title: string
   lines: string[]
   saving: boolean
   onClose: () => void
@@ -547,7 +557,7 @@ function SetupSaveConfirmModal({
           id="setup-save-confirm-title"
           className="text-base font-bold text-neutral-900"
         >
-          {title}
+          以下の情報で登録してよろしいですか？
         </h3>
         <ul className="mt-3 space-y-1.5 text-sm text-neutral-700">
           {lines.map((line) => (
@@ -556,10 +566,10 @@ function SetupSaveConfirmModal({
         </ul>
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
-            キャンセル
+            修正する
           </Button>
           <Button type="button" onClick={onConfirm} disabled={saving}>
-            {saving ? "登録中..." : "はい、登録する"}
+            {saving ? "登録中..." : "登録する"}
           </Button>
         </div>
       </div>
