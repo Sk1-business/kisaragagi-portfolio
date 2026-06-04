@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
+import { AdminSalonSlugCard } from "@/features/admin/components/AdminSalonSlugCard"
+import { AdminWelcomeCard } from "@/features/admin/components/AdminWelcomeCard"
 import { AdminOwnerFeatureHub } from "@/features/admin/components/AdminOwnerFeatureHub"
 import { TodayReservationsCard } from "@/features/admin/components/TodayReservationsCard"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
@@ -101,6 +103,7 @@ export function AdminDashboardPage() {
         refreshing={todayRefreshing}
         onRefresh={() => void refetchTodayReservations()}
       />
+      <AdminSalonSlugCard />
     </div>
   )
 }

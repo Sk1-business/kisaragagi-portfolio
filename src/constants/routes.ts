@@ -4,6 +4,7 @@ export const ROUTES = {
   customerSignup: "/customer/signup",
   backofficeLogin: "/backoffice/login",
   backofficeSignup: "/backoffice/signup",
+  salonPublic: "/s/:slug",
   /** 認証メール送信完了案内（5分カウントダウン） */
   backofficeSignupVerifySent: "/backoffice/signup/verify-sent",
   /** メール内リンクから飛んでくるトークン検証画面 */

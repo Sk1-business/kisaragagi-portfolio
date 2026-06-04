@@ -29,6 +29,7 @@ import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
 import { UserMypagePage } from "@/features/user/pages/UserMypagePage"
 import { UserPaymentPage } from "@/features/user/pages/UserPaymentPage"
 import { UserPaymentDetailPage } from "@/features/user/pages/UserPaymentDetailPage"
+import { SalonPublicEntryPage } from "@/features/user/pages/SalonPublicEntryPage"
 import { UserProfilePage } from "@/features/user/pages/UserProfilePage"
 import { UserReservationConfirmPage } from "@/features/user/pages/UserReservationConfirmPage"
 import { UserReservationChangeModePage } from "@/features/user/pages/UserReservationChangeModePage"
@@ -70,15 +71,9 @@ function LandingPage() {
           <CardContent className="space-y-2">
 
             <Button asChild className="w-full rounded-md">
-              <Link to={ROUTES.customerLogin}>予約者ログインへ</Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full rounded-md">
-              <Link to={ROUTES.customerSignup}>予約者新規登録へ</Link>
-            </Button>
-            <Button asChild className="w-full rounded-xl">
               <Link to={`${ROUTES.customerLogin}?shopId=sample-salon-2026`}>予約者ログインへ</Link>
             </Button>
-            <Button asChild variant="outline" className="w-full rounded-xl">
+            <Button asChild variant="outline" className="w-full rounded-md">
               <Link to={`${ROUTES.customerSignup}?shopId=sample-salon-2026`}>予約者新規登録へ</Link>
             </Button>
           </CardContent>
@@ -116,6 +111,7 @@ function App() {
         <Route path={ROUTES.customerSignup} element={<CustomerSignupPage />} />
         <Route path={ROUTES.backofficeLogin} element={<BackofficeLoginPage />} />
         <Route path={ROUTES.backofficeSignup} element={<BackofficeSignupPage />} />
+        <Route path={ROUTES.salonPublic} element={<SalonPublicEntryPage />} />
         <Route
           path={ROUTES.backofficeSignupVerifySent}
           element={<BackofficeSignupVerifySentPage />}

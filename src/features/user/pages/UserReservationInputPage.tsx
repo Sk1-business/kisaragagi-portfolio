@@ -16,7 +16,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import {
-  fetchPaymentCardDetail,
   fetchPaymentCards,
   type PaymentCard,
 } from "@/features/user/api/userPaymentApi"
@@ -73,7 +72,7 @@ export interface ReservationInputData {
   menuPrice?: number | null
   /** credit のとき: 登録カード or 新規入力（新規は入力画面で Stripe → 同一ページで確認） */
   creditCardMode?: "saved" | "new"
-  savedStripePaymentMethodId?: string | null
+  savedCardId?: string | null
   /** 確認画面表示用 */
   savedCardSummary?: string | null
 }
@@ -119,9 +118,7 @@ export function UserReservationInputPage() {
   const [savedCardsLoading, setSavedCardsLoading] = useState(true)
   const [creditCardMode, setCreditCardMode] = useState<"saved" | "new">("new")
   const [selectedSavedCardId, setSelectedSavedCardId] = useState("")
-  const [resolvedSavedStripePmId, setResolvedSavedStripePmId] = useState("")
   const [savedCardResolveError, setSavedCardResolveError] = useState("")
-  const [isResolvingSavedCard, setIsResolvingSavedCard] = useState(false)
   const [creditFlowError, setCreditFlowError] = useState("")
   const [savedCardsBootstrapped, setSavedCardsBootstrapped] = useState(false)
   const [lastName, setLastName] = useState("")
@@ -276,43 +273,17 @@ export function UserReservationInputPage() {
     queueMicrotask(() => {
       setCreditFlowError("")
     })
-  }, [paymentMethod, creditCardMode, selectedSavedCardId, resolvedSavedStripePmId])
+  }, [paymentMethod, creditCardMode, selectedSavedCardId])
 
   useEffect(() => {
-    let cancelled = false
     queueMicrotask(() => {
-      if (paymentMethod !== "credit" || creditCardMode !== "saved" || !selectedSavedCardId) {
-        setResolvedSavedStripePmId("")
+      if (paymentMethod !== "credit" || creditCardMode !== "saved") {
         setSavedCardResolveError("")
-        setIsResolvingSavedCard(false)
         return
       }
-      setIsResolvingSavedCard(true)
-      setSavedCardResolveError("")
-      setResolvedSavedStripePmId("")
-      void fetchPaymentCardDetail(selectedSavedCardId, shopId)
-        .then(({ stripePaymentMethodId }) => {
-          if (cancelled) return
-          if (!stripePaymentMethodId?.trim()) {
-            setSavedCardResolveError(
-              "このカードでは決済できません。別のカードを選ぶか、マイページで再登録してください。",
-            )
-            return
-          }
-          setResolvedSavedStripePmId(stripePaymentMethodId.trim())
-        })
-        .catch(() => {
-          if (cancelled) return
-          setSavedCardResolveError("カード情報の取得に失敗しました。")
-        })
-        .finally(() => {
-          if (!cancelled) setIsResolvingSavedCard(false)
-        })
+      setSavedCardResolveError(selectedSavedCardId ? "" : "登録カードを選択してください。")
     })
-    return () => {
-      cancelled = true
-    }
-  }, [paymentMethod, creditCardMode, selectedSavedCardId, shopId])
+  }, [paymentMethod, creditCardMode, selectedSavedCardId])
 
   useEffect(() => {
     let isMounted = true
@@ -375,7 +346,7 @@ export function UserReservationInputPage() {
     const selectedSavedCard = savedCards.find((c) => c.id === selectedSavedCardId)
     const isCredit = !zeroPrice && paymentMethod === "credit"
     const useSavedStripe =
-      isCredit && creditCardMode === "saved" && Boolean(resolvedSavedStripePmId.trim())
+      isCredit && creditCardMode === "saved" && Boolean(selectedSavedCardId.trim())
 
     return {
       ...(isUpdateFlow && reservationId ? { reservationId } : {}),
@@ -399,7 +370,7 @@ export function UserReservationInputPage() {
       menuDurationMinutes: resolvedMenu.duration_minutes,
       menuPrice: resolvedMenu.price,
       creditCardMode: isCredit ? creditCardMode : undefined,
-      savedStripePaymentMethodId: useSavedStripe ? resolvedSavedStripePmId.trim() : null,
+      savedCardId: useSavedStripe ? selectedSavedCardId.trim() : null,
       savedCardSummary:
         useSavedStripe && selectedSavedCard
           ? `${selectedSavedCard.brand} ${selectedSavedCard.maskedNumber}`
@@ -429,11 +400,7 @@ export function UserReservationInputPage() {
         setCreditFlowError("登録済みのカードがありません。新しいカードを選ぶか、マイページでカードを登録してください。")
         return
       }
-      if (isResolvingSavedCard) {
-        setCreditFlowError("カード情報を読み込み中です。少し待ってから再度お試しください。")
-        return
-      }
-      if (!resolvedSavedStripePmId.trim()) {
+      if (!selectedSavedCardId.trim()) {
         setCreditFlowError("登録カードを選択してください。")
         return
       }
@@ -851,9 +818,6 @@ export function UserReservationInputPage() {
                                 </button>
                               )
                             })}
-                            {isResolvingSavedCard ? (
-                              <p className="text-xs text-muted-foreground">{"カード情報を確認中…"}</p>
-                            ) : null}
                             {savedCardResolveError ? (
                               <p className="text-xs text-destructive">{savedCardResolveError}</p>
                             ) : null}
@@ -970,7 +934,6 @@ export function UserReservationInputPage() {
               publishableKey={stripePublishableKey}
               amountYen={stripeAmountYen}
               onReadyChange={setIsStripeReady}
-              savedPaymentMethodId={null}
             />
           </div>
         ) : null}

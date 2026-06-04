@@ -24,10 +24,10 @@ export function persistShopSlug(slug: string): void {
 }
 
 /**
- * 店舗スコープ API パス: `/api/salons/{slug}{path}`
+ * 店舗スコープ API パス: `/api/s/{slug}{path}`
  */
 export function buildSalonApiPath(shopSlug: string, path: string): string {
-  const base = `/api/salons/${encodeURIComponent(shopSlug)}`
+  const base = `/api/s/${encodeURIComponent(shopSlug)}`
   if (!path || path === "/") return base
   return path.startsWith("/") ? `${base}${path}` : `${base}/${path}`
 }

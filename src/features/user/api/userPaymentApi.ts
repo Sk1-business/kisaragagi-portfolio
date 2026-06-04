@@ -65,38 +65,6 @@ export async function fetchPaymentCards(shopSlug?: string): Promise<PaymentCard[
   }))
 }
 
-interface CustomerPaymentCardDetailResponse {
-  card_id: string
-  brand: string
-  masked_number: string
-  expiry: string
-  holder_name: string
-  stripe_payment_method_id: string | null
-}
-
-/** 予約フローで登録カード決済に使う Stripe payment method id を取得 */
-export async function fetchPaymentCardDetail(
-  cardId: string,
-  shopSlug?: string,
-): Promise<{
-  card: PaymentCard
-  stripePaymentMethodId: string | null
-}> {
-  const response = await apiRequest<CustomerPaymentCardDetailResponse>(
-    `${cardsApiBase(shopSlug)}/${encodeURIComponent(cardId)}`,
-  )
-  return {
-    card: {
-      id: response.card_id,
-      brand: response.brand,
-      maskedNumber: response.masked_number,
-      expiry: response.expiry,
-      holderName: response.holder_name,
-    },
-    stripePaymentMethodId: response.stripe_payment_method_id,
-  }
-}
-
 export async function createCardSetupIntent(shopSlug?: string): Promise<StripeCardSetupIntent> {
   const response = await apiRequest<StripeSetupIntentResponse>(
     `${cardsApiBase(shopSlug)}/setup-intent`,

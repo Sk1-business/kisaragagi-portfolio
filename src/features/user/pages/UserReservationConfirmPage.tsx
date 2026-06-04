@@ -87,7 +87,7 @@ export function UserReservationConfirmPage() {
       menuDurationMinutes: null,
       menuPrice: null,
       creditCardMode: undefined,
-      savedStripePaymentMethodId: null,
+      savedCardId: null,
       savedCardSummary: null,
     } satisfies ReservationInputData)
 
@@ -100,10 +100,10 @@ export function UserReservationConfirmPage() {
   ).trim()
   const isReservationUpdate = treatAsReservationUpdateFlow && Boolean(effectiveReservationId)
   const isCreditPayment = input.paymentMethod === "credit" && !isReservationUpdate
-  const useSavedStripeCard =
+  const useSavedCard =
     isCreditPayment &&
     input.creditCardMode === "saved" &&
-    Boolean(input.savedStripePaymentMethodId?.trim())
+    Boolean(input.savedCardId?.trim())
 
   const menuPrice = input.menuPrice ?? null
   /** 入力画面で free 選択、または 0 円メニュー（API で skip 含む） */
@@ -150,6 +150,7 @@ export function UserReservationConfirmPage() {
         trainerId: input.mode === "nomination" ? input.trainerId || null : null,
         date: input.date,
         time: input.time,
+        cardId: useSavedCard ? input.savedCardId : undefined,
       }).then((result) => {
         if (!active) return
         if (!result.ok) {
@@ -169,7 +170,18 @@ export function UserReservationConfirmPage() {
     return () => {
       active = false
     }
-  }, [hasData, input.date, input.menuId, input.time, input.mode, input.trainerId, isCreditPayment, shopId])
+  }, [
+    hasData,
+    input.date,
+    input.menuId,
+    input.time,
+    input.mode,
+    input.trainerId,
+    input.savedCardId,
+    useSavedCard,
+    isCreditPayment,
+    shopId,
+  ])
 
   async function handleSubmit() {
     if (!hasData) return
@@ -467,7 +479,7 @@ export function UserReservationConfirmPage() {
                 publishableKey={stripePublishableKey}
                 amountYen={stripeAmountYen}
                 onReadyChange={setIsStripeReady}
-                savedPaymentMethodId={useSavedStripeCard ? input.savedStripePaymentMethodId!.trim() : null}
+                useSavedCard={useSavedCard}
               />
             ) : null}
           </div>

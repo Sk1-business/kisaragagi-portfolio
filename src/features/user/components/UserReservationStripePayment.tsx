@@ -10,14 +10,13 @@ export type UserReservationStripePaymentHandle = {
 type SavedPmProps = {
   stripePromise: Promise<Stripe | null>
   clientSecret: string
-  savedPaymentMethodId: string
   amountYen: number
   onReadyChange: (ready: boolean) => void
 }
 
-const SavedPaymentMethodConfirm = forwardRef<UserReservationStripePaymentHandle, SavedPmProps>(
-  function SavedPaymentMethodConfirm(
-    { stripePromise, clientSecret, savedPaymentMethodId, amountYen, onReadyChange },
+const SavedCardConfirm = forwardRef<UserReservationStripePaymentHandle, SavedPmProps>(
+  function SavedCardConfirm(
+    { stripePromise, clientSecret, amountYen, onReadyChange },
     ref,
   ) {
     useImperativeHandle(
@@ -32,7 +31,6 @@ const SavedPaymentMethodConfirm = forwardRef<UserReservationStripePaymentHandle,
           const { error, paymentIntent } = await stripe.confirmPayment({
             clientSecret,
             confirmParams: {
-              payment_method: savedPaymentMethodId,
               return_url: returnUrl,
             },
             redirect: "if_required",
@@ -46,7 +44,7 @@ const SavedPaymentMethodConfirm = forwardRef<UserReservationStripePaymentHandle,
           return paymentIntent.id
         },
       }),
-      [stripePromise, clientSecret, savedPaymentMethodId],
+      [stripePromise, clientSecret],
     )
 
     useEffect(() => {
@@ -132,17 +130,15 @@ type Props = {
   publishableKey: string
   amountYen: number
   onReadyChange: (ready: boolean) => void
-  /** 指定時は Payment Element を出さず、登録済み Stripe PM で確定する */
-  savedPaymentMethodId?: string | null
+  useSavedCard?: boolean
 }
 
 export const UserReservationStripePayment = forwardRef<UserReservationStripePaymentHandle, Props>(
   function UserReservationStripePayment(
-    { clientSecret, publishableKey, amountYen, onReadyChange, savedPaymentMethodId },
+    { clientSecret, publishableKey, amountYen, onReadyChange, useSavedCard = false },
     ref,
   ) {
     const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null)
-    const trimmedSavedPm = savedPaymentMethodId?.trim() || ""
 
     useEffect(() => {
       setStripePromise(loadStripe(publishableKey))
@@ -150,15 +146,14 @@ export const UserReservationStripePayment = forwardRef<UserReservationStripePaym
 
     if (!stripePromise) return null
 
-    if (trimmedSavedPm) {
+    if (useSavedCard) {
       return (
         <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
           <p className="text-xs font-semibold text-foreground">オンライン決済（クレジット）</p>
-          <SavedPaymentMethodConfirm
+          <SavedCardConfirm
             ref={ref}
             stripePromise={stripePromise}
             clientSecret={clientSecret}
-            savedPaymentMethodId={trimmedSavedPm}
             amountYen={amountYen}
             onReadyChange={onReadyChange}
           />

@@ -20,6 +20,7 @@ import { AUTH_AUDIENCE_TEXT, AUTH_TEXT } from "@/features/auth/constants"
 import { useAuthNavigation } from "@/features/auth/hooks/useAuthNavigation"
 import type { AuthFormCardProps, Gender, MockUser } from "@/features/auth/types/auth"
 import { fetchSalonPage } from "@/features/user/api/userSalonApi"
+import lineBrandIcon from "@/assets/LINE_Brand_icon.png"
 import { persistShopSlug, resolveShopSlug } from "@/lib/shopSlug"
 import {
   isCompletePhoneSegments,
@@ -162,6 +163,10 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
     }
 
     if (mode === "login") {
+      if (result.message) {
+        setLoginError(result.message)
+        return
+      }
       if (
         audience === "BACKOFFICE_PORTAL" &&
         result.reason === "unauthorized"
@@ -172,6 +177,11 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
           "ログインに失敗しました。メールアドレスまたはパスワードを確認してください。",
         )
       }
+      return
+    }
+
+    if (result.message) {
+      setLoginError(result.message)
     }
   }
 
@@ -624,7 +634,7 @@ function LineLoginButton({ shopSlug, onError }: { shopSlug?: string; onError: (m
       onClick={handleClick}
       className="group flex h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-[#06C755] text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#05b34e] hover:shadow-md active:scale-[0.98] disabled:opacity-60"
     >
-      <img src="/LINE_Brand_icon.png" alt="" className="size-5" />
+      <img src={lineBrandIcon} alt="" className="size-5" />
       {loading ? "リダイレクト中…" : "LINEでログイン / 新規登録"}
     </button>
   )
