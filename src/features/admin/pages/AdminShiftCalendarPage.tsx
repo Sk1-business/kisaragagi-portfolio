@@ -1,22 +1,31 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ShiftBulkMonthPanel } from "@/features/admin/components/calendar/ShiftBulkMonthPanel"
+import { filterEditableStaff } from "@/features/admin/lib/shiftPermissions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { fetchAdminUsersList } from "@/features/admin/api/adminUsersApi"
 import {
-  fetchAdminSettings,
+  fetchAdminBusinessHours,
+  fetchAdminHolidays,
   type BusinessHoursItem,
 } from "@/features/admin/api/adminSettingsApi"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
+import { filterStaffRoleTrainers } from "@/features/admin/api/staffApi"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { useTrainerShiftsForMonth } from "@/features/admin/hooks/useTrainerShiftsForMonth"
 import { useStaff } from "@/features/admin/hooks/useStaff"
 import { ShiftCalendarMonthView } from "@/features/admin/components/calendar/ShiftCalendarMonthView"
+import { useAdminProfile } from "@/features/auth/context/AdminProfileContext"
 import { addMonths, startOfDay } from "@/features/admin/lib/calendarUtils"
 import { ROUTES } from "@/constants/routes"
 
+type ShiftRegisterView = "individual" | "bulk"
+
 export function AdminShiftCalendarPage() {
   const navigate = useNavigate()
+  const profile = useAdminProfile()
   const { staffList, loading: staffLoading } = useStaff()
   const { reservations, replaceReservations } = useAdminReservations()
   const [reservationsLoading, setReservationsLoading] = useState(true)
@@ -26,11 +35,55 @@ export function AdminShiftCalendarPage() {
   const [holidayDateKeys, setHolidayDateKeys] = useState<ReadonlySet<string>>(() => new Set())
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [settingsError, setSettingsError] = useState(false)
+  const [adminUsers, setAdminUsers] = useState<
+    Awaited<ReturnType<typeof fetchAdminUsersList>>
+  >([])
+  const [adminUsersLoading, setAdminUsersLoading] = useState(true)
+  const [registerView, setRegisterView] = useState<ShiftRegisterView>("individual")
+
+  const staffListForShifts = useMemo(
+    () =>
+      filterStaffRoleTrainers(staffList, adminUsers, {
+        viewerAdminId: profile.adminId,
+        viewerRole: profile.role,
+      }),
+    [staffList, adminUsers, profile.adminId, profile.role],
+  )
+
+  const editableStaffForShifts = useMemo(
+    () => filterEditableStaff(staffListForShifts, profile),
+    [staffListForShifts, profile],
+  )
+
+  const canUseBulkRegister = editableStaffForShifts.length > 0 && !settingsError
 
   const { loading: shiftsLoading, error: shiftsError, refetch } = useTrainerShiftsForMonth(
-    staffList,
+    staffListForShifts,
     currentDate,
   )
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      setAdminUsersLoading(true)
+      try {
+        const users = await fetchAdminUsersList()
+        if (!cancelled) setAdminUsers(users)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setAdminUsers([])
+      } finally {
+        if (!cancelled) setAdminUsersLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
 
   useEffect(() => {
     let cancelled = false
@@ -38,13 +91,21 @@ export function AdminShiftCalendarPage() {
       setSettingsLoading(true)
       setSettingsError(false)
       try {
-        const s = await fetchAdminSettings()
+        const [business_hours, holidays] = await Promise.all([
+          fetchAdminBusinessHours(),
+          fetchAdminHolidays(),
+        ])
         if (!cancelled) {
-          setBusinessHoursItems(s.business_hours)
-          setHolidayDateKeys(new Set(s.holidays))
+          setBusinessHoursItems(business_hours)
+          setHolidayDateKeys(new Set(holidays))
         }
-      } catch {
-        if (!cancelled) setSettingsError(true)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setSettingsError(true)
       } finally {
         if (!cancelled) setSettingsLoading(false)
       }
@@ -52,16 +113,16 @@ export function AdminShiftCalendarPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [navigate])
 
   useEffect(() => {
-    if (staffLoading) return
+    if (staffLoading || adminUsersLoading) return
     let cancelled = false
     void (async () => {
       setReservationsLoading(true)
       setReservationsFetchFailed(false)
       try {
-        const list = await fetchAdminReservations(staffList, {
+        const list = await fetchAdminReservations(staffListForShifts, {
           viewMode: "month",
           anchorDate: currentDate,
         })
@@ -81,7 +142,14 @@ export function AdminShiftCalendarPage() {
     return () => {
       cancelled = true
     }
-  }, [staffLoading, staffList, replaceReservations, navigate, currentDate])
+  }, [
+    staffLoading,
+    adminUsersLoading,
+    staffListForShifts,
+    replaceReservations,
+    navigate,
+    currentDate,
+  ])
 
   const goPrev = () => {
     setCurrentDate((d) => addMonths(d, -1))
@@ -97,7 +165,11 @@ export function AdminShiftCalendarPage() {
 
   const titleMonth = `${currentDate.getFullYear()}年 ${currentDate.getMonth() + 1}月`
 
-  if (staffLoading || (staffList.length > 0 && shiftsLoading)) {
+  if (
+    staffLoading ||
+    adminUsersLoading ||
+    (staffListForShifts.length > 0 && shiftsLoading)
+  ) {
     return <p className="text-sm text-muted-foreground">読み込み中...</p>
   }
 
@@ -108,14 +180,33 @@ export function AdminShiftCalendarPage() {
           <div>
             <CardTitle className="text-lg">シフトカレンダー</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
-              シフトは{" "}
-              <span className="font-mono text-xs">GET /api/admin/trainers/&#123;trainer_id&#125;/shifts</span>{" "}
-              で取得した <span className="font-mono text-xs">trainer_shifts</span> を表示します。
-              編集時の勤務時間は{" "}
-              <span className="font-mono text-xs">GET /api/admin/settings</span> の営業時間内に制限されます。
+              {registerView === "individual"
+                ? "カレンダーから日ごとにシフトを登録・編集します。"
+                : "表示中の月の営業日に、同じ勤務時間のシフトをまとめて登録します。"}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {registerView === "individual" ? (
+              canUseBulkRegister ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setRegisterView("bulk")}
+                >
+                  一括登録
+                </Button>
+              ) : null
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setRegisterView("individual")}
+              >
+                個別登録
+              </Button>
+            )}
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
@@ -149,21 +240,35 @@ export function AdminShiftCalendarPage() {
         <CardContent>
           {settingsError ? (
             <p className="mb-4 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-              営業時間（GET /api/admin/settings）の取得に失敗しました。シフトの保存時は営業時間内に収まる必要があります。
+              営業時間または定休日の取得に失敗しました。シフトの保存時は営業時間内に収まる必要があります。
             </p>
           ) : null}
           {shiftsError ? (
             <p className="py-8 text-center text-sm text-destructive">
               シフト一覧の取得に失敗しました。ネットワークまたはサーバーを確認してください。
             </p>
-          ) : staffList.length === 0 ? (
+          ) : staffListForShifts.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              スタッフが登録されていません。スタッフ管理から担当者を追加してください。
+              表示できるスタッフがいません。スタッフ管理から担当者を追加してください。
             </p>
+          ) : registerView === "bulk" ? (
+            <ShiftBulkMonthPanel
+              monthAnchor={currentDate}
+              monthLabel={titleMonth}
+              editableStaff={editableStaffForShifts}
+              businessHoursItems={businessHoursItems}
+              holidayDateKeys={holidayDateKeys}
+              settingsLoading={settingsLoading}
+              settingsError={settingsError}
+              reservations={reservations}
+              reservationsLoading={reservationsLoading}
+              reservationsFetchFailed={reservationsFetchFailed}
+              onApplied={() => refetch()}
+            />
           ) : (
             <ShiftCalendarMonthView
               date={currentDate}
-              staffList={staffList}
+              staffList={staffListForShifts}
               businessHoursItems={businessHoursItems}
               holidayDateKeys={holidayDateKeys}
               settingsLoading={settingsLoading}

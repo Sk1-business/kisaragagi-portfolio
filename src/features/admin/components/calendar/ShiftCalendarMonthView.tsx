@@ -2,9 +2,8 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import type { BusinessHoursItem } from "@/features/admin/api/adminSettingsApi"
 import {
-  createTrainerShift,
+  applyTrainerDayShift,
   deleteTrainerShift,
-  updateTrainerShift,
 } from "@/features/admin/api/trainerShiftsApi"
 import { useAdminShiftAvailability } from "@/features/admin/context/AdminShiftAvailabilityContext"
 import type { ResolvedShiftDay } from "@/features/admin/context/AdminShiftAvailabilityContext"
@@ -27,6 +26,8 @@ import { getBusinessHoursForJsDate } from "@/features/admin/lib/businessHours"
 import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
 import { ROUTES } from "@/constants/routes"
+import { isShiftEditableForStaff } from "@/features/admin/lib/shiftPermissions"
+import { useAdminProfile } from "@/features/auth/context/AdminProfileContext"
 import { cn } from "@/lib/utils"
 
 interface ShiftCalendarMonthViewProps {
@@ -71,8 +72,11 @@ export function ShiftCalendarMonthView({
   refetchShifts,
 }: ShiftCalendarMonthViewProps) {
   const navigate = useNavigate()
+  const profile = useAdminProfile()
   const { resolveStaffDay, setOverride, apiShiftRows } = useAdminShiftAvailability()
   const [editing, setEditing] = useState<{ staff: Staff; day: Date } | null>(null)
+
+  const canEditStaff = (staff: Staff) => isShiftEditableForStaff(profile, staff)
 
   const monthStart = startOfMonth(date)
   const monthEnd = endOfMonth(date)
@@ -111,19 +115,15 @@ export function ShiftCalendarMonthView({
 
     try {
       if (commit.type === "save") {
-        const body = {
-          date: dateKey,
-          start_time: commit.slot.start,
-          end_time: commit.slot.end,
-        }
-        if (ids.length === 0) {
-          await createTrainerShift(trainerId, body)
-        } else {
-          for (const id of ids.slice(1)) {
-            await deleteTrainerShift(trainerId, id)
-          }
-          await updateTrainerShift(trainerId, ids[0], body)
-        }
+        await applyTrainerDayShift(
+          trainerId,
+          {
+            date: dateKey,
+            start_time: commit.slot.start,
+            end_time: commit.slot.end,
+          },
+          rows,
+        )
         setOverride(trainerId, dateKey, null)
       } else if (commit.type === "off") {
         for (const id of ids) {
@@ -164,9 +164,7 @@ export function ShiftCalendarMonthView({
               const dayNorm = startOfDay(new Date(day.getTime()))
               const dateKey = getDateKeyInTimeZone(day, ADMIN_CALENDAR_TIME_ZONE)
               const isHoliday =
-                holidayDateKeys != null &&
-                holidayDateKeys.size > 0 &&
-                holidayDateKeys.has(dateKey)
+                holidayDateKeys != null && holidayDateKeys.has(dateKey)
               const biz =
                 businessHoursItems.length > 0
                   ? getBusinessHoursForJsDate(businessHoursItems, day)
@@ -197,15 +195,24 @@ export function ShiftCalendarMonthView({
                       休業
                     </span>
                   ) : null}
+                  {!isHoliday ? (
                   <div className="mt-0.5 space-y-0.5">
                     {sortedStaff.map((staff) => {
                       const resolved = resolveStaffDay(staff, dayNorm)
                       const work = resolved.kind === "work"
                       const hasExistingShift =
                         (apiShiftRows[staff.id]?.[dateKey]?.length ?? 0) > 0
-                      /** 休業日は新規/更新不可。既存シフトがある場合のみ削除目的で編集を許可。 */
-                      const disableShiftEdit =
-                        (isHoliday || (inMonth && isWeekdayClosed)) && !hasExistingShift
+                      /** 曜日休業は新規/更新不可。既存シフトがある場合のみ削除目的で編集を許可。 */
+                      const disableByClosedDay =
+                        inMonth && isWeekdayClosed && !hasExistingShift
+                      /** staff は自分以外のシフトを編集できない（参照のみ） */
+                      const isOtherStaffForViewer = !canEditStaff(staff)
+                      const disableShiftEdit = disableByClosedDay || isOtherStaffForViewer
+                      const titleText = isOtherStaffForViewer
+                        ? `${rowLabel(resolved, staff)}（他のスタッフのシフトのため編集できません。参照のみ）`
+                        : disableByClosedDay
+                          ? "休業日のため新規登録はできません（既存シフトがある日のみ削除可）"
+                          : `${rowLabel(resolved, staff)}（クリックで編集）`
                       return (
                         <button
                           key={staff.id}
@@ -228,13 +235,7 @@ export function ShiftCalendarMonthView({
                                   backgroundColor: `${staff.color}08`,
                                 }
                           }
-                          title={
-                            disableShiftEdit
-                              ? isHoliday
-                                ? "定休日のため新規登録はできません（既存シフトがある日のみ削除可）"
-                                : "休業日のため新規登録はできません（既存シフトがある日のみ削除可）"
-                              : `${rowLabel(resolved, staff)}（クリックで編集）`
-                          }
+                          title={titleText}
                           onClick={() => setEditing({ staff, day: dayNorm })}
                         >
                           <span className="font-medium">{staff.name}</span>
@@ -249,6 +250,7 @@ export function ShiftCalendarMonthView({
                       )
                     })}
                   </div>
+                  ) : null}
                 </div>
               )
             })}

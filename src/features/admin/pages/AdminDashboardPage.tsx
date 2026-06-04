@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
 import { AdminSalonSlugCard } from "@/features/admin/components/AdminSalonSlugCard"
 import { AdminWelcomeCard } from "@/features/admin/components/AdminWelcomeCard"
+import { AdminOwnerFeatureHub } from "@/features/admin/components/AdminOwnerFeatureHub"
 import { TodayReservationsCard } from "@/features/admin/components/TodayReservationsCard"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
-import { useAdminDashboardSummary } from "@/features/admin/hooks/useAdminDashboardSummary"
 import { useStaff } from "@/features/admin/hooks/useStaff"
+import { useAdminProfile } from "@/features/auth/context/AdminProfileContext"
 import {
   ADMIN_CALENDAR_TIME_ZONE,
   getDateKeyInTimeZone,
@@ -17,18 +18,26 @@ import type { Reservation } from "@/features/admin/types/reservation"
 
 export function AdminDashboardPage() {
   const navigate = useNavigate()
-  const summary = useAdminDashboardSummary()
+  const profile = useAdminProfile()
   const { staffList, loading: staffLoading } = useStaff()
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  /** 終了済み予約を定期的に一覧から外す */
-  const [nowTick, setNowTick] = useState(() => Date.now())
-  const [todaySource, setTodaySource] = useState<Reservation[]>([])
+  const [todayReservations, setTodayReservations] = useState<Reservation[]>([])
   const [todayFetchLoading, setTodayFetchLoading] = useState(true)
+  const [todayRefreshing, setTodayRefreshing] = useState(false)
 
-  useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 60_000)
-    return () => window.clearInterval(id)
-  }, [])
+  const fetchTodayReservations = useCallback(async () => {
+    const jstKey = getDateKeyInTimeZone(new Date(), ADMIN_CALENDAR_TIME_ZONE)
+    const list = await fetchAdminReservations(staffList, {
+      viewMode: "day",
+      anchorDate: new Date(),
+      dateKeyOverride: jstKey,
+    })
+    const onlyToday = list.filter(
+      (r) => getIsoDateKeyInTimeZone(r.startAt, ADMIN_CALENDAR_TIME_ZONE) === jstKey,
+    )
+    setTodayReservations(onlyToday)
+    setLastUpdated(new Date())
+  }, [staffList])
 
   useEffect(() => {
     if (staffLoading) return
@@ -36,26 +45,14 @@ export function AdminDashboardPage() {
     void (async () => {
       setTodayFetchLoading(true)
       try {
-        const jstKey = getDateKeyInTimeZone(new Date(), ADMIN_CALENDAR_TIME_ZONE)
-        const list = await fetchAdminReservations(staffList, {
-          viewMode: "day",
-          anchorDate: new Date(),
-          dateKeyOverride: jstKey,
-        })
-        if (cancelled) return
-        const onlyToday = list.filter(
-          (r) =>
-            getIsoDateKeyInTimeZone(r.startAt, ADMIN_CALENDAR_TIME_ZONE) ===
-              jstKey && r.status === "CONFIRMED",
-        )
-        setTodaySource(onlyToday)
+        await fetchTodayReservations()
       } catch (e) {
         if (cancelled) return
         if (e instanceof Error && e.message === "UNAUTHORIZED") {
           navigate(ROUTES.backofficeLogin, { replace: true })
           return
         }
-        setTodaySource([])
+        setTodayReservations([])
       } finally {
         if (!cancelled) setTodayFetchLoading(false)
       }
@@ -63,19 +60,25 @@ export function AdminDashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [staffList, staffLoading, navigate])
+  }, [staffLoading, fetchTodayReservations, navigate])
 
-  const todayReservations = useMemo(() => {
-    return todaySource.filter((r) => new Date(r.endAt).getTime() > nowTick)
-  }, [todaySource, nowTick])
-
-  useEffect(() => {
-    if (!todayFetchLoading && !staffLoading && summary) {
-      setLastUpdated(new Date())
+  const refetchTodayReservations = useCallback(async () => {
+    if (staffLoading || todayRefreshing) return
+    setTodayRefreshing(true)
+    try {
+      await fetchTodayReservations()
+    } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
+      setTodayReservations([])
+    } finally {
+      setTodayRefreshing(false)
     }
-  }, [todayFetchLoading, staffLoading, summary])
+  }, [staffLoading, todayRefreshing, fetchTodayReservations, navigate])
 
-  if (!summary || staffLoading || todayFetchLoading) {
+  if (staffLoading || todayFetchLoading) {
     return <p className="text-sm text-muted-foreground">読み込み中...</p>
   }
 
@@ -92,11 +95,13 @@ export function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <AdminWelcomeCard summary={summary} />
+      {profile.role === "owner" ? <AdminOwnerFeatureHub /> : null}
       <TodayReservationsCard
         reservations={todayReservations}
         staffList={staffList}
         updatedAtLabel={updatedLabel || undefined}
+        refreshing={todayRefreshing}
+        onRefresh={() => void refetchTodayReservations()}
       />
       <AdminSalonSlugCard />
     </div>

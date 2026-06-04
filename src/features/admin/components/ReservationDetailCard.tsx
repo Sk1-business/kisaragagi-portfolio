@@ -23,14 +23,11 @@ import {
   adminReservationApiStatusLabel,
   mapReservationStatusToApiStatus,
 } from "@/features/admin/api/reservationsApi"
-import { X } from "lucide-react"
-
 interface ReservationDetailCardProps {
   reservation: Reservation
   staffList?: Staff[]
   /** 担当者の空き判定用（この予約以外の重複を見る） */
   reservations?: Reservation[]
-  onClose: () => void
   /** 指定時はメモを管理者が編集可能（非同期可・失敗時は編集を閉じない） */
   onUpdateMemo?: (memo: string | undefined) => void | Promise<void>
   /**
@@ -61,7 +58,6 @@ export function ReservationDetailCard({
   reservation,
   staffList = [],
   reservations = [],
-  onClose,
   onUpdateMemo,
   onUpdateStatus,
   onUpdateAssignee,
@@ -221,11 +217,8 @@ export function ReservationDetailCard({
 
   return (
     <Card className="w-full border-border shadow-md sm:max-w-md">
-      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0 pb-2">
+      <CardHeader className="space-y-0 pb-2">
         <CardTitle className="text-base">予約詳細</CardTitle>
-        <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={onClose} aria-label="閉じる">
-          <X className="size-4" />
-        </Button>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div>

@@ -3,14 +3,21 @@ import { apiFetch } from "@/lib/api"
 
 export type AdminSessionResult = "ok" | "unauthorized" | "error"
 
+/** `admin_users.role`（バックエンドは `owner` / `staff` を返す） */
+export type AdminRole = "owner" | "staff"
+
 /** `admin_users` 相当の `GET /api/admin/me` レスポンス（JSON は snake_case を想定） */
 export type AdminMeProfile = {
+  /** `admin_users.admin_id`（ログイン中の管理者 ID。シフト編集権限の判定に使用） */
+  adminId: string | null
   /** `admin_users.name`（表示名） */
   name: string
   /** `admin_users.avatar_url`（画像 URL。null のときは名前をテキスト表示） */
   avatarUrl: string | null
   /** 所属サロン名（API が返す場合のみ。例: `salon_name` や `salon.name`） */
   salonName: string | null
+  /** `admin_users.role`。未取得・不正値時は安全側に倒して "staff" 扱い */
+  role: AdminRole
 }
 
 function trimOrNull(s: unknown): string | null {
@@ -25,7 +32,7 @@ function trimOrNull(s: unknown): string | null {
  */
 export function mapAdminMeJson(raw: unknown): AdminMeProfile {
   if (!raw || typeof raw !== "object") {
-    return { name: "", avatarUrl: null, salonName: null }
+    return { adminId: null, name: "", avatarUrl: null, salonName: null, role: "staff" }
   }
   const o = raw as Record<string, unknown>
 
@@ -42,10 +49,17 @@ export function mapAdminMeJson(raw: unknown): AdminMeProfile {
     salonName = trimOrNull(s.name) ?? trimOrNull(s.salon_name)
   }
 
+  const adminId = trimOrNull(o.admin_id) ?? trimOrNull(o.adminId)
+
+  const rawRole = trimOrNull(o.role)?.toLowerCase() ?? null
+  const role: AdminRole = rawRole === "owner" ? "owner" : "staff"
+
   return {
+    adminId,
     name,
     avatarUrl,
     salonName,
+    role,
   }
 }
 

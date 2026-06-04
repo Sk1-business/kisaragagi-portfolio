@@ -13,6 +13,10 @@ import {
   postAdminTrainer,
   putAdminTrainer,
 } from "@/features/admin/api/trainersApi"
+import {
+  postAdminUser,
+  type CreateAdminUserError,
+} from "@/features/admin/api/adminUsersApi"
 import type { Staff } from "@/features/admin/types/staff"
 
 function isValidHexColor(s: string): boolean {
@@ -25,6 +29,29 @@ function normalizeColorInput(s: string): string {
   const t = s.trim().toLowerCase()
   return t.startsWith("#") ? t : `#${t}`
 }
+
+/**
+ * `Trainer.display_order` 昇順 → 名前昇順。
+ * バックエンドのソートと一致させる。
+ */
+function sortStaffByDisplayOrder(list: Staff[]): Staff[] {
+  return [...list].sort((a, b) => {
+    const oa = a.display_order ?? Number.MAX_SAFE_INTEGER
+    const ob = b.display_order ?? Number.MAX_SAFE_INTEGER
+    if (oa !== ob) return oa - ob
+    return a.name.localeCompare(b.name, "ja")
+  })
+}
+
+/** addStaff の結果。スタッフ自体は作れても admin_users 連携が失敗するケースがある */
+export type AddStaffResult =
+  | { kind: "ok"; staff: Staff }
+  | {
+      kind: "admin_user_failed"
+      message: string
+      reason: CreateAdminUserError["kind"]
+    }
+  | { kind: "trainer_failed"; message: string }
 
 type AdminStaffContextValue = {
   staffList: Staff[]
@@ -40,7 +67,14 @@ type AdminStaffContextValue = {
     display_order?: number
     /** サロンメニューID。POST /api/admin/trainers の menu_ids にまとめて送る */
     menuIds: string[]
-  }) => Promise<Staff | null>
+    /**
+     * 入力された場合、`POST /api/admin/admin-users` でスタッフ用のログイン
+     * アカウント（`role: "staff"`）も同時に作成する。これがあると本人が
+     * 管理者ログイン画面から自分のメール/パスワードでログインできるようになる。
+     */
+    loginEmail?: string
+    loginPassword?: string
+  }) => Promise<AddStaffResult>
   updateStaff: (
     id: string,
     input: {
@@ -52,6 +86,11 @@ type AdminStaffContextValue = {
       menuIds: string[]
     },
   ) => Promise<boolean>
+  /**
+   * 表示順の入れ替え（`PUT /api/admin/trainers/{id}` を 2 回呼ぶ）。
+   * 隣接 2 行の `display_order` をスワップする想定。
+   */
+  swapStaffDisplayOrder: (a: Staff, b: Staff) => Promise<boolean>
   deleteStaff: (staff: Staff) => Promise<void>
 }
 
@@ -88,14 +127,44 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
       image_url?: string
       display_order?: number
       menuIds: string[]
-    }): Promise<Staff | null> => {
+      loginEmail?: string
+      loginPassword?: string
+    }): Promise<AddStaffResult> => {
       const name = input.name.trim()
       const color = input.color.trim()
-      if (!name || !isValidHexColor(color)) return null
+      if (!name || !isValidHexColor(color)) {
+        return {
+          kind: "trainer_failed",
+          message: "入力内容を確認してください",
+        }
+      }
       const normalized = normalizeColorInput(color)
       const menuIds = input.menuIds
         .map((id) => String(id).trim())
         .filter(Boolean)
+
+      const loginEmail = input.loginEmail?.trim()
+      const loginPassword = input.loginPassword
+      if (loginEmail && loginPassword) {
+        const result = await postAdminUser({
+          email: loginEmail,
+          password: loginPassword,
+          name,
+          role: "staff",
+          isActive: true,
+        })
+        if (!result.ok) {
+          if (result.error.kind === "unauthorized") {
+            throw new Error("UNAUTHORIZED")
+          }
+          return {
+            kind: "admin_user_failed",
+            reason: result.error.kind,
+            message: result.error.message,
+          }
+        }
+      }
+
       const base: Parameters<typeof postAdminTrainer>[0] = {
         name,
         color: normalized,
@@ -113,20 +182,29 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
           ...base,
           menu_ids: menuIds,
         })
-        if (!created) return null
+        if (!created) {
+          return {
+            kind: "trainer_failed",
+            message: "スタッフの登録に失敗しました",
+          }
+        }
         const withMenus: Staff = {
           ...created,
           menuIds: menuIds.length > 0 ? [...menuIds] : created.menuIds,
         }
         setStaffList((prev) =>
-          [...prev.filter((s) => s.id !== withMenus.id), withMenus].sort((a, b) =>
-            a.name.localeCompare(b.name, "ja"),
-          ),
+          sortStaffByDisplayOrder([
+            ...prev.filter((s) => s.id !== withMenus.id),
+            withMenus,
+          ]),
         )
-        return withMenus
+        return { kind: "ok", staff: withMenus }
       } catch (e) {
         if (e instanceof Error && e.message === "UNAUTHORIZED") throw e
-        return null
+        return {
+          kind: "trainer_failed",
+          message: "スタッフの登録に失敗しました",
+        }
       }
     },
     [],
@@ -173,11 +251,69 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
             color: normalized,
             description: descTrim || undefined,
             image_url: imgTrim || undefined,
-            display_order: input.display_order,
             menuIds: [...menuIds],
+            ...(input.display_order !== undefined
+              ? { display_order: input.display_order }
+              : {}),
           }
-          return next.sort((a, b) => a.name.localeCompare(b.name, "ja"))
+          return sortStaffByDisplayOrder(next)
         })
+        return true
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") throw e
+        return false
+      }
+    },
+    [],
+  )
+
+  const swapStaffDisplayOrder = useCallback(
+    async (a: Staff, b: Staff): Promise<boolean> => {
+      if (a.id === b.id) return false
+      const oa = a.display_order
+      const ob = b.display_order
+      /**
+       * どちらかが未設定だと安定したスワップが組めないため、
+       * 一覧の現在順（display_order 昇順）を元に 0 起点で振り直してから入れ替える。
+       */
+      let newOrderA: number
+      let newOrderB: number
+      if (
+        typeof oa === "number" &&
+        Number.isFinite(oa) &&
+        typeof ob === "number" &&
+        Number.isFinite(ob) &&
+        oa !== ob
+      ) {
+        newOrderA = ob
+        newOrderB = oa
+      } else {
+        newOrderA = typeof ob === "number" && Number.isFinite(ob) ? ob : 1
+        newOrderB = typeof oa === "number" && Number.isFinite(oa) ? oa : 0
+        if (newOrderA === newOrderB) {
+          newOrderA = newOrderB + 1
+        }
+      }
+      try {
+        await putAdminTrainer(a.id, {
+          name: a.name,
+          color: a.color,
+          display_order: newOrderA,
+        })
+        await putAdminTrainer(b.id, {
+          name: b.name,
+          color: b.color,
+          display_order: newOrderB,
+        })
+        setStaffList((prev) =>
+          sortStaffByDisplayOrder(
+            prev.map((s) => {
+              if (s.id === a.id) return { ...s, display_order: newOrderA }
+              if (s.id === b.id) return { ...s, display_order: newOrderB }
+              return s
+            }),
+          ),
+        )
         return true
       } catch (e) {
         if (e instanceof Error && e.message === "UNAUTHORIZED") throw e
@@ -200,6 +336,7 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
       refetchStaff,
       addStaff,
       updateStaff,
+      swapStaffDisplayOrder,
       deleteStaff,
     }),
     [
@@ -209,6 +346,7 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
       refetchStaff,
       addStaff,
       updateStaff,
+      swapStaffDisplayOrder,
       deleteStaff,
     ],
   )

@@ -5,6 +5,18 @@ export const ROUTES = {
   backofficeLogin: "/backoffice/login",
   backofficeSignup: "/backoffice/signup",
   salonPublic: "/s/:slug",
+  /** 認証メール送信完了案内（5分カウントダウン） */
+  backofficeSignupVerifySent: "/backoffice/signup/verify-sent",
+  /** メール内リンクから飛んでくるトークン検証画面 */
+  backofficeSignupVerify: "/backoffice/signup/verify",
+  /** 認証完了後に遷移する初期設定画面（サロン情報） */
+  backofficeInitialSetup: "/backoffice/setup/initial",
+  /** 初期設定の続き: 営業日・営業時間登録画面 */
+  backofficeSetupBusinessHours: "/backoffice/setup/business-hours",
+  /** 初期設定の続き: 予約ルール登録画面 */
+  backofficeSetupBookingRules: "/backoffice/setup/booking-rules",
+  /** 初期設定の完了画面 */
+  backofficeSetupDone: "/backoffice/setup/done",
   userHome: "/user",
   userReservationNomination: "/user/reservation/nomination",
   userReservationChangeMode: "/user/reservation/change-mode",

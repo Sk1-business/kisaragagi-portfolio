@@ -5,8 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ROUTES } from "@/constants/routes"
 import {
+  BackofficeInitialSetupPage,
   BackofficeLoginPage,
+  BackofficeSetupBusinessHoursPage,
+  BackofficeSetupBookingRulesPage,
+  BackofficeSetupDonePage,
   BackofficeSignupPage,
+  BackofficeSignupVerifyPage,
+  BackofficeSignupVerifySentPage,
   CustomerLoginPage,
   CustomerSignupPage,
 } from "@/features/auth/pages"
@@ -32,6 +38,7 @@ import { UserReservationDetailPage } from "@/features/user/pages/UserReservation
 import { UserPayPayReturnPage } from "@/features/user/pages/UserPayPayReturnPage"
 import { UserSchedulePage } from "@/features/user/pages/UserSchedulePage"
 import { AdminLayout } from "./layouts/AdminLayout"
+import { OwnerOnlyRoute } from "./layouts/OwnerOnlyRoute"
 import { UserLayout } from "./layouts/UserLayout"
 
 function LandingPage() {
@@ -105,6 +112,30 @@ function App() {
         <Route path={ROUTES.backofficeLogin} element={<BackofficeLoginPage />} />
         <Route path={ROUTES.backofficeSignup} element={<BackofficeSignupPage />} />
         <Route path={ROUTES.salonPublic} element={<SalonPublicEntryPage />} />
+        <Route
+          path={ROUTES.backofficeSignupVerifySent}
+          element={<BackofficeSignupVerifySentPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSignupVerify}
+          element={<BackofficeSignupVerifyPage />}
+        />
+        <Route
+          path={ROUTES.backofficeInitialSetup}
+          element={<BackofficeInitialSetupPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSetupBusinessHours}
+          element={<BackofficeSetupBusinessHoursPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSetupBookingRules}
+          element={<BackofficeSetupBookingRulesPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSetupDone}
+          element={<BackofficeSetupDonePage />}
+        />
         <Route element={<UserLayout />}>
           <Route path={ROUTES.userHome} element={<UserDashboardPage />} />
           <Route path={ROUTES.userReservationNomination} element={<UserNominationPage />} />
@@ -128,8 +159,22 @@ function App() {
             path={ROUTES.adminCancelled}
             element={<Navigate to={ROUTES.adminHome} replace />}
           />
-          <Route path={ROUTES.adminStaff} element={<AdminStaffPage />} />
-          <Route path={ROUTES.adminMenus} element={<AdminMenusPage />} />
+          <Route
+            path={ROUTES.adminStaff}
+            element={
+              <OwnerOnlyRoute>
+                <AdminStaffPage />
+              </OwnerOnlyRoute>
+            }
+          />
+          <Route
+            path={ROUTES.adminMenus}
+            element={
+              <OwnerOnlyRoute>
+                <AdminMenusPage />
+              </OwnerOnlyRoute>
+            }
+          />
           <Route
             path={ROUTES.adminNewReservationConfirm}
             element={<AdminNewReservationConfirmPage />}

@@ -1,5 +1,6 @@
 import { adminTrainerShiftsPath } from "@/constants/adminApi"
 import { apiFetch } from "@/lib/api"
+import type { BulkMonthPlan } from "@/features/admin/lib/shiftBulkMonth"
 import type { AvailabilitySlot } from "@/features/admin/lib/shiftAvailability"
 import { minutesToHHmm, roundTimeToShiftStep } from "@/features/admin/lib/businessHours"
 import { isoToMinutesInAdminCalendarTz } from "@/features/admin/lib/calendarUtils"
@@ -208,4 +209,114 @@ export async function deleteTrainerShift(trainerId: string, shiftId: string): Pr
   const res = await apiFetch(shiftDetailUrl(trainerId, shiftId), { method: "DELETE" })
   if (res.status === 401) throw new Error("UNAUTHORIZED")
   if (!res.ok) throw new Error("FETCH_FAILED")
+}
+
+/**
+ * `POST /api/admin/trainers/{trainer_id}/shifts/bulk` — 複数日のシフトを一括作成。
+ */
+export async function createTrainerShiftsBulk(
+  trainerId: string,
+  shifts: { date: string; start_time: string; end_time: string }[],
+): Promise<TrainerShiftRow[]> {
+  if (shifts.length === 0) return []
+  const res = await apiFetch(`${adminTrainerShiftsPath(trainerId)}/bulk`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      shifts: shifts.map((s) => ({
+        date: s.date.slice(0, 10),
+        start_time: toApiTime(s.start_time),
+        end_time: toApiTime(s.end_time),
+      })),
+    }),
+  })
+  if (res.status === 401) throw new Error("UNAUTHORIZED")
+  if (!res.ok) throw new Error("FETCH_FAILED")
+  const data = await res.json()
+  if (!Array.isArray(data)) return []
+  return data.map((row) => parseTrainerShiftOut(row))
+}
+
+export type DayShiftWriteBody = {
+  date: string
+  start_time: string
+  end_time: string
+}
+
+/** 1日分のシフトを保存（既存があれば1件に集約して更新） */
+export async function applyTrainerDayShift(
+  trainerId: string,
+  body: DayShiftWriteBody,
+  existingRows: TrainerShiftRow[],
+): Promise<void> {
+  const ids = existingRows.map((r) => r.shift_id)
+  if (ids.length === 0) {
+    await createTrainerShift(trainerId, body)
+    return
+  }
+  for (const id of ids.slice(1)) {
+    await deleteTrainerShift(trainerId, id)
+  }
+  await updateTrainerShift(trainerId, ids[0], body)
+}
+
+/** 一括登録プランを API に反映 */
+export async function applyBulkMonthPlan(
+  trainerId: string,
+  plan: BulkMonthPlan,
+  apiShiftRowsByDate: Record<string, TrainerShiftRow[] | undefined>,
+): Promise<{ applied: number; failed: number }> {
+  const creates = plan.actions.filter((a) => a.type === "create")
+  const updates = plan.actions.filter((a) => a.type === "update")
+
+  let applied = 0
+  let failed = 0
+
+  if (creates.length > 0) {
+    try {
+      await createTrainerShiftsBulk(
+        trainerId,
+        creates.map((a) => ({
+          date: a.dateKey,
+          start_time: a.slot.start,
+          end_time: a.slot.end,
+        })),
+      )
+      applied += creates.length
+    } catch {
+      for (const a of creates) {
+        try {
+          await createTrainerShift(trainerId, {
+            date: a.dateKey,
+            start_time: a.slot.start,
+            end_time: a.slot.end,
+          })
+          applied++
+        } catch {
+          failed++
+        }
+      }
+    }
+  }
+
+  for (const a of updates) {
+    if (a.type !== "update") continue
+    try {
+      const rows = apiShiftRowsByDate[a.dateKey] ?? []
+      await applyTrainerDayShift(
+        trainerId,
+        {
+          date: a.dateKey,
+          start_time: a.slot.start,
+          end_time: a.slot.end,
+        },
+        rows,
+      )
+      applied++
+    } catch {
+      failed++
+    }
+  }
+
+  return { applied, failed }
 }
