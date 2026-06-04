@@ -39,6 +39,24 @@ function formatPrice(m: AdminMenu): string {
     : "—"
 }
 
+type MenuAddConfirmDraft = {
+  name: string
+  duration_minutes: number
+  price: number
+  is_public: boolean
+}
+
+function menuDraftToSummaryMenu(draft: MenuAddConfirmDraft): AdminMenu {
+  return {
+    menu_id: "",
+    name: draft.name,
+    duration_minutes: draft.duration_minutes,
+    price: draft.price,
+    is_public: draft.is_public,
+    is_archived: false,
+  }
+}
+
 function MenuDetailSummary({
   m,
   includePublic = false,
@@ -87,6 +105,11 @@ export function AdminMenusPage() {
   const [formHidden, setFormHidden] = useState(false)
   const [formError, setFormError] = useState("")
   const [formSaving, setFormSaving] = useState(false)
+  /** 新規追加: 入力検証後の登録確認ダイアログ */
+  const [addConfirmOpen, setAddConfirmOpen] = useState(false)
+  const [addConfirmDraft, setAddConfirmDraft] = useState<MenuAddConfirmDraft | null>(
+    null,
+  )
 
   /** メイン一覧から非表示へ */
   const [hideTarget, setHideTarget] = useState<AdminMenu | null>(null)
@@ -143,12 +166,16 @@ export function AdminMenusPage() {
     setFormDuration("")
     setFormPrice("")
     setFormHidden(true)
+    setAddConfirmOpen(false)
+    setAddConfirmDraft(null)
     setFormOpen("add")
   }
 
   const openEdit = (m: AdminMenu) => {
     setFormError("")
     setPageError("")
+    setAddConfirmOpen(false)
+    setAddConfirmDraft(null)
     setFormName(m.name)
     setFormDuration(
       m.duration_minutes !== undefined ? String(m.duration_minutes) : "",
@@ -161,9 +188,109 @@ export function AdminMenusPage() {
   const closeForm = () => {
     setFormOpen(null)
     setFormError("")
+    setAddConfirmOpen(false)
+    setAddConfirmDraft(null)
   }
 
-  const submitForm = () => {
+  const validateMenuFormForAdd = (): MenuAddConfirmDraft | null => {
+    const name = formName.trim()
+    if (!name) {
+      setFormError("メニュー名を入力してください")
+      return null
+    }
+    if (name.length > 200) {
+      setFormError("メニュー名は200文字以内で入力してください")
+      return null
+    }
+    const durRaw = formDuration.trim()
+    if (!durRaw) {
+      setFormError("新規追加時は所要時間（分）を入力してください")
+      return null
+    }
+    const duration_minutes = Number(durRaw)
+    if (
+      !Number.isFinite(duration_minutes) ||
+      duration_minutes <= 0 ||
+      !Number.isInteger(duration_minutes)
+    ) {
+      setFormError("所要時間（分）は正の整数で入力してください")
+      return null
+    }
+    const priceRaw = formPrice.trim()
+    if (!priceRaw) {
+      setFormError("新規追加時は料金を入力してください")
+      return null
+    }
+    const price = Number(priceRaw)
+    if (!Number.isFinite(price) || price < 0 || !Number.isInteger(price)) {
+      setFormError("料金は0以上の整数で入力してください")
+      return null
+    }
+    setFormError("")
+    return {
+      name,
+      duration_minutes,
+      price,
+      is_public: !formHidden,
+    }
+  }
+
+  /** 新規追加: 入力検証のうえ確認ダイアログへ */
+  const requestAddConfirm = () => {
+    const draft = validateMenuFormForAdd()
+    if (!draft) return
+    setAddConfirmDraft(draft)
+    setAddConfirmOpen(true)
+  }
+
+  /** 新規追加: 確認後に POST */
+  const confirmRegisterMenu = () => {
+    void (async () => {
+      const draft = addConfirmDraft ?? validateMenuFormForAdd()
+      if (!draft) {
+        setAddConfirmOpen(false)
+        return
+      }
+      setFormSaving(true)
+      setFormError("")
+      try {
+        await postAdminMenu({
+          name: draft.name,
+          duration_minutes: draft.duration_minutes,
+          price: draft.price,
+          is_public: draft.is_public,
+          is_archived: false,
+        })
+        const refreshed = await fetchAdminMenus()
+        setMenus(
+          [...refreshed].sort((a, b) => a.name.localeCompare(b.name, "ja")),
+        )
+        setAddConfirmOpen(false)
+        setAddConfirmDraft(null)
+        closeForm()
+      } catch (e) {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        if (e instanceof Error && e.message.startsWith("FETCH_FAILED_")) {
+          const [, rawDetail] = e.message.split(":", 2)
+          const detail = rawDetail?.trim()
+          if (detail) {
+            setFormError(`保存に失敗しました: ${detail}`)
+          } else {
+            setFormError("入力形式がAPI仕様と一致していません。項目を確認してください。")
+          }
+          return
+        }
+        setFormError("保存に失敗しました。入力内容とサーバーを確認してください。")
+      } finally {
+        setFormSaving(false)
+      }
+    })()
+  }
+
+  const submitEditForm = () => {
     void (async () => {
       const name = formName.trim()
       if (!name) {
@@ -184,10 +311,6 @@ export function AdminMenusPage() {
         }
         duration_minutes = n
       }
-      if (formOpen === "add" && duration_minutes === undefined) {
-        setFormError("新規追加時は所要時間（分）を入力してください")
-        return
-      }
       const priceRaw = formPrice.trim()
       let price: number | undefined
       if (priceRaw) {
@@ -198,26 +321,10 @@ export function AdminMenusPage() {
         }
         price = n
       }
-      if (formOpen === "add" && price === undefined) {
-        setFormError("新規追加時は料金を入力してください")
-        return
-      }
       setFormSaving(true)
       setFormError("")
       try {
-        if (formOpen === "add") {
-          await postAdminMenu({
-            name,
-            duration_minutes: duration_minutes as number,
-            price: price as number,
-            is_public: !formHidden,
-            is_archived: false,
-          })
-          const refreshed = await fetchAdminMenus()
-          setMenus(
-            [...refreshed].sort((a, b) => a.name.localeCompare(b.name, "ja")),
-          )
-        } else if (formOpen && "edit" in formOpen) {
+        if (formOpen && "edit" in formOpen) {
           const editMenu = formOpen.edit
           const id = editMenu.menu_id
           const durationForPut =
@@ -251,8 +358,8 @@ export function AdminMenusPage() {
           setMenus(
             [...refreshed].sort((a, b) => a.name.localeCompare(b.name, "ja")),
           )
+          closeForm()
         }
-        closeForm()
       } catch (e) {
         if (e instanceof Error && e.message === "UNAUTHORIZED") {
           navigate(ROUTES.backofficeLogin, { replace: true })
@@ -479,7 +586,7 @@ export function AdminMenusPage() {
         </div>
       </div>
 
-      {formOpen && (
+      {formOpen && !(formOpen === "add" && addConfirmOpen) && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           role="dialog"
@@ -567,9 +674,68 @@ export function AdminMenusPage() {
                   type="button"
                   className="rounded-md"
                   disabled={formSaving}
-                  onClick={submitForm}
+                  onClick={formOpen === "add" ? requestAddConfirm : submitEditForm}
                 >
                   {formSaving ? "保存中..." : "保存"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {formOpen === "add" && addConfirmOpen && addConfirmDraft && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="menu-add-confirm-title"
+          onClick={() => !formSaving && setAddConfirmOpen(false)}
+        >
+          <Card
+            className="w-full max-w-md border-border shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader>
+              <CardTitle id="menu-add-confirm-title" className="text-base">
+                登録の確認
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-foreground">
+                この内容でメニューを登録しますか？
+              </p>
+              <MenuDetailSummary
+                m={menuDraftToSummaryMenu(addConfirmDraft)}
+                includePublic
+              />
+              <p className="text-xs text-muted-foreground">
+                {addConfirmDraft.is_public
+                  ? "メニュー一覧に表示され、ユーザーから予約できます。"
+                  : "非表示リストに追加され、ユーザーには表示されません。"}
+              </p>
+              {formError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {formError}
+                </p>
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-md"
+                  disabled={formSaving}
+                  onClick={() => setAddConfirmOpen(false)}
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  type="button"
+                  className="rounded-md"
+                  disabled={formSaving}
+                  onClick={confirmRegisterMenu}
+                >
+                  {formSaving ? "登録中..." : "登録"}
                 </Button>
               </div>
             </CardContent>

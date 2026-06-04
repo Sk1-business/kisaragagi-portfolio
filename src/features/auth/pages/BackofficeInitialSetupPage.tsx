@@ -6,14 +6,29 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import { putAdminProfile } from "@/features/admin/api/adminProfileApi"
+import {
+  InitialSetupAddressFields,
+  type InitialSetupAddressValue,
+} from "@/features/auth/components/InitialSetupAddressFields"
 import { postAdminLogout, postAdminSignup } from "@/features/auth/api/adminLoginApi"
+import { composeSalonAddress } from "@/features/auth/lib/formatSalonAddress"
 import { clearSignupVerification } from "@/features/auth/lib/signupVerification"
+
+const EMPTY_ADDRESS: InitialSetupAddressValue = {
+  prefecture: "",
+  municipality: "",
+  street: "",
+  building: "",
+}
 
 type InitialSetupDraft = {
   email: string
   password: string
   passwordConfirm: string
-  address: string
+  addressPrefecture: string
+  addressMunicipality: string
+  addressStreet: string
+  addressBuilding: string
   phone: string
   salonName: string
   salonMessage: string
@@ -43,12 +58,19 @@ function validateOptionalUrl(value: string, label: string): string | null {
   return null
 }
 
-function toInitialSetupDraft(form: FormData, email: string): InitialSetupDraft {
+function toInitialSetupDraft(
+  form: FormData,
+  email: string,
+  address: InitialSetupAddressValue,
+): InitialSetupDraft {
   return {
     email,
     password: String(form.get("password") ?? ""),
     passwordConfirm: String(form.get("passwordConfirm") ?? ""),
-    address: String(form.get("address") ?? "").trim(),
+    addressPrefecture: address.prefecture.trim(),
+    addressMunicipality: address.municipality.trim(),
+    addressStreet: address.street.trim(),
+    addressBuilding: address.building.trim(),
     phone: String(form.get("phone") ?? "").trim(),
     salonName: String(form.get("salonName") ?? "").trim(),
     salonMessage: String(form.get("salonMessage") ?? "").trim(),
@@ -77,6 +99,7 @@ export function BackofficeInitialSetupPage() {
   const [saving, setSaving] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [backNavigateNotice, setBackNavigateNotice] = useState("")
+  const [address, setAddress] = useState<InitialSetupAddressValue>(EMPTY_ADDRESS)
   const restoreStateRef = useRef<unknown>(null)
 
   const navState = location.state as
@@ -115,7 +138,7 @@ export function BackofficeInitialSetupPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const draft = toInitialSetupDraft(form, email)
+    const draft = toInitialSetupDraft(form, email, address)
 
     if (!draft.password) {
       setError("パスワードは必須です。")
@@ -129,12 +152,26 @@ export function BackofficeInitialSetupPage() {
       setError("パスワード（確認用）が一致しません。")
       return
     }
-    if (!draft.address) {
-      setError("住所は必須です。")
+    if (!draft.addressPrefecture) {
+      setError("県を選択してください。")
       return
     }
-    if (draft.address.length > 500) {
-      setError("住所は500文字以内で入力してください。")
+    if (!draft.addressMunicipality) {
+      setError("市町村を選択してください。")
+      return
+    }
+    if (!draft.addressStreet) {
+      setError("町名・番地を入力してください。")
+      return
+    }
+    const composedAddress = composeSalonAddress({
+      prefecture: draft.addressPrefecture,
+      municipality: draft.addressMunicipality,
+      street: draft.addressStreet,
+      building: draft.addressBuilding || undefined,
+    })
+    if (composedAddress.length > 500) {
+      setError("住所全体は500文字以内で入力してください。")
       return
     }
     if (!draft.phone) {
@@ -207,7 +244,7 @@ export function BackofficeInitialSetupPage() {
       //    （phone/address/SNS/メッセージ/紹介文/ポリシー）
       const profilePayload: Parameters<typeof putAdminProfile>[0] = {
         phone: draft.phone,
-        address: draft.address,
+        address: composedAddress,
       }
       if (draft.salonMessage) profilePayload.booking_page_message = draft.salonMessage
       if (draft.salonDescription) profilePayload.description = draft.salonDescription
@@ -332,15 +369,11 @@ export function BackofficeInitialSetupPage() {
           />
         </Field>
 
-        <Field label="住所" htmlFor="initial-address" required>
-          <textarea
-            id="initial-address"
-            name="address"
-            required
-            maxLength={500}
-            className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </Field>
+        <InitialSetupAddressFields
+          value={address}
+          onChange={setAddress}
+          disabled={saving}
+        />
 
         <Field label="電話番号" htmlFor="initial-phone" required>
           <Input

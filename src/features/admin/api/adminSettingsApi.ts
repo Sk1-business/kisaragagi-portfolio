@@ -32,27 +32,8 @@ function parseHolidayDates(raw: unknown): string[] {
   return [...new Set(out)]
 }
 
-/**
- * `GET /api/admin/settings` — `business_hours`（曜日ごとの営業時間）と `holidays`（定休日 YYYY-MM-DD）を含む。
- */
-export async function fetchAdminSettings(): Promise<AdminSettingsOut> {
-  const res = await apiFetch(ADMIN_SETTINGS_PATH, { method: "GET" })
-  if (res.status === 401) {
-    throw new Error("UNAUTHORIZED")
-  }
-  if (!res.ok) {
-    throw new Error("FETCH_FAILED")
-  }
-  const data = (await res.json()) as unknown
-  if (!data || typeof data !== "object") {
-    return { business_hours: [], holidays: [] }
-  }
-  const o = data as Record<string, unknown>
-  const holidays = parseHolidayDates(o.holidays ?? o.holidayDates)
-  const raw = o.business_hours ?? o.businessHours
-  if (!Array.isArray(raw)) {
-    return { business_hours: [], holidays }
-  }
+function parseBusinessHoursArray(raw: unknown): BusinessHoursItem[] {
+  if (!Array.isArray(raw)) return []
   const business_hours: BusinessHoursItem[] = []
   for (const row of raw) {
     if (!row || typeof row !== "object") continue
@@ -69,7 +50,55 @@ export async function fetchAdminSettings(): Promise<AdminSettingsOut> {
       is_closed: Boolean(closed),
     })
   }
-  return { business_hours, holidays }
+  return business_hours
+}
+
+async function throwIfSettingsFetchUnauthorized(res: Response): Promise<void> {
+  if (res.status === 401) {
+    throw new Error("UNAUTHORIZED")
+  }
+  if (!res.ok) {
+    throw new Error("FETCH_FAILED")
+  }
+}
+
+/**
+ * `GET /api/admin/settings/business-hours` — `business_hours` テーブルの曜日ごと営業時間。
+ */
+export async function fetchAdminBusinessHours(): Promise<BusinessHoursItem[]> {
+  const res = await apiFetch(`${ADMIN_SETTINGS_PATH}/business-hours`, { method: "GET" })
+  await throwIfSettingsFetchUnauthorized(res)
+  const data = (await res.json()) as unknown
+  return parseBusinessHoursArray(data)
+}
+
+/**
+ * `GET /api/admin/settings/holidays` — `holidays` テーブルの定休日（YYYY-MM-DD）。
+ */
+export async function fetchAdminHolidays(): Promise<string[]> {
+  const res = await apiFetch(`${ADMIN_SETTINGS_PATH}/holidays`, { method: "GET" })
+  await throwIfSettingsFetchUnauthorized(res)
+  const data = (await res.json()) as unknown
+  return parseHolidayDates(data)
+}
+
+/**
+ * `GET /api/admin/settings` — `business_hours`（曜日ごとの営業時間）と `holidays`（定休日 YYYY-MM-DD）を含む。
+ */
+export async function fetchAdminSettings(): Promise<AdminSettingsOut> {
+  const res = await apiFetch(ADMIN_SETTINGS_PATH, { method: "GET" })
+  await throwIfSettingsFetchUnauthorized(res)
+  const data = (await res.json()) as unknown
+  if (!data || typeof data !== "object") {
+    return { business_hours: [], holidays: [] }
+  }
+  const o = data as Record<string, unknown>
+  const holidays = parseHolidayDates(o.holidays ?? o.holidayDates)
+  const raw = o.business_hours ?? o.businessHours
+  return {
+    business_hours: parseBusinessHoursArray(raw),
+    holidays,
+  }
 }
 
 /** `PUT /api/admin/settings/business-hours` のリクエストアイテム。 */

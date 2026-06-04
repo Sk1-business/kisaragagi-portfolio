@@ -9,9 +9,13 @@ import {
   countFutureReservationsForTrainer,
   fetchAllReservationsForAdmin,
 } from "@/features/admin/api/reservationsApi"
+import { fetchAdminUsersList } from "@/features/admin/api/adminUsersApi"
 import { fetchAdminMenus } from "@/features/admin/api/menusApi"
 import { fetchAdminTrainerById } from "@/features/admin/api/trainersApi"
-import { isStaffNameTaken } from "@/features/admin/api/staffApi"
+import {
+  filterStaffListForManagementPage,
+  isStaffNameTaken,
+} from "@/features/admin/api/staffApi"
 import { useAdminStaff } from "@/features/admin/context/AdminStaffContext"
 import { ROUTES } from "@/constants/routes"
 import type { Staff } from "@/features/admin/types/staff"
@@ -97,6 +101,38 @@ export function AdminStaffPage() {
   const [pageError, setPageError] = useState("")
   const [deleteWorking, setDeleteWorking] = useState(false)
   const [deletePrecheckLoading, setDeletePrecheckLoading] = useState(false)
+  const [adminUsers, setAdminUsers] = useState<
+    Awaited<ReturnType<typeof fetchAdminUsersList>>
+  >([])
+  const [adminUsersLoading, setAdminUsersLoading] = useState(true)
+
+  const staffListForPage = useMemo(
+    () => filterStaffListForManagementPage(staffList, adminUsers),
+    [staffList, adminUsers],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      setAdminUsersLoading(true)
+      try {
+        const users = await fetchAdminUsersList()
+        if (!cancelled) setAdminUsers(users)
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setAdminUsers([])
+      } finally {
+        if (!cancelled) setAdminUsersLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
 
   const openAdd = () => {
     setFormError("")
@@ -104,7 +140,7 @@ export function AdminStaffPage() {
     setFormName("")
     setFormDescription("")
     setFormImageUrl("")
-    setFormColor(COLOR_PRESETS[staffList.length % COLOR_PRESETS.length])
+    setFormColor(COLOR_PRESETS[staffListForPage.length % COLOR_PRESETS.length])
     setFormLoginEmail("")
     setFormLoginPassword("")
     setFormLoginPasswordConfirm("")
@@ -257,7 +293,7 @@ export function AdminStaffPage() {
       setFormError("表示色は #RRGGBB 形式で入力してください")
       return
     }
-    if (isStaffNameTaken(staffList, formName)) {
+    if (isStaffNameTaken(staffListForPage, formName)) {
       setFormError("すでに登録されている名前です")
       return
     }
@@ -313,7 +349,7 @@ export function AdminStaffPage() {
       setFormSaving(true)
       setFormError("")
       try {
-        if (isStaffNameTaken(staffList, formName)) {
+        if (isStaffNameTaken(staffListForPage, formName)) {
           setFormError("すでに登録されている名前です")
           setAddConfirmOpen(false)
           return
@@ -357,11 +393,11 @@ export function AdminStaffPage() {
 
   /** 一覧の表示順入れ替え。`Δ = -1`(上に) / `+1`(下に) */
   const handleReorder = (target: Staff, delta: -1 | 1) => {
-    const idx = staffList.findIndex((s) => s.id === target.id)
+    const idx = staffListForPage.findIndex((s) => s.id === target.id)
     if (idx < 0) return
     const partnerIdx = idx + delta
-    if (partnerIdx < 0 || partnerIdx >= staffList.length) return
-    const partner = staffList[partnerIdx]
+    if (partnerIdx < 0 || partnerIdx >= staffListForPage.length) return
+    const partner = staffListForPage[partnerIdx]
     if (!partner) return
     void (async () => {
       setReorderingId(target.id)
@@ -400,7 +436,7 @@ export function AdminStaffPage() {
       setFormError("名前は100文字以内で入力してください")
       return
     }
-    if (isStaffNameTaken(staffList, name, formOpen.edit.id)) {
+    if (isStaffNameTaken(staffListForPage, name, formOpen.edit.id)) {
       setFormError("すでに登録されている名前です")
       return
     }
@@ -421,7 +457,7 @@ export function AdminStaffPage() {
       setFormSaving(true)
       setFormError("")
       try {
-        if (isStaffNameTaken(staffList, name, formOpen.edit.id)) {
+        if (isStaffNameTaken(staffListForPage, name, formOpen.edit.id)) {
           setFormError("すでに登録されている名前です")
           setEditConfirmOpen(false)
           return
@@ -453,7 +489,7 @@ export function AdminStaffPage() {
 
   const openDelete = (s: Staff) => {
     setPageError("")
-    const others = staffList.filter((x) => x.id !== s.id)
+    const others = staffListForPage.filter((x) => x.id !== s.id)
     if (others.length === 0) {
       setPageError("スタッフは少なくとも1名必要です")
       return
@@ -513,7 +549,7 @@ export function AdminStaffPage() {
     })()
   }
 
-  if (loading) {
+  if (loading || adminUsersLoading) {
     return <p className="text-sm text-muted-foreground">読み込み中...</p>
   }
 
@@ -571,9 +607,16 @@ export function AdminStaffPage() {
               </tr>
             </thead>
             <tbody>
-              {staffList.map((s, idx) => {
+              {staffListForPage.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                    表示できるスタッフがいません。スタッフを追加してください。
+                  </td>
+                </tr>
+              ) : null}
+              {staffListForPage.map((s, idx) => {
                 const isFirst = idx === 0
-                const isLast = idx === staffList.length - 1
+                const isLast = idx === staffListForPage.length - 1
                 const reorderingThis = reorderingId !== null
                 return (
                   <tr key={s.id} className="border-b border-border/60">
