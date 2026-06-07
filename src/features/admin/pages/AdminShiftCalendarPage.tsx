@@ -12,7 +12,7 @@ import {
   type BusinessHoursItem,
 } from "@/features/admin/api/adminSettingsApi"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
-import { filterStaffRoleTrainers } from "@/features/admin/api/staffApi"
+import { resolveDisplayStaffTrainers } from "@/features/admin/api/staffApi"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { useTrainerShiftsForMonth } from "@/features/admin/hooks/useTrainerShiftsForMonth"
 import { useStaff } from "@/features/admin/hooks/useStaff"
@@ -42,16 +42,10 @@ export function AdminShiftCalendarPage() {
   const [registerView, setRegisterView] = useState<ShiftRegisterView>("individual")
 
   /** カレンダー表示用: オーナー行を除くスタッフ全員（staff ログイン時も他者のシフトを参照表示） */
-  const staffListForShifts = useMemo(() => {
-    if (adminUsers.length > 0) {
-      return filterStaffRoleTrainers(staffList, adminUsers, {
-        viewerAdminId: profile.adminId,
-        viewerRole: profile.role,
-      })
-    }
-    // staff は `GET /admin-users` 不可のため、オーナー行（trainer_id = admin_id）以外を表示
-    return staffList.filter((t) => !(t.adminId && t.id === t.adminId))
-  }, [staffList, adminUsers, profile.adminId, profile.role])
+  const staffListForShifts = useMemo(
+    () => resolveDisplayStaffTrainers(staffList, adminUsers, profile),
+    [staffList, adminUsers, profile],
+  )
 
   const editableStaffForShifts = useMemo(
     () => filterEditableStaff(staffListForShifts, profile),

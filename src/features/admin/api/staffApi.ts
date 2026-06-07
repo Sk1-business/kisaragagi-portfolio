@@ -70,6 +70,30 @@ export function filterStaffRoleTrainers(
   return trainers.filter((t) => t.id === viewerId || t.adminId === viewerId)
 }
 
+/**
+ * カレンダー・シフト等の表示・絞り込み用。
+ * オーナー（admin_users.role=owner）に紐づくトレーナー行を除き、スタッフのみ残す。
+ */
+export function resolveDisplayStaffTrainers(
+  trainers: Staff[],
+  adminUsers: AdminUserListItem[],
+  profile: { adminId: string | null; role: "owner" | "staff" },
+): Staff[] {
+  if (adminUsers.length > 0) {
+    return filterStaffRoleTrainers(trainers, adminUsers, {
+      viewerAdminId: profile.adminId,
+      viewerRole: profile.role,
+    })
+  }
+  return trainers.filter((t) => !(t.adminId && t.id === t.adminId))
+}
+
+export function staffTrainerNames(trainers: Staff[]): string[] {
+  return [...new Set(trainers.map((s) => s.name.trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "ja"),
+  )
+}
+
 export function isStaffNameTaken(
   staffList: Staff[],
   name: string,

@@ -8,9 +8,14 @@ import {
   type BusinessHoursItem,
 } from "@/features/admin/api/adminSettingsApi"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
-import { fetchAdminTrainerNames } from "@/features/admin/api/trainersApi"
+import { fetchAdminUsersList } from "@/features/admin/api/adminUsersApi"
+import {
+  resolveDisplayStaffTrainers,
+  staffTrainerNames,
+} from "@/features/admin/api/staffApi"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { colorFromTrainerName, useStaff } from "@/features/admin/hooks/useStaff"
+import { useAdminProfile } from "@/features/auth/context/AdminProfileContext"
 import type { Staff } from "@/features/admin/types/staff"
 import { ROUTES } from "@/constants/routes"
 import { CalendarDayView } from "@/features/admin/components/calendar/CalendarDayView"
@@ -55,11 +60,13 @@ function trainerFilterDotColor(name: string, staffList: Staff[]): string {
 export function AdminCalendarPage() {
   const { reservations, loading, replaceReservations } = useAdminReservations()
   const { staffList, loading: staffLoading } = useStaff()
+  const profile = useAdminProfile()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [trainerNameList, setTrainerNameList] = useState<string[]>([])
-  const [trainersLoading, setTrainersLoading] = useState(true)
-  const [trainersError, setTrainersError] = useState(false)
+  const [adminUsers, setAdminUsers] = useState<
+    Awaited<ReturnType<typeof fetchAdminUsersList>>
+  >([])
+  const [adminUsersLoading, setAdminUsersLoading] = useState(true)
   const [selectedTrainerNames, setSelectedTrainerNames] = useState<Set<string>>(
     () => new Set(),
   )
@@ -76,6 +83,16 @@ export function AdminCalendarPage() {
   const currentDate = useMemo(
     () => parseDateParam(searchParams.get("date")),
     [searchParams],
+  )
+
+  const staffListForFilter = useMemo(
+    () => resolveDisplayStaffTrainers(staffList, adminUsers, profile),
+    [staffList, adminUsers, profile],
+  )
+
+  const trainerNameList = useMemo(
+    () => staffTrainerNames(staffListForFilter),
+    [staffListForFilter],
   )
 
   const reservationFetchOptions = useMemo(
@@ -136,30 +153,32 @@ export function AdminCalendarPage() {
   ])
 
   useEffect(() => {
+    if (profile.role !== "owner") {
+      setAdminUsers([])
+      setAdminUsersLoading(false)
+      return
+    }
     let cancelled = false
     void (async () => {
-      setTrainersLoading(true)
-      setTrainersError(false)
+      setAdminUsersLoading(true)
       try {
-        const names = await fetchAdminTrainerNames()
-        if (cancelled) return
-        setTrainerNameList(names)
+        const users = await fetchAdminUsersList()
+        if (!cancelled) setAdminUsers(users)
       } catch (e) {
         if (cancelled) return
         if (e instanceof Error && e.message === "UNAUTHORIZED") {
           navigate(ROUTES.backofficeLogin, { replace: true })
           return
         }
-        setTrainerNameList([])
-        setTrainersError(true)
+        setAdminUsers([])
       } finally {
-        if (!cancelled) setTrainersLoading(false)
+        if (!cancelled) setAdminUsersLoading(false)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [navigate])
+  }, [navigate, profile.role])
 
   useEffect(() => {
     let cancelled = false
@@ -304,27 +323,12 @@ export function AdminCalendarPage() {
 
   const clearTrainerFilter = () => setSelectedTrainerNames(new Set())
 
-  const refetchTrainers = () => {
-    void (async () => {
-      setTrainersLoading(true)
-      setTrainersError(false)
-      try {
-        const names = await fetchAdminTrainerNames()
-        setTrainerNameList(names)
-      } catch (e) {
-        if (e instanceof Error && e.message === "UNAUTHORIZED") {
-          navigate(ROUTES.backofficeLogin, { replace: true })
-          return
-        }
-        setTrainerNameList([])
-        setTrainersError(true)
-      } finally {
-        setTrainersLoading(false)
-      }
-    })()
-  }
-
-  if (loading || staffLoading || calendarListLoading) {
+  if (
+    loading ||
+    staffLoading ||
+    (profile.role === "owner" && adminUsersLoading) ||
+    calendarListLoading
+  ) {
     return (
       <p className="text-sm text-muted-foreground">読み込み中...</p>
     )
@@ -354,21 +358,12 @@ export function AdminCalendarPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">トレーナーで絞り込み</CardTitle>
           <p className="text-sm text-muted-foreground">
-            このサロンに登録されているトレーナー名から選びます。複数選べます。未選択のときは全員分を表示します。
+            スタッフ（施術者）の名前から選びます。オーナー用の管理者行は含みません。複数選べます。未選択のときは全員分を表示します。
           </p>
         </CardHeader>
         <CardContent>
-          {trainersLoading ? (
-            <p className="text-sm text-muted-foreground">トレーナー一覧を読み込み中...</p>
-          ) : trainersError ? (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">
-                トレーナー一覧の取得に失敗しました。ネットワークまたはサーバーを確認してください。
-              </p>
-              <Button type="button" variant="outline" size="sm" onClick={refetchTrainers}>
-                再試行
-              </Button>
-            </div>
+          {staffLoading ? (
+            <p className="text-sm text-muted-foreground">スタッフ一覧を読み込み中...</p>
           ) : (
             <div className="self-end flex flex-wrap items-center gap-2">
               {trainerNameList.map((name) => (
@@ -382,7 +377,9 @@ export function AdminCalendarPage() {
                 >
                   <span
                     className="mr-2 inline-block size-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: trainerFilterDotColor(name, staffList) }}
+                    style={{
+                      backgroundColor: trainerFilterDotColor(name, staffListForFilter),
+                    }}
                   />
                   {name}
                 </Button>
@@ -398,7 +395,7 @@ export function AdminCalendarPage() {
                   選択をクリア
                 </Button>
               )}
-              {trainerNameList.length === 0 && !trainersError ? (
+              {trainerNameList.length === 0 ? (
                 <p className="text-sm text-muted-foreground">登録されているトレーナーがありません。</p>
               ) : null}
             </div>

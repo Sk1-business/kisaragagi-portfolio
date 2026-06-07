@@ -163,7 +163,9 @@ export function ShiftAvailabilityEditDialog({
       const first = outside[0]
       const range = formatTimeRangeInAdminCalendarTz(first.startAt, first.endAt)
       setError(
-        `この担当者には、変更後のシフトの勤務時間内に収まらない予約が入っているため、シフトを変更できません。例えば、10:00〜19:00のシフトで10:00〜11:00の予約がある場合、シフトを11:00〜19:00に変更することはできません。${outside.length === 1 ? `（該当: ${range}）` : `（例: ${range} ほか${outside.length - 1}件）`}`,
+        outside.length === 1
+          ? `既に予約が入っているためシフトを変更できません。（該当: ${range}）`
+          : `既に予約が入っているためシフトを変更できません。（該当: ${range} ほか${outside.length - 1}件）`,
       )
       return
     }

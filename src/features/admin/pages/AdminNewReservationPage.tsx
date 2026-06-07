@@ -253,7 +253,6 @@ export function AdminNewReservationPage() {
     setTrainerId("")
     setCustomerName("")
     setCustomerEmail("")
-    setCustomerId("")
     setCustomerPhone("")
     setNotes("")
   }, [location.state])
@@ -460,7 +459,7 @@ export function AdminNewReservationPage() {
           <CardDescription>
             必須: メニュー、開始日時、顧客名、メール。
             {staffList.length > 0 ? " メニュー・開始時刻入力後に担当者を選択、" : null}
-            任意: 既存顧客 ID、電話、メモ。
+            任意: 電話、メモ。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
