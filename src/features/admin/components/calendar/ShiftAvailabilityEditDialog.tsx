@@ -1,6 +1,7 @@
 import { useLayoutEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ShiftRegisterConfirmDialog } from "@/features/admin/components/calendar/ShiftRegisterConfirmDialog"
+import { isShiftRegisterableDay } from "@/features/admin/lib/shiftDatePolicy"
 import { ShiftTimeRangeFields } from "@/features/admin/components/calendar/ShiftTimeRangeFields"
 import { formatTimeRangeInAdminCalendarTz, toDateKey } from "@/features/admin/lib/calendarUtils"
 import type { ResolvedShiftDay } from "@/features/admin/context/AdminShiftAvailabilityContext"
@@ -100,6 +101,10 @@ export function ShiftAvailabilityEditDialog({
       if (e instanceof Error && e.message === "UNAUTHORIZED") {
         return
       }
+      if (e instanceof Error && e.message === "PAST_DATE") {
+        setError("当日以前の日付にはシフトを登録・変更できません。")
+        return
+      }
       setError("保存に失敗しました。通信またはサーバーを確認してください。")
     } finally {
       setSaving(false)
@@ -107,6 +112,10 @@ export function ShiftAvailabilityEditDialog({
   }
 
   const handleSave = () => {
+    if (day && !isShiftRegisterableDay(day)) {
+      setError("当日以前の日付にはシフトを登録・変更できません。")
+      return
+    }
     if (settingsLoading || !businessDay) {
       setError("営業時間を読み込み中です。しばらく待ってから再度お試しください。")
       return
@@ -176,6 +185,10 @@ export function ShiftAvailabilityEditDialog({
   }
 
   const handleOff = () => {
+    if (day && !isShiftRegisterableDay(day)) {
+      setError("当日以前の日付にはシフトを登録・変更できません。")
+      return
+    }
     if (reservationsFetchFailed) {
       setError(
         "予約一覧を取得できなかったため、シフトを休みにできません。しばらくしてから再度お試しください。",

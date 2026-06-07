@@ -155,12 +155,6 @@ export function AdminNewReservationConfirmPage() {
             <dd>{draft.customerName}</dd>
             <dt className="text-muted-foreground">メール</dt>
             <dd className="break-all">{draft.customerEmail}</dd>
-            {draft.customerId ? (
-              <>
-                <dt className="text-muted-foreground">顧客 ID</dt>
-                <dd className="font-mono text-xs">{draft.customerId}</dd>
-              </>
-            ) : null}
             {draft.customerPhone ? (
               <>
                 <dt className="text-muted-foreground">電話</dt>

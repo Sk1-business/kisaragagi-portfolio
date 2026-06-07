@@ -374,6 +374,8 @@ export async function postAdminTrainer(input: {
   description?: string
   image_url?: string
   display_order?: number
+  /** ログインアカウント（admin_users）との紐付け */
+  admin_id?: string
   /** 対応メニューID（同一 trainer_id に紐づける） */
   menu_ids?: string[]
 }): Promise<Staff> {
@@ -394,6 +396,10 @@ export async function postAdminTrainer(input: {
     Number.isFinite(input.display_order)
   ) {
     payload.display_order = Math.round(input.display_order)
+  }
+  const adminId = input.admin_id?.trim()
+  if (adminId) {
+    payload.admin_id = adminId
   }
   const mids = (input.menu_ids ?? [])
     .map((id) => String(id).trim())

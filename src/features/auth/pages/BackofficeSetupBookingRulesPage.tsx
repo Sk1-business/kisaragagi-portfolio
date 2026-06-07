@@ -10,6 +10,12 @@ import {
   putBookingRules,
 } from "@/features/admin/api/adminSettingsApi"
 import { postAdminLogout } from "@/features/auth/api/adminLoginApi"
+import {
+  canAccessSalonSettingsStep,
+  isAdminSalonSettingsFlow,
+  resolveAdminSalonReturnTo,
+  type SalonSettingsFlowNavState,
+} from "@/features/auth/lib/salonSettingsNavState"
 import { clearSignupVerification } from "@/features/auth/lib/signupVerification"
 
 const STORAGE_KEY = "backoffice_initial_setup_booking_rules_v1"
@@ -117,10 +123,9 @@ function buildSummary(form: BookingRulesForm): string[] {
 export function BackofficeSetupBookingRulesPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const navState = location.state as
-    | { fromBusinessHours?: boolean; email?: string }
-    | null
+  const navState = location.state as SalonSettingsFlowNavState | null
   const fromBusinessHours = Boolean(navState?.fromBusinessHours)
+  const fromAdminSalonSettings = isAdminSalonSettingsFlow(navState)
   const stateEmail = typeof navState?.email === "string" ? navState.email : ""
 
   const stored = useMemo(() => loadDraft(), [])
@@ -147,13 +152,13 @@ export function BackofficeSetupBookingRulesPage() {
   restoreStateRef.current = location.state
 
   useEffect(() => {
-    if (!fromBusinessHours && !initialEmail) {
+    if (!canAccessSalonSettingsStep(navState, { requireBusinessHours: true })) {
       navigate(ROUTES.backofficeSetupBusinessHours, { replace: true })
     }
-  }, [fromBusinessHours, initialEmail, navigate])
+  }, [navState, navigate])
 
   useEffect(() => {
-    if (!fromBusinessHours && !initialEmail) return
+    if (!canAccessSalonSettingsStep(navState, { requireBusinessHours: true })) return
     let cancelled = false
     void fetchAdminBookingRules()
       .then((rules) => {
@@ -171,10 +176,10 @@ export function BackofficeSetupBookingRulesPage() {
     return () => {
       cancelled = true
     }
-  }, [fromBusinessHours, initialEmail, stored])
+  }, [navState, stored])
 
   useLayoutEffect(() => {
-    if (!fromBusinessHours && !initialEmail) return
+    if (!canAccessSalonSettingsStep(navState, { requireBusinessHours: true })) return
     function onPopState(e: PopStateEvent) {
       e.stopImmediatePropagation()
       setBackNavigateNotice(BACK_NAV_BLOCKED_MESSAGE)
@@ -189,7 +194,7 @@ export function BackofficeSetupBookingRulesPage() {
     window.addEventListener("popstate", onPopState, { capture: true })
     return () =>
       window.removeEventListener("popstate", onPopState, { capture: true })
-  }, [fromBusinessHours, initialEmail, navigate])
+  }, [navState, fromBusinessHours, initialEmail, navigate])
 
   function validateForm(): BookingRulesPayload | null {
     const deadline = parsePositiveInt(
@@ -279,6 +284,11 @@ export function BackofficeSetupBookingRulesPage() {
         // ignore
       }
 
+      if (fromAdminSalonSettings) {
+        navigate(resolveAdminSalonReturnTo(navState), { replace: true })
+        return
+      }
+
       navigate(ROUTES.backofficeSetupDone, {
         replace: true,
         state: { fromBookingRules: true, email: initialEmail },
@@ -291,6 +301,10 @@ export function BackofficeSetupBookingRulesPage() {
 
   async function handleConfirmCancel() {
     setShowCancelConfirm(false)
+    if (fromAdminSalonSettings) {
+      navigate(resolveAdminSalonReturnTo(navState), { replace: true })
+      return
+    }
     try {
       localStorage.removeItem(STORAGE_KEY)
       localStorage.removeItem(BUSINESS_HOURS_STORAGE_KEY)

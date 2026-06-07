@@ -145,6 +145,7 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
 
       const loginEmail = input.loginEmail?.trim()
       const loginPassword = input.loginPassword
+      let linkedAdminId: string | undefined
       if (loginEmail && loginPassword) {
         const result = await postAdminUser({
           email: loginEmail,
@@ -163,6 +164,7 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
             message: result.error.message,
           }
         }
+        linkedAdminId = result.created.adminId
       }
 
       const base: Parameters<typeof postAdminTrainer>[0] = {
@@ -170,6 +172,7 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
         color: normalized,
         description: input.description?.trim() || undefined,
         image_url: input.image_url?.trim() || undefined,
+        admin_id: linkedAdminId,
       }
       if (
         input.display_order !== undefined &&

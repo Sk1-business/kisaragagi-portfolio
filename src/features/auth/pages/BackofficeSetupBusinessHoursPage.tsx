@@ -19,6 +19,13 @@ import {
   type HolidayCreated,
 } from "@/features/admin/api/adminSettingsApi"
 import { postAdminLogout } from "@/features/auth/api/adminLoginApi"
+import {
+  canAccessSalonSettingsStep,
+  carryAdminSalonNavState,
+  isAdminSalonSettingsFlow,
+  resolveAdminSalonReturnTo,
+  type SalonSettingsFlowNavState,
+} from "@/features/auth/lib/salonSettingsNavState"
 import { clearSignupVerification } from "@/features/auth/lib/signupVerification"
 
 const STORAGE_KEY = "backoffice_initial_setup_business_hours_v1"
@@ -149,10 +156,9 @@ function isValidHHmm(t: string): boolean {
 export function BackofficeSetupBusinessHoursPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const navState = location.state as
-    | { fromInitialSetup?: boolean; email?: string }
-    | null
+  const navState = location.state as SalonSettingsFlowNavState | null
   const fromInitialSetup = Boolean(navState?.fromInitialSetup)
+  const fromAdminSalonSettings = isAdminSalonSettingsFlow(navState)
   const stateEmail = typeof navState?.email === "string" ? navState.email : ""
 
   const stored = useMemo(() => loadDraft(), [])
@@ -190,14 +196,14 @@ export function BackofficeSetupBusinessHoursPage() {
 
   // 直接アクセス（state も localStorage の前ステップ完了印も無い）の場合は前ステップへ
   useEffect(() => {
-    if (!fromInitialSetup && !initialEmail) {
+    if (!canAccessSalonSettingsStep(navState)) {
       navigate(ROUTES.backofficeInitialSetup, { replace: true })
     }
-  }, [fromInitialSetup, initialEmail, navigate])
+  }, [navState, navigate])
 
   // ブラウザ戻る抑止（capture phase で React Router より先に握りつぶす）
   useLayoutEffect(() => {
-    if (!fromInitialSetup && !initialEmail) return
+    if (!canAccessSalonSettingsStep(navState)) return
     function onPopState(e: PopStateEvent) {
       e.stopImmediatePropagation()
       setBackNavigateNotice(BACK_NAV_BLOCKED_MESSAGE)
@@ -212,7 +218,7 @@ export function BackofficeSetupBusinessHoursPage() {
     window.addEventListener("popstate", onPopState, { capture: true })
     return () =>
       window.removeEventListener("popstate", onPopState, { capture: true })
-  }, [fromInitialSetup, initialEmail, navigate])
+  }, [navState, fromInitialSetup, initialEmail, navigate])
 
   function updateRow(value: number, patch: Partial<BusinessHourRow>) {
     setRows((prev) =>
@@ -395,12 +401,17 @@ export function BackofficeSetupBusinessHoursPage() {
         // ignore storage 失敗
       }
 
+      if (fromAdminSalonSettings) {
+        navigate(resolveAdminSalonReturnTo(navState), { replace: true })
+        return
+      }
+
       navigate(ROUTES.backofficeSetupBookingRules, {
         replace: true,
-        state: {
+        state: carryAdminSalonNavState(navState, {
           fromBusinessHours: true,
           email: initialEmail,
-        },
+        }),
       })
     } finally {
       setSaving(false)
@@ -420,6 +431,10 @@ export function BackofficeSetupBusinessHoursPage() {
 
   async function handleConfirmCancel() {
     setShowCancelConfirm(false)
+    if (fromAdminSalonSettings) {
+      navigate(resolveAdminSalonReturnTo(navState), { replace: true })
+      return
+    }
     try {
       localStorage.removeItem(STORAGE_KEY)
       localStorage.removeItem(INITIAL_SETUP_DRAFT_KEY)

@@ -41,14 +41,17 @@ export function AdminShiftCalendarPage() {
   const [adminUsersLoading, setAdminUsersLoading] = useState(true)
   const [registerView, setRegisterView] = useState<ShiftRegisterView>("individual")
 
-  const staffListForShifts = useMemo(
-    () =>
-      filterStaffRoleTrainers(staffList, adminUsers, {
+  /** カレンダー表示用: オーナー行を除くスタッフ全員（staff ログイン時も他者のシフトを参照表示） */
+  const staffListForShifts = useMemo(() => {
+    if (adminUsers.length > 0) {
+      return filterStaffRoleTrainers(staffList, adminUsers, {
         viewerAdminId: profile.adminId,
         viewerRole: profile.role,
-      }),
-    [staffList, adminUsers, profile.adminId, profile.role],
-  )
+      })
+    }
+    // staff は `GET /admin-users` 不可のため、オーナー行（trainer_id = admin_id）以外を表示
+    return staffList.filter((t) => !(t.adminId && t.id === t.adminId))
+  }, [staffList, adminUsers, profile.adminId, profile.role])
 
   const editableStaffForShifts = useMemo(
     () => filterEditableStaff(staffListForShifts, profile),
@@ -178,12 +181,14 @@ export function AdminShiftCalendarPage() {
       <Card className="rounded-lg border-border shadow-xs">
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle className="text-lg">シフトカレンダー</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {registerView === "individual"
-                ? "カレンダーから日ごとにシフトを登録・編集します。"
-                : "表示中の月の営業日に、同じ勤務時間のシフトをまとめて登録します。"}
-            </p>
+            <CardTitle className="text-lg">
+              {registerView === "individual" ? "シフトカレンダー" : "シフト一括登録"}
+            </CardTitle>
+            {registerView === "individual" ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                カレンダーから日ごとにシフトを登録・編集します（当日以降のみ）。
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {registerView === "individual" ? (
@@ -194,7 +199,7 @@ export function AdminShiftCalendarPage() {
                   size="sm"
                   onClick={() => setRegisterView("bulk")}
                 >
-                  一括登録
+                  シフト一括登録
                 </Button>
               ) : null
             ) : (
@@ -204,7 +209,7 @@ export function AdminShiftCalendarPage() {
                 size="sm"
                 onClick={() => setRegisterView("individual")}
               >
-                個別登録
+                シフトカレンダー
               </Button>
             )}
             <div className="flex items-center gap-1">

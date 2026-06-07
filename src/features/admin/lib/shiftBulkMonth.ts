@@ -15,6 +15,10 @@ import {
   shiftSlotWithinBusinessHours,
   type BusinessWindowForDay,
 } from "@/features/admin/lib/businessHours"
+import {
+  getShiftCalendarTodayKey,
+  isShiftRegisterableDateKey,
+} from "@/features/admin/lib/shiftDatePolicy"
 import { getReservationsOutsideShiftWindow } from "@/features/admin/lib/shiftReservationConflict"
 import type { AvailabilitySlot } from "@/features/admin/lib/shiftAvailability"
 import type { Reservation } from "@/features/admin/types/reservation"
@@ -114,9 +118,16 @@ export function buildBulkMonthPlan(params: {
   let createCount = 0
   let updateCount = 0
   let skipCount = 0
+  const todayKey = getShiftCalendarTodayKey()
 
   for (const day of iterateDaysInMonth(monthAnchor)) {
     const dateKey = getDateKeyInTimeZone(day, ADMIN_CALENDAR_TIME_ZONE)
+
+    if (!isShiftRegisterableDateKey(dateKey, todayKey)) {
+      actions.push({ type: "skip", dateKey, reason: "過去日" })
+      skipCount++
+      continue
+    }
 
     if (holidayDateKeys.has(dateKey)) {
       actions.push({ type: "skip", dateKey, reason: "定休日" })

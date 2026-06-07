@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { CalendarRange, CreditCard, UtensilsCrossed, Users } from "lucide-react"
+import { CalendarRange, CreditCard, Store, UtensilsCrossed, Users } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -7,6 +7,14 @@ import { ROUTES } from "@/constants/routes"
 import { cn } from "@/lib/utils"
 
 const hubItems = [
+  {
+    key: "salon",
+    title: "サロン管理",
+    description: "サロン情報・営業時間・予約ルールの設定",
+    to: ROUTES.adminSalonSettings,
+    icon: Store,
+    disabled: false,
+  },
   {
     key: "staff",
     title: "スタッフ管理",

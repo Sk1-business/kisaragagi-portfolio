@@ -128,7 +128,6 @@ export function AdminNewReservationPage() {
   const [trainerId, setTrainerId] = useState(() => initialDraft?.trainerId ?? "")
   const [customerName, setCustomerName] = useState(() => initialDraft?.customerName ?? "")
   const [customerEmail, setCustomerEmail] = useState(() => initialDraft?.customerEmail ?? "")
-  const [customerId, setCustomerId] = useState(() => initialDraft?.customerId ?? "")
   const [customerPhone, setCustomerPhone] = useState(() => initialDraft?.customerPhone ?? "")
   const [notes, setNotes] = useState(() => initialDraft?.notes ?? "")
   const [formError, setFormError] = useState("")
@@ -240,7 +239,6 @@ export function AdminNewReservationPage() {
       setTrainerId(draft.trainerId)
       setCustomerName(draft.customerName)
       setCustomerEmail(draft.customerEmail)
-      setCustomerId(draft.customerId ?? "")
       setCustomerPhone(draft.customerPhone ?? "")
       setNotes(draft.notes ?? "")
       return
@@ -431,7 +429,6 @@ export function AdminNewReservationPage() {
       trainerName,
       customerName: customerName.trim(),
       customerEmail: customerEmail.trim(),
-      customerId: customerId.trim() || undefined,
       customerPhone: customerPhone.trim() || undefined,
       notes: notes.trim() || undefined,
     }
@@ -651,16 +648,6 @@ export function AdminNewReservationPage() {
               value={customerEmail}
               onChange={(e) => setCustomerEmail(e.target.value)}
               placeholder="example@example.com"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="admin-new-cid">既存顧客 ID（任意）</Label>
-            <Input
-              id="admin-new-cid"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              placeholder="指定するとその顧客に紐づけます"
             />
           </div>
 

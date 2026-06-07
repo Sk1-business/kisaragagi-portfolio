@@ -92,6 +92,15 @@ export function ShiftBulkMonthPanel({
     return { start: "09:00", end: "21:00" }
   }, [businessHoursItems])
 
+  /** 曜日ごとの定休（`business_hours.is_closed`） */
+  const closedWeekdays = useMemo(() => {
+    const closed = new Set<number>()
+    for (const row of businessHoursItems) {
+      if (row.is_closed) closed.add(row.day_of_week)
+    }
+    return closed
+  }, [businessHoursItems])
+
   const reservationsReady = !reservationsLoading && !reservationsFetchFailed
 
   const clearResultOnTimeChange = () => setResultMessage(null)
@@ -122,6 +131,7 @@ export function ShiftBulkMonthPanel({
   ])
 
   const toggleWeekday = (dow: number) => {
+    if (closedWeekdays.has(dow)) return
     setWeekdayMask((prev) => {
       const next = new Set(prev)
       if (next.has(dow)) next.delete(dow)
@@ -223,7 +233,7 @@ export function ShiftBulkMonthPanel({
     !selectedStaff ||
     reservationsLoading ||
     reservationsFetchFailed ||
-    (plan != null && plan.createCount + plan.updateCount === 0)
+    weekdayMask.size === 0
 
   const weekdaySummary = WEEKDAY_LABELS.filter((_, i) => weekdayMask.has(i)).join("・")
 
@@ -238,12 +248,9 @@ export function ShiftBulkMonthPanel({
   return (
     <>
       <div className="space-y-4">
-        <div>
-          <h2 className="text-base font-semibold">一括登録</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {monthLabel}の営業日に、同じ勤務時間のシフトをまとめて登録します。定休日・曜日休業・予約と重なる日はスキップします。
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          {monthLabel}の営業日（当日以降）に、同じ勤務時間のシフトをまとめて登録します。チェックした曜日のみ上書きし、未チェックの曜日はスキップします。過去日・定休日・休業曜日・予約と重なる日もスキップします。
+        </p>
 
         {showStaffPicker ? (
           <div className="space-y-1.5">
@@ -295,21 +302,31 @@ export function ShiftBulkMonthPanel({
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">対象曜日</legend>
           <div className="flex flex-wrap gap-3">
-            {WEEKDAY_LABELS.map((label, dow) => (
-              <label
-                key={label}
-                className="flex cursor-pointer items-center gap-1.5 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  className="size-4 rounded border-border"
-                  checked={weekdayMask.has(dow)}
-                  disabled={saving}
-                  onChange={() => toggleWeekday(dow)}
-                />
-                {label}
-              </label>
-            ))}
+            {WEEKDAY_LABELS.map((label, dow) => {
+              const isClosedWeekday = closedWeekdays.has(dow)
+              return (
+                <label
+                  key={label}
+                  className={cn(
+                    "flex items-center gap-1.5 text-sm",
+                    isClosedWeekday ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+                  )}
+                  title={isClosedWeekday ? "休業日のため選択できません" : undefined}
+                >
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded border-border"
+                    checked={!isClosedWeekday && weekdayMask.has(dow)}
+                    disabled={saving || isClosedWeekday}
+                    onChange={() => toggleWeekday(dow)}
+                  />
+                  {label}
+                  {isClosedWeekday ? (
+                    <span className="text-xs text-muted-foreground">（休業）</span>
+                  ) : null}
+                </label>
+              )
+            })}
           </div>
         </fieldset>
 

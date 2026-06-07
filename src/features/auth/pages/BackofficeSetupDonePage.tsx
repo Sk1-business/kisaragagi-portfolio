@@ -3,6 +3,11 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
+import {
+  isAdminSalonSettingsFlow,
+  resolveAdminSalonReturnTo,
+  type SalonSettingsFlowNavState,
+} from "@/features/auth/lib/salonSettingsNavState"
 
 /**
  * 初期設定（サロン情報→営業日・営業時間→予約ルール）の完了画面。
@@ -10,17 +15,26 @@ import { ROUTES } from "@/constants/routes"
 export function BackofficeSetupDonePage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const navState = location.state as
-    | { fromBookingRules?: boolean; email?: string }
-    | null
+  const navState = location.state as SalonSettingsFlowNavState | null
   const email = typeof navState?.email === "string" ? navState.email : ""
   const fromBookingRules = Boolean(navState?.fromBookingRules)
+  const fromAdminSalonSettings = isAdminSalonSettingsFlow(navState)
 
   useEffect(() => {
+    if (fromAdminSalonSettings) {
+      navigate(resolveAdminSalonReturnTo(navState), { replace: true })
+      return
+    }
     if (!fromBookingRules) {
       navigate(ROUTES.backofficeInitialSetup, { replace: true })
     }
-  }, [fromBookingRules, navigate])
+  }, [fromAdminSalonSettings, fromBookingRules, navState, navigate])
+
+  if (fromAdminSalonSettings) {
+    return (
+      <p className="px-4 py-8 text-center text-sm text-muted-foreground">ダッシュボードへ戻ります…</p>
+    )
+  }
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col items-center justify-center px-4 py-8 sm:px-6">
