@@ -1085,7 +1085,6 @@ export function AdminStaffPage() {
                     className="inline-block size-4 rounded-full border border-border"
                     style={{ backgroundColor: normalizeHex(formColor) }}
                   />
-                  <span className="font-mono text-xs">{normalizeHex(formColor)}</span>
                 </p>
                 {formDescription.trim() ? (
                   <p className="mt-2 whitespace-pre-wrap">

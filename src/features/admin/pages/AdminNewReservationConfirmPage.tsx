@@ -73,8 +73,8 @@ export function AdminNewReservationConfirmPage() {
       setSubmitError("開始・終了時刻が無効です。入力画面に戻って確認してください。")
       return
     }
-    if (new Date(startIso).getTime() < new Date(draft.bookingNotBeforeIso).getTime()) {
-      setSubmitError("開始日時が無効です。入力画面でやり直してください。")
+    if (new Date(startIso).getTime() <= Date.now()) {
+      setSubmitError("開始日時が過去になっています。入力画面でやり直してください。")
       return
     }
     setSubmitting(true)

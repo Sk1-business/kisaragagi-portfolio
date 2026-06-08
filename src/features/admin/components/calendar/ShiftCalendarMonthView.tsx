@@ -182,19 +182,26 @@ export function ShiftCalendarMonthView({
                   : null
               const isWeekdayClosed = biz?.isClosed === true
               const isPastDay = !isShiftRegisterableDateKey(dateKey, todayKey)
+              const isToday = dateKey === todayKey
               return (
                 <div
                   key={day.toISOString()}
-                  className={`min-h-[120px] border-b border-r border-border p-1 last:border-r-0 ${
-                    inMonth ? "bg-background" : "bg-muted/20"
-                  } ${isHoliday ? "bg-amber-50/90 dark:bg-amber-950/25" : ""} ${
-                    !isHoliday && isWeekdayClosed && inMonth ? "bg-muted/50" : ""
-                  } ${isPastDay && inMonth ? "bg-muted/30" : ""}`}
+                  className={cn(
+                    "min-h-[120px] border-b border-r border-border p-1 last:border-r-0",
+                    inMonth ? "bg-background" : "bg-muted/20",
+                    isHoliday && "bg-amber-50/90 dark:bg-amber-950/25",
+                    !isHoliday && isWeekdayClosed && inMonth && "bg-muted/50",
+                    isPastDay && inMonth && "bg-muted/30",
+                    isToday && "bg-primary/5 ring-2 ring-inset ring-primary/60",
+                  )}
                 >
                   <span
-                    className={`inline-flex size-6 items-center justify-center rounded text-xs ${
-                      inMonth ? "text-foreground" : "text-muted-foreground"
-                    }`}
+                    className={cn(
+                      "inline-flex size-6 items-center justify-center rounded text-xs",
+                      inMonth ? "text-foreground" : "text-muted-foreground",
+                      isToday &&
+                        "rounded-full bg-primary font-semibold text-primary-foreground",
+                    )}
                   >
                     {day.getDate()}
                   </span>

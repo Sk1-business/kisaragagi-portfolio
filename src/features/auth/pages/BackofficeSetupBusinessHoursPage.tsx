@@ -78,10 +78,18 @@ function genTempId(): string {
 }
 
 function isValidISODate(s: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
-  const d = new Date(`${s}T00:00:00`)
-  if (Number.isNaN(d.getTime())) return false
-  return d.toISOString().slice(0, 10) === s
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (!m) return false
+  const year = Number(m[1])
+  const month = Number(m[2])
+  const day = Number(m[3])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false
+  const d = new Date(year, month - 1, day)
+  return (
+    d.getFullYear() === year &&
+    d.getMonth() === month - 1 &&
+    d.getDate() === day
+  )
 }
 
 function defaultRows(): BusinessHourRow[] {
@@ -279,11 +287,11 @@ export function BackofficeSetupBusinessHoursPage() {
       if (r.is_closed) continue
       if (!isValidHHmm(r.start_time) || !isValidHHmm(r.end_time)) {
         setError(`${label}の時刻は HH:mm 形式で入力してください。`)
-        return
+        return null
       }
       if (timeToMinutes(r.end_time) <= timeToMinutes(r.start_time)) {
         setError(`${label}の終了時刻は開始時刻より後に設定してください。`)
-        return
+        return null
       }
     }
 
@@ -291,7 +299,7 @@ export function BackofficeSetupBusinessHoursPage() {
       setError(
         "すべての曜日を定休日にすることはできません。少なくとも1日は営業日にしてください。",
       )
-      return
+      return null
     }
 
     // --- 休業日バリデーション（任意・空行はスキップ） ---
@@ -305,18 +313,18 @@ export function BackofficeSetupBusinessHoursPage() {
     for (const h of cleanedHolidays) {
       if (!isValidISODate(h.date)) {
         setError(`休業日「${h.date}」の日付形式が正しくありません（YYYY-MM-DD）。`)
-        return
+        return null
       }
       if (h.description.length > 200) {
         setError("休業理由は200文字以内で入力してください。")
-        return
+        return null
       }
     }
     const dateSet = new Set<string>()
     for (const h of cleanedHolidays) {
       if (dateSet.has(h.date)) {
         setError(`休業日「${h.date}」が重複しています。`)
-        return
+        return null
       }
       dateSet.add(h.date)
     }
