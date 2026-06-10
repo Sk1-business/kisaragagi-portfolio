@@ -75,7 +75,7 @@ export function AdminStaffPage() {
   const [formDescription, setFormDescription] = useState("")
   const [formImageUrl, setFormImageUrl] = useState("")
   const [formColor, setFormColor] = useState("#6366f1")
-  /** スタッフ追加フォーム専用: 管理者ログイン用のメール・パスワード */
+  /** スタッフ追加フォーム専用: 招待メール送信先と初期パスワード */
   const [formLoginEmail, setFormLoginEmail] = useState("")
   const [formLoginPassword, setFormLoginPassword] = useState("")
   const [formLoginPasswordConfirm, setFormLoginPasswordConfirm] = useState("")
@@ -366,7 +366,7 @@ export function AdminStaffPage() {
         if (result.kind === "admin_user_failed") {
           setAddConfirmOpen(false)
           setFormError(
-            `ログイン用アカウントの作成に失敗しました: ${result.message}`,
+            `スタッフ招待メールの送信に失敗しました: ${result.message}`,
           )
           return
         }
@@ -733,7 +733,7 @@ export function AdminStaffPage() {
               {formOpen === "add" && (
                 <div className="space-y-4 rounded-md border border-border bg-muted/30 p-4">
                   <div className="space-y-2">
-                    <Label htmlFor="staff-login-email">ログイン用メールアドレス</Label>
+                    <Label htmlFor="staff-login-email">招待メール送信先</Label>
                     <Input
                       id="staff-login-email"
                       type="email"
