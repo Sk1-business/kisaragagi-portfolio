@@ -128,8 +128,8 @@ export function AdminPayPaySettingsCard() {
       setFieldErrors({})
       setMessage(
         mode === "sandbox"
-          ? "PayPay Sandboxの連携情報を保存しました。"
-          : "PayPayオンライン決済の連携情報を保存しました。",
+          ? "PayPay Sandboxの認証情報を保存しました。実際の有効性は未確認です。"
+          : "PayPayオンライン決済の認証情報を保存しました。実際の有効性は未確認です。",
       )
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "PayPayの受取設定に失敗しました。")
@@ -180,7 +180,7 @@ export function AdminPayPaySettingsCard() {
                 : "w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700"
             }
           >
-            {loading ? "確認中" : status.configured ? "連携済み" : "未連携"}
+            {loading ? "確認中" : status.configured ? "認証情報保存済み" : "未設定"}
           </span>
         </div>
       </CardHeader>
@@ -273,9 +273,12 @@ export function AdminPayPaySettingsCard() {
                   <span>
                     {status.configured ? (
                       <>
-                        {status.mode === "sandbox" ? "Sandbox" : "本番環境"}に連携済みです。
+                        {status.mode === "sandbox" ? "Sandbox" : "本番環境"}の認証情報を保存済みです。
                         Merchant ID:{" "}
                         <span className="font-mono font-medium">{status.merchant_id_masked}</span>
+                        <span className="mt-1 block text-xs">
+                          PayPay側での有効性は未確認です。テスト決済で動作を確認してください。
+                        </span>
                       </>
                     ) : (
                       "Sandbox用の認証情報を入力してください。"
