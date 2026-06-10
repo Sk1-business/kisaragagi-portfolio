@@ -41,8 +41,8 @@ const hubItems = [
   },
   {
     key: "payments",
-    title: "決済・PayPay連携",
-    description: "PayPayの受取アカウントと決済設定を管理",
+    title: "決済連携",
+    description: "StripeとPayPayの受取アカウントを管理",
     to: ROUTES.adminPayments,
     icon: CreditCard,
     disabled: false,

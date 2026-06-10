@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import { AdminPayPaySettingsCard } from "@/features/admin/components/AdminPayPaySettingsCard"
+import { AdminStripeConnectCard } from "@/features/admin/components/AdminStripeConnectCard"
 
 export function AdminPaymentsPage() {
   return (
@@ -18,12 +19,13 @@ export function AdminPaymentsPage() {
       </div>
 
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">決済・PayPay連携</h1>
+        <h1 className="text-lg font-semibold tracking-tight">決済連携</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          店舗でPayPay決済を受け取るための認証情報を設定します。
+          クレジットカードとPayPayの売上受取設定を管理します。
         </p>
       </div>
 
+      <AdminStripeConnectCard />
       <AdminPayPaySettingsCard />
     </div>
   )
