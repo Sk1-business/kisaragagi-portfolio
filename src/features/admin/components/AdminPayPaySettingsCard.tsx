@@ -6,7 +6,7 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react"
-import { useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useState, type FormEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,11 +16,13 @@ import {
   deletePayPayCredentials,
   fetchPayPayStatus,
   savePayPayCredentials,
+  type PayPayMode,
   type PayPayStatus,
 } from "@/features/admin/api/payPaySettingsApi"
 
 const PAYPAY_APPLICATION_URL = "https://paypay.ne.jp/store-online/"
 const PAYPAY_DEVELOPER_URL = "https://developer.paypay.ne.jp/"
+const IS_DEVELOPMENT = import.meta.env.DEV
 type CredentialField = "merchantId" | "apiKey" | "apiSecret"
 type CredentialErrors = Partial<Record<CredentialField, string>>
 
@@ -64,6 +66,7 @@ function validateCredentials(
 
 export function AdminPayPaySettingsCard() {
   const [status, setStatus] = useState<PayPayStatus>(EMPTY_STATUS)
+  const [mode, setMode] = useState<PayPayMode>("production")
   const [applicationCompleted, setApplicationCompleted] = useState(false)
   const [apiKey, setApiKey] = useState("")
   const [apiSecret, setApiSecret] = useState("")
@@ -75,23 +78,24 @@ export function AdminPayPaySettingsCard() {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
-  async function loadStatus() {
+  const loadStatus = useCallback(async () => {
     setLoading(true)
     setError("")
     try {
       const nextStatus = await fetchPayPayStatus()
       setStatus(nextStatus)
+      if (IS_DEVELOPMENT && nextStatus.mode) setMode(nextStatus.mode)
       if (nextStatus.configured) setApplicationCompleted(true)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "PayPay連携状態の取得に失敗しました。")
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     void loadStatus()
-  }, [])
+  }, [loadStatus])
 
   function clearFieldError(field: CredentialField) {
     setFieldErrors((current) => ({ ...current, [field]: undefined }))
@@ -115,14 +119,18 @@ export function AdminPayPaySettingsCard() {
         apiKey,
         apiSecret,
         merchantId,
-        mode: "production",
+        mode: IS_DEVELOPMENT ? mode : "production",
       })
       setStatus(nextStatus)
       setApiKey("")
       setApiSecret("")
       setMerchantId("")
       setFieldErrors({})
-      setMessage("PayPayオンライン決済の連携情報を保存しました。")
+      setMessage(
+        mode === "sandbox"
+          ? "PayPay Sandboxの連携情報を保存しました。"
+          : "PayPayオンライン決済の連携情報を保存しました。",
+      )
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "PayPayの受取設定に失敗しました。")
     } finally {
@@ -149,7 +157,8 @@ export function AdminPayPaySettingsCard() {
   }
 
   const busy = loading || saving || deleting
-  const showCredentialForm = status.configured || applicationCompleted
+  const isSandbox = IS_DEVELOPMENT && mode === "sandbox"
+  const showCredentialForm = status.configured || isSandbox || applicationCompleted
 
   return (
     <Card className="rounded-lg border-border shadow-xs">
@@ -218,12 +227,36 @@ export function AdminPayPaySettingsCard() {
               <div>
                 <h3 className="font-semibold">審査完了後に連携情報を登録する</h3>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  審査完了後、PayPay for Developersで本番用のAPI Key、API Secret、Merchant
-                  IDを確認してください。
+                  {isSandbox
+                    ? "PayPay for DevelopersでSandbox用のAPI Key、API Secret、Merchant IDを確認してください。"
+                    : "審査完了後、PayPay for Developersで本番用のAPI Key、API Secret、Merchant IDを確認してください。"}
                 </p>
               </div>
 
-              {!status.configured ? (
+              {IS_DEVELOPMENT ? (
+                <div className="space-y-2 rounded-md border border-dashed border-amber-300 bg-amber-50 p-3">
+                  <Label htmlFor="paypay-mode">接続環境（開発時のみ表示）</Label>
+                  <select
+                    id="paypay-mode"
+                    value={mode}
+                    onChange={(event) => {
+                      setMode(event.target.value as PayPayMode)
+                      setMessage("")
+                      setError("")
+                    }}
+                    disabled={busy}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  >
+                    <option value="sandbox">Sandbox（開発・テスト用）</option>
+                    <option value="production">本番</option>
+                  </select>
+                  <p className="text-xs text-amber-800">
+                    Sandboxの認証情報は本番環境では使用できません。
+                  </p>
+                </div>
+              ) : null}
+
+              {!status.configured && !isSandbox ? (
                 <label className="flex cursor-pointer items-start gap-3 rounded-md bg-muted/50 p-3 text-sm">
                   <input
                     type="checkbox"
@@ -238,8 +271,15 @@ export function AdminPayPaySettingsCard() {
                 <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
                   <span>
-                    本番環境に連携済みです。Merchant ID:{" "}
-                    <span className="font-mono font-medium">{status.merchant_id_masked}</span>
+                    {status.configured ? (
+                      <>
+                        {status.mode === "sandbox" ? "Sandbox" : "本番環境"}に連携済みです。
+                        Merchant ID:{" "}
+                        <span className="font-mono font-medium">{status.merchant_id_masked}</span>
+                      </>
+                    ) : (
+                      "Sandbox用の認証情報を入力してください。"
+                    )}
                   </span>
                 </div>
               )}
@@ -248,7 +288,7 @@ export function AdminPayPaySettingsCard() {
                 <form className="space-y-4" onSubmit={handleSubmit} noValidate>
                   {status.mode === "sandbox" ? (
                     <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                      現在はSandbox情報が登録されています。本番用の認証情報へ更新してください。
+                      現在はSandbox情報が登録されています。本番公開前に本番用の認証情報へ更新してください。
                     </p>
                   ) : null}
 
