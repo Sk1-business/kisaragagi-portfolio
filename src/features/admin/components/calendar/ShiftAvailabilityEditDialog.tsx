@@ -85,7 +85,7 @@ export function ShiftAvailabilityEditDialog({
     setInitialEnd(e)
   }, [open, resolved, businessDay])
 
-  if (!open || !staff || !day) return null
+  if (!open || !staff || !day || !resolved) return null
 
   const dateLabel = `${day.getFullYear()}年${day.getMonth() + 1}月${day.getDate()}日`
 
