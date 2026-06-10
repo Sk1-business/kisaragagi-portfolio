@@ -7,12 +7,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import { checkAdminEmailExists } from "@/features/auth/api/adminLoginApi"
+import { requestSignupVerificationEmail } from "@/features/auth/api/signupVerificationApi"
 import { AuthBrandingPanel, AuthMobileBrandingHeader } from "@/features/auth/components/AuthBrandingPanel"
 import { AUTH_AUDIENCE_TEXT } from "@/features/auth/constants"
-import {
-  buildSignupVerificationUrl,
-  issueSignupVerification,
-} from "@/features/auth/lib/signupVerification"
 
 const REDIRECT_DELAY_MS = 2500
 const audienceText = AUTH_AUDIENCE_TEXT.BACKOFFICE_PORTAL
@@ -63,15 +60,27 @@ export function BackofficeSignupEmailPage() {
         )
         return
       }
-      const record = issueSignupVerification(trimmed)
-      const link = buildSignupVerificationUrl(record.token)
+      const sendResult = await requestSignupVerificationEmail({ email: trimmed })
+      if (sendResult.kind === "duplicate_email") {
+        setDuplicateNotice(
+          sendResult.message ||
+            "すでにそのメールアドレスは登録されています。ログイン画面に移動します…",
+        )
+        return
+      }
+      if (sendResult.kind !== "ok") {
+        setError(
+          sendResult.message
+            ? `認証メールの送信に失敗しました（${sendResult.message}）。時間をおいて再度お試しください。`
+            : "認証メールの送信に失敗しました。時間をおいて再度お試しください。",
+        )
+        return
+      }
       navigate(ROUTES.backofficeSignupVerifySent, {
         replace: true,
         state: {
-          email: record.email,
-          token: record.token,
-          expiresAt: record.expiresAt,
-          link,
+          email: sendResult.email,
+          expiresAt: sendResult.expiresAt,
         },
       })
     } finally {

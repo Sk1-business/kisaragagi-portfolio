@@ -32,6 +32,20 @@ export const ADMIN_TRAINER_PROFILE_IMAGE_UPLOAD_PATH =
  */
 export const ADMIN_USERS_LIST_PATH = "/api/admin/admin-users" as const
 
+/** `POST /api/admin/signup-verifications` - owner signup email verification. */
+export const ADMIN_SIGNUP_VERIFICATIONS_PATH =
+  "/api/admin/signup-verifications" as const
+
+/** `POST /api/admin/signup-verifications/verify` - consumes owner signup token. */
+export const ADMIN_SIGNUP_VERIFICATIONS_VERIFY_PATH =
+  "/api/admin/signup-verifications/verify" as const
+
+/**
+ * `POST /api/admin/staff-invitations` -
+ * creates a staff admin user and sends the staff onboarding email.
+ */
+export const ADMIN_STAFF_INVITATIONS_PATH = "/api/admin/staff-invitations" as const
+
 /** `GET/POST …/trainers/{trainer_id}/shifts` */
 export function adminTrainerShiftsPath(trainerId: string): string {
   return `${ADMIN_TRAINERS_LIST_PATH}/${encodeURIComponent(trainerId)}/shifts`

@@ -57,7 +57,7 @@ type BusinessHourRow = {
 type HolidayInputRow = {
   /** クライアント側の一意キー（DB の id ではない） */
   tempId: string
-  /** YYYY-MM-DD（空文字 = 未入力） */
+  /** MM/DD（空文字 = 未入力） */
   date: string
   /** 休業理由（任意） */
   description: string
@@ -77,19 +77,82 @@ function genTempId(): string {
   return `tmp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function isValidISODate(s: string): boolean {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+function normalizeHolidayMonthDayInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 4)
+  if (digits.length <= 2) return digits
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`
+}
+
+function holidayMonthDayFromStoredDate(value: string): string {
+  const trimmed = value.trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed.slice(5).replace("-", "/")
+  if (/^\d{2}-\d{2}$/.test(trimmed)) return trimmed.replace("-", "/")
+  return normalizeHolidayMonthDayInput(trimmed)
+}
+
+function isValidHolidayMonthDay(s: string): boolean {
+  const m = /^(\d{2})\/(\d{2})$/.exec(s)
   if (!m) return false
-  const year = Number(m[1])
-  const month = Number(m[2])
-  const day = Number(m[3])
+  const month = Number(m[1])
+  const day = Number(m[2])
   if (month < 1 || month > 12 || day < 1 || day > 31) return false
+  const year = 2000
   const d = new Date(year, month - 1, day)
+  return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day
+}
+
+function isValidDateParts(year: number, month: number, day: number): boolean {
+  const date = new Date(year, month - 1, day)
   return (
-    d.getFullYear() === year &&
-    d.getMonth() === month - 1 &&
-    d.getDate() === day
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
   )
+}
+
+function holidayMonthDayToNextISODate(monthDay: string): string {
+  const [monthRaw, dayRaw] = monthDay.split("/")
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+  const today = new Date()
+  const todayAtMidnight = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  )
+
+  for (let year = today.getFullYear(); ; year += 1) {
+    if (!isValidDateParts(year, month, day)) continue
+    const candidate = new Date(year, month - 1, day)
+    if (candidate >= todayAtMidnight) {
+      return `${year}-${monthRaw}-${dayRaw}`
+    }
+  }
+}
+
+function buildSaveSummary(
+  rows: BusinessHourRow[],
+  cleanedHolidays: { date: string; description: string }[],
+): string[] {
+  const lines: string[] = []
+  for (const r of rows) {
+    const label =
+      DAY_OF_WEEK.find((d) => d.value === r.day_of_week)?.label ?? "曜日"
+    if (r.is_closed) {
+      lines.push(`${label}: 定休日`)
+    } else {
+      lines.push(`${label}: ${r.start_time} 〜 ${r.end_time}`)
+    }
+  }
+  if (cleanedHolidays.length === 0) {
+    lines.push("休業日: なし")
+  } else {
+    for (const h of cleanedHolidays) {
+      const desc = h.description ? `（${h.description}）` : ""
+      lines.push(`休業日: ${h.date}${desc}`)
+    }
+  }
+  return lines
 }
 
 function defaultRows(): BusinessHourRow[] {
@@ -190,7 +253,7 @@ export function BackofficeSetupBusinessHoursPage() {
     const persisted = stored?.holidays ?? []
     return persisted.map((h) => ({
       tempId: genTempId(),
-      date: h.date,
+      date: holidayMonthDayFromStoredDate(h.date),
       description: h.description ?? "",
     }))
   })
@@ -255,30 +318,6 @@ export function BackofficeSetupBusinessHoursPage() {
     setError("")
   }
 
-  function buildSaveSummary(
-    cleanedHolidays: { date: string; description: string }[],
-  ): string[] {
-    const lines: string[] = []
-    for (const r of rows) {
-      const label =
-        DAY_OF_WEEK.find((d) => d.value === r.day_of_week)?.label ?? "曜日"
-      if (r.is_closed) {
-        lines.push(`${label}: 定休日`)
-      } else {
-        lines.push(`${label}: ${r.start_time} 〜 ${r.end_time}`)
-      }
-    }
-    if (cleanedHolidays.length === 0) {
-      lines.push("休業日: なし")
-    } else {
-      for (const h of cleanedHolidays) {
-        const desc = h.description ? `（${h.description}）` : ""
-        lines.push(`休業日: ${h.date}${desc}`)
-      }
-    }
-    return lines
-  }
-
   function validateForm(): { cleanedHolidays: { date: string; description: string }[] } | null {
     // --- 営業時間バリデーション ---
     for (const r of rows) {
@@ -305,14 +344,14 @@ export function BackofficeSetupBusinessHoursPage() {
     // --- 休業日バリデーション（任意・空行はスキップ） ---
     const cleanedHolidays = holidays
       .map((h) => ({
-        date: h.date.trim(),
+        date: holidayMonthDayFromStoredDate(h.date),
         description: h.description.trim(),
       }))
       .filter((h) => h.date.length > 0)
 
     for (const h of cleanedHolidays) {
-      if (!isValidISODate(h.date)) {
-        setError(`休業日「${h.date}」の日付形式が正しくありません（YYYY-MM-DD）。`)
+      if (!isValidHolidayMonthDay(h.date)) {
+        setError(`休業日「${h.date}」の日付形式が正しくありません（MM/DD）。`)
         return null
       }
       if (h.description.length > 200) {
@@ -376,8 +415,9 @@ export function BackofficeSetupBusinessHoursPage() {
       // 2) POST /api/admin/settings/holidays （各日付ごとに1回ずつ）
       const created: HolidayCreated[] = []
       for (const h of cleanedHolidays) {
+        const apiDate = holidayMonthDayToNextISODate(h.date)
         const r = await postHoliday({
-          date: h.date,
+          date: apiDate,
           description: h.description || null,
         })
         if (r.kind === "unauthorized") {
@@ -430,11 +470,11 @@ export function BackofficeSetupBusinessHoursPage() {
   const saveSummaryLines = useMemo(() => {
     const cleaned = holidays
       .map((h) => ({
-        date: h.date.trim(),
+        date: holidayMonthDayFromStoredDate(h.date),
         description: h.description.trim(),
       }))
       .filter((h) => h.date.length > 0)
-    return buildSaveSummary(cleaned)
+    return buildSaveSummary(rows, cleaned)
   }, [rows, holidays])
 
   async function handleConfirmCancel() {
@@ -606,10 +646,15 @@ export function BackofficeSetupBusinessHoursPage() {
                     </Label>
                     <Input
                       id={`holiday-date-${h.tempId}`}
-                      type="date"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="例: 12/31"
+                      maxLength={5}
                       value={h.date}
                       onChange={(e) =>
-                        updateHolidayRow(h.tempId, { date: e.target.value })
+                        updateHolidayRow(h.tempId, {
+                          date: normalizeHolidayMonthDayInput(e.target.value),
+                        })
                       }
                       className="h-9"
                       disabled={saving}

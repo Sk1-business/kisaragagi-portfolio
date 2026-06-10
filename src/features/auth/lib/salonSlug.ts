@@ -13,7 +13,7 @@ function randomSalonSlugSuffix(): string {
  */
 export function baseSlugFromSalonName(salonName: string): string | null {
   const raw = salonName.toLowerCase().trim()
-  let s = raw.replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
+  const s = raw.replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
   if (s.length < 3) return null
   return SLUG_PATTERN.test(s) ? s : null
 }

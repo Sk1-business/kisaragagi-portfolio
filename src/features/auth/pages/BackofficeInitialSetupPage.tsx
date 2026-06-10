@@ -15,6 +15,7 @@ import { composeSalonAddress } from "@/features/auth/lib/formatSalonAddress"
 import { clearSignupVerification } from "@/features/auth/lib/signupVerification"
 
 const EMPTY_ADDRESS: InitialSetupAddressValue = {
+  postalCode: "",
   prefecture: "",
   municipality: "",
   street: "",
@@ -25,6 +26,7 @@ type InitialSetupDraft = {
   email: string
   password: string
   passwordConfirm: string
+  addressPostalCode: string
   addressPrefecture: string
   addressMunicipality: string
   addressStreet: string
@@ -67,6 +69,7 @@ function toInitialSetupDraft(
     email,
     password: String(form.get("password") ?? ""),
     passwordConfirm: String(form.get("passwordConfirm") ?? ""),
+    addressPostalCode: address.postalCode.trim(),
     addressPrefecture: address.prefecture.trim(),
     addressMunicipality: address.municipality.trim(),
     addressStreet: address.street.trim(),
@@ -153,11 +156,11 @@ export function BackofficeInitialSetupPage() {
       return
     }
     if (!draft.addressPrefecture) {
-      setError("県を選択してください。")
+      setError("都道府県を選択してください。")
       return
     }
     if (!draft.addressMunicipality) {
-      setError("市町村を選択してください。")
+      setError("市区町村を選択してください。")
       return
     }
     if (!draft.addressStreet) {
