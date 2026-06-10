@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom"
 import { ROUTES } from "@/constants/routes"
 import { AdminSalonSlugCard } from "@/features/admin/components/AdminSalonSlugCard"
 import { AdminOwnerFeatureHub } from "@/features/admin/components/AdminOwnerFeatureHub"
+import { AdminPayPaySettingsCard } from "@/features/admin/components/AdminPayPaySettingsCard"
 import { TodayReservationsCard } from "@/features/admin/components/TodayReservationsCard"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import { useStaff } from "@/features/admin/hooks/useStaff"
@@ -95,6 +96,7 @@ export function AdminDashboardPage() {
   return (
     <div className="space-y-6">
       {profile.role === "owner" ? <AdminOwnerFeatureHub /> : null}
+      {profile.role === "owner" ? <AdminPayPaySettingsCard /> : null}
       <TodayReservationsCard
         reservations={todayReservations}
         staffList={staffList}
