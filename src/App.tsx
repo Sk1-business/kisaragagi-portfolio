@@ -23,6 +23,7 @@ import { AdminNewReservationPage } from "@/features/admin/pages/AdminNewReservat
 import { AdminReservationDetailPage } from "@/features/admin/pages/AdminReservationDetailPage"
 import { AdminShiftCalendarPage } from "@/features/admin/pages/AdminShiftCalendarPage"
 import { AdminMenusPage } from "@/features/admin/pages/AdminMenusPage"
+import { AdminPaymentsPage } from "@/features/admin/pages/AdminPaymentsPage"
 import { AdminSalonSettingsPage } from "@/features/admin/pages/AdminSalonSettingsPage"
 import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
@@ -173,6 +174,14 @@ function App() {
             element={
               <OwnerOnlyRoute>
                 <AdminMenusPage />
+              </OwnerOnlyRoute>
+            }
+          />
+          <Route
+            path={ROUTES.adminPayments}
+            element={
+              <OwnerOnlyRoute>
+                <AdminPaymentsPage />
               </OwnerOnlyRoute>
             }
           />
