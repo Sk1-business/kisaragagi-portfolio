@@ -36,6 +36,7 @@ export const ROUTES = {
   adminCancelled: "/admin/cancelled",
   adminStaff: "/admin/staff",
   adminMenus: "/admin/menus",
+  adminPayments: "/admin/payments",
   /** オーナー向けサロン設定（営業時間・予約ルール等） */
   adminSalonSettings: "/admin/salon",
   /** 管理者による代理予約（入力） */

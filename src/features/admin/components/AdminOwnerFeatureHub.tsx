@@ -40,12 +40,12 @@ const hubItems = [
     disabled: false,
   },
   {
-    key: "stripe",
-    title: "決済・Stripe接続",
-    description: "決済まわりの設定（準備中）",
-    to: null as string | null,
+    key: "payments",
+    title: "決済連携",
+    description: "StripeとPayPayの受取アカウントを管理",
+    to: ROUTES.adminPayments,
     icon: CreditCard,
-    disabled: true,
+    disabled: false,
   },
 ] as const
 
