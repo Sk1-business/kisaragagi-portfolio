@@ -324,7 +324,7 @@ export function AdminMenusPage() {
       setFormSaving(true)
       setFormError("")
       try {
-        if (formOpen && typeof formOpen === "object" && "edit" in formOpen) {
+        if (formOpen !== null && formOpen !== "add") {
           const editMenu = formOpen.edit
           const id = editMenu.menu_id
           const durationForPut =

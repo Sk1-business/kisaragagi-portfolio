@@ -9,13 +9,11 @@ import { persistShopSlug } from "@/lib/shopSlug"
 export function SalonPublicEntryPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
-  const [error, setError] = useState("")
+  const [requestError, setRequestError] = useState("")
+  const error = slug ? requestError : "サロンが見つかりません。"
 
   useEffect(() => {
-    if (!slug) {
-      setError("サロンが見つかりません。")
-      return
-    }
+    if (!slug) return
 
     let mounted = true
     void fetchSalonPage(slug)
@@ -25,7 +23,7 @@ export function SalonPublicEntryPage() {
         navigate(buildPathWithShopId(ROUTES.userHome, slug), { replace: true })
       })
       .catch(() => {
-        if (mounted) setError("サロンが見つかりません。")
+        if (mounted) setRequestError("サロンが見つかりません。")
       })
 
     return () => {

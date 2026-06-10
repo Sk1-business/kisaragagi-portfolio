@@ -5,9 +5,9 @@ import { CheckCircle2, Loader2, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import {
-  consumeSignupVerification,
-  type ConsumeResult,
-} from "@/features/auth/lib/signupVerification"
+  verifySignupEmailToken,
+  type SignupVerificationConsumeResult,
+} from "@/features/auth/api/signupVerificationApi"
 
 const SUCCESS_AUTOPROCEED_MS = 1800
 const FAILURE_REDIRECT_MS = 2500
@@ -15,36 +15,39 @@ const FAILURE_REDIRECT_MS = 2500
 export function BackofficeSignupVerifyPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const token = searchParams.get("token") ?? ""
+  const token = (searchParams.get("token") ?? "").trim()
+  const hasToken = Boolean(token)
 
-  const [status, setStatus] = useState<"checking" | "success" | "failed">("checking")
+  const [status, setStatus] = useState<"checking" | "success" | "failed">(
+    hasToken ? "checking" : "failed",
+  )
   const [email, setEmail] = useState<string>("")
-  const [failureReason, setFailureReason] = useState<string>("")
+  const [failureReason, setFailureReason] = useState<string>(
+    hasToken ? "" : "認証リンクが無効です（トークンがありません）。",
+  )
   const consumedRef = useRef(false)
 
   useEffect(() => {
     if (consumedRef.current) return
     consumedRef.current = true
 
-    if (!token) {
+    if (!token) return
+    void (async () => {
+      const result: SignupVerificationConsumeResult = await verifySignupEmailToken(token)
+      if (result.kind === "ok") {
+        setEmail(result.email)
+        setStatus("success")
+        return
+      }
       setStatus("failed")
-      setFailureReason("認証リンクが無効です（トークンがありません）。")
-      return
-    }
-    const result: ConsumeResult = consumeSignupVerification(token)
-    if (result.kind === "ok") {
-      setEmail(result.email)
-      setStatus("success")
-      return
-    }
-    setStatus("failed")
-    if (result.kind === "expired") {
-      setFailureReason("認証リンクの有効期限が切れています（5分超過）。")
-    } else if (result.kind === "already_used") {
-      setFailureReason("この認証リンクはすでに使用済みです。")
-    } else {
-      setFailureReason("認証リンクが無効です。新規登録をやり直してください。")
-    }
+      if (result.kind === "expired") {
+        setFailureReason(result.message || "認証リンクの有効期限が切れています。")
+      } else if (result.kind === "already_used") {
+        setFailureReason(result.message || "この認証リンクはすでに使用済みです。")
+      } else {
+        setFailureReason(result.message || "認証リンクが無効です。新規登録をやり直してください。")
+      }
+    })()
   }, [token])
 
   // 成功時は短い案内のあと初期設定画面へ

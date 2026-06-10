@@ -7,8 +7,8 @@ export type SalonAddressParts = {
 }
 
 /**
- * 「県」「市町村」「町名・番地」「マンション名」を1文字列に結合する。
- * マンション名があるときのみ、その前に半角スペースを入れる。
+ * 「都道府県」「市区町村」「町名・番地」「建物名」を1文字列に結合する。
+ * 建物名があるときのみ、その前に半角スペースを入れる。
  */
 export function composeSalonAddress(parts: SalonAddressParts): string {
   const prefecture = parts.prefecture.trim()
