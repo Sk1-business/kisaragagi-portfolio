@@ -216,60 +216,65 @@ export function ReservationDetailCard({
   }
 
   return (
-    <Card className="w-full border-border shadow-md sm:max-w-md">
-      <CardHeader className="space-y-0 pb-2">
+    <Card className="w-full border-border shadow-md">
+      <CardHeader className="pb-3">
         <CardTitle className="text-base">予約詳細</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">予約ID</p>
-          <p className="font-mono">{reservation.id}</p>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">お客様名</p>
-          <p>{reservation.customerName}</p>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">メニュー</p>
-          <p>{reservation.menuName?.trim() ? reservation.menuName : "—"}</p>
-        </div>
-        {reservation.customerPhone?.trim() ? (
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">電話番号</p>
-            <p className="tabular-nums">{reservation.customerPhone.trim()}</p>
+      <CardContent className="text-sm">
+        <dl className="divide-y divide-border">
+          <div className="grid grid-cols-[8rem_1fr] gap-x-4 py-3 first:pt-0 sm:grid-cols-[10rem_1fr]">
+            <dt className="text-xs font-medium text-muted-foreground pt-0.5">予約ID</dt>
+            <dd className="font-mono text-xs break-all">{reservation.id}</dd>
           </div>
-        ) : null}
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">メールアドレス</p>
-          <p>{reservation.customerEmail}</p>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">日時</p>
-          <p>
-            {formatDateJa(startDate)} {formatTime(reservation.startAt)} ～ {formatTime(reservation.endAt)}
-          </p>
-          <p className="mt-0.5 text-muted-foreground">
-            所要時間 {formatReservationDurationJa(reservation.startAt, reservation.endAt)}
-          </p>
-        </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-muted-foreground">担当者</p>
-            {onUpdateAssignee &&
-              staffList.length > 0 &&
-              !editingAssignee &&
-              !isDoneReservation && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 rounded-md px-2 text-xs"
-                onClick={openAssigneeEdit}
-              >
-                編集
-              </Button>
-            )}
+          <div className="grid grid-cols-[8rem_1fr] gap-x-4 py-3 sm:grid-cols-[10rem_1fr]">
+            <dt className="text-xs font-medium text-muted-foreground pt-0.5">お客様名</dt>
+            <dd>{reservation.customerName}</dd>
           </div>
+          <div className="grid grid-cols-[8rem_1fr] gap-x-4 py-3 sm:grid-cols-[10rem_1fr]">
+            <dt className="text-xs font-medium text-muted-foreground pt-0.5">メニュー</dt>
+            <dd>{reservation.menuName?.trim() ? reservation.menuName : "—"}</dd>
+          </div>
+          {reservation.customerPhone?.trim() ? (
+            <div className="grid grid-cols-[8rem_1fr] gap-x-4 py-3 sm:grid-cols-[10rem_1fr]">
+              <dt className="text-xs font-medium text-muted-foreground pt-0.5">電話番号</dt>
+              <dd className="tabular-nums">{reservation.customerPhone.trim()}</dd>
+            </div>
+          ) : null}
+          <div className="grid grid-cols-[8rem_1fr] gap-x-4 py-3 sm:grid-cols-[10rem_1fr]">
+            <dt className="text-xs font-medium text-muted-foreground pt-0.5">メールアドレス</dt>
+            <dd className="break-all">{reservation.customerEmail}</dd>
+          </div>
+          <div className="grid grid-cols-[8rem_1fr] gap-x-4 py-3 sm:grid-cols-[10rem_1fr]">
+            <dt className="text-xs font-medium text-muted-foreground pt-0.5">日時</dt>
+            <dd>
+              <p>
+                {formatDateJa(startDate)} {formatTime(reservation.startAt)} ～ {formatTime(reservation.endAt)}
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                所要時間 {formatReservationDurationJa(reservation.startAt, reservation.endAt)}
+              </p>
+            </dd>
+          </div>
+          <div className="py-3 sm:grid sm:grid-cols-[10rem_1fr] sm:gap-x-4">
+            <div className="grid grid-cols-[8rem_1fr] gap-x-4 sm:contents">
+              <dt className="flex items-center gap-2 text-xs font-medium text-muted-foreground pt-0.5">
+                担当者
+                {onUpdateAssignee &&
+                  staffList.length > 0 &&
+                  !editingAssignee &&
+                  !isDoneReservation && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 rounded-md px-2 text-xs"
+                    onClick={openAssigneeEdit}
+                  >
+                    編集
+                  </Button>
+                )}
+              </dt>
+              <dd>
           {onUpdateAssignee &&
           staffList.length > 0 &&
           editingAssignee &&
@@ -407,26 +412,30 @@ export function ReservationDetailCard({
               {getReservationAssigneeDisplayName(reservation, staffList)}
             </p>
           )}
-        </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-muted-foreground">ステータス</p>
-            {onUpdateStatus && !editingStatus && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 rounded-md px-2 text-xs"
-                onClick={() => {
-                  setStatusRuleError("")
-                  setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
-                  setEditingStatus(true)
-                }}
-              >
-                編集
-              </Button>
-            )}
+              </dd>
+            </div>
           </div>
+          <div className="py-3 sm:grid sm:grid-cols-[10rem_1fr] sm:gap-x-4">
+            <div className="grid grid-cols-[8rem_1fr] gap-x-4 sm:contents">
+              <dt className="flex items-center gap-2 text-xs font-medium text-muted-foreground pt-0.5">
+                ステータス
+                {onUpdateStatus && !editingStatus && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 rounded-md px-2 text-xs"
+                    onClick={() => {
+                      setStatusRuleError("")
+                      setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
+                      setEditingStatus(true)
+                    }}
+                  >
+                    編集
+                  </Button>
+                )}
+              </dt>
+              <dd>
           {onUpdateStatus && editingStatus ? (
             <div className="space-y-2">
               <Label htmlFor="reservation-status-edit" className="sr-only">
@@ -506,25 +515,29 @@ export function ReservationDetailCard({
           ) : (
             <p>{adminReservationApiStatusLabel(currentApiStatus)}</p>
           )}
-        </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-muted-foreground">メモ</p>
-            {onUpdateMemo && !editingMemo && !isDoneReservation && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 rounded-md px-2 text-xs"
-                onClick={() => {
-                  setMemoDraft(reservation.memo ?? "")
-                  setEditingMemo(true)
-                }}
-              >
-                編集
-              </Button>
-            )}
+              </dd>
+            </div>
           </div>
+          <div className="py-3 sm:grid sm:grid-cols-[10rem_1fr] sm:gap-x-4">
+            <div className="grid grid-cols-[8rem_1fr] gap-x-4 sm:contents">
+              <dt className="flex items-center gap-2 text-xs font-medium text-muted-foreground pt-0.5">
+                メモ
+                {onUpdateMemo && !editingMemo && !isDoneReservation && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 rounded-md px-2 text-xs"
+                    onClick={() => {
+                      setMemoDraft(reservation.memo ?? "")
+                      setEditingMemo(true)
+                    }}
+                  >
+                    編集
+                  </Button>
+                )}
+              </dt>
+              <dd>
           {onUpdateMemo && editingMemo && !isDoneReservation ? (
             <div className="space-y-2">
               <Label htmlFor="reservation-memo-edit" className="sr-only">
@@ -576,11 +589,14 @@ export function ReservationDetailCard({
               {reservation.memo?.trim() ? reservation.memo : "（メモはありません）"}
             </p>
           )}
-        </div>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">予約作成日時</p>
-          <p>{new Date(reservation.createdAt).toLocaleString("ja-JP")}</p>
-        </div>
+              </dd>
+            </div>
+          </div>
+          <div className="grid grid-cols-[8rem_1fr] gap-x-4 py-3 last:pb-0 sm:grid-cols-[10rem_1fr]">
+            <dt className="text-xs font-medium text-muted-foreground pt-0.5">予約作成日時</dt>
+            <dd>{new Date(reservation.createdAt).toLocaleString("ja-JP")}</dd>
+          </div>
+        </dl>
       </CardContent>
 
       {statusConfirm && onUpdateStatus && (

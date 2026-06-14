@@ -328,7 +328,7 @@ export function BackofficeInitialSetupPage() {
         </p>
         <p className="mt-1 text-sm font-medium text-foreground">
           <span className="text-destructive">※</span>
-          は入力必須の項目です。公開予約ページのURL用スラッグは登録時に自動で付与されます。
+          は入力必須の項目です。
         </p>
         {fromSignup ? (
           <div

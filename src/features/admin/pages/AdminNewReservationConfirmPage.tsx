@@ -118,12 +118,6 @@ export function AdminNewReservationConfirmPage() {
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">予約内容の確認</h2>
-        <p className="text-sm text-muted-foreground">
-          内容を確認し、「予約確定」で{" "}
-          <code className="rounded bg-muted px-1 text-xs">POST /api/admin/reservations</code>{" "}
-          を呼び出します。サーバーは重複のほか、メニューと担当の対応（{" "}
-          <code className="rounded bg-muted px-1 text-xs">trainer_menus</code>）も検証します。
-        </p>
       </div>
 
       <Card className="border-border shadow-xs">
