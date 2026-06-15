@@ -456,7 +456,10 @@ export function AdminMenusPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          メニューの登録・表示/非表示の設定を行います．
+        </p>
         <Button type="button" size="sm" className="rounded-md" onClick={openAdd}>
           <Plus className="mr-1 size-4" />
           メニュー新規登録
@@ -530,7 +533,7 @@ export function AdminMenusPage() {
       <div className="rounded-lg border border-border bg-muted/50 p-4 shadow-xs">
         <h2 className="mb-3 text-base font-semibold text-foreground">非表示リスト</h2>
         <p className="mb-3 text-xs text-muted-foreground">
-          未アーカイブで公開オフのメニューです。アーカイブ済み（論理削除）のメニューは、メニュー一覧・非表示リストのどちらにも表示しません。
+          公開オフのメニューです。
         </p>
         <div className="overflow-x-auto rounded-md border border-border/60 bg-muted/30">
           <table className="w-full min-w-[400px] text-sm">

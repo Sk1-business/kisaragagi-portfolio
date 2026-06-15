@@ -302,7 +302,7 @@ export function BackofficeSetupBookingRulesPage() {
   async function handleConfirmCancel() {
     setShowCancelConfirm(false)
     if (fromAdminSalonSettings) {
-      navigate(resolveAdminSalonReturnTo(navState), { replace: true })
+      navigate(-1)
       return
     }
     try {
@@ -340,12 +340,16 @@ export function BackofficeSetupBookingRulesPage() {
       ) : null}
 
       <div className="mb-6">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-400">
-          初期設定 - ステップ 3 / 3
-        </p>
+        {!fromAdminSalonSettings ? (
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-400">
+            初期設定 - ステップ 3 / 3
+          </p>
+        ) : null}
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">予約ルールの登録</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          お客様の予約・キャンセルに関するルールを設定します。後からも変更できます。
+          {!fromAdminSalonSettings
+            ? "お客様の予約・キャンセルに関するルールを設定します。後からも変更できます。"
+            : "お客様の予約・キャンセルに関するルールを設定します。"}
         </p>
         {initialEmail ? (
           <p className="mt-2 text-xs text-emerald-700">
@@ -393,7 +397,7 @@ export function BackofficeSetupBookingRulesPage() {
         <div className="space-y-2">
           <Label htmlFor="booking-deadline">予約締切（分）</Label>
           <p className="text-xs text-muted-foreground">
-            予約開始時刻の何分前まで受け付けるか（デフォルト: 120分）
+            予約を施術開始時刻の何分前まで受け付けるか、設定してください。
           </p>
           <Input
             id="booking-deadline"
@@ -413,7 +417,7 @@ export function BackofficeSetupBookingRulesPage() {
         <div className="space-y-2">
           <Label htmlFor="buffer-minutes">予約間バッファ時間（分）</Label>
           <p className="text-xs text-muted-foreground">
-            施術と施術の間に空ける時間（デフォルト: 0分）
+            施術と施術の間に何分空けるか、設定してください。
           </p>
           <Input
             id="buffer-minutes"
@@ -433,7 +437,7 @@ export function BackofficeSetupBookingRulesPage() {
         <div className="space-y-2">
           <Label htmlFor="slot-increment">空き枠の時間刻み（分）</Label>
           <p className="text-xs text-muted-foreground">
-            予約可能な時間の刻み幅（デフォルト: 15分）
+            予約可能な時間の刻み幅を何分にするか、設定してください。
           </p>
           <Input
             id="slot-increment"
@@ -453,7 +457,7 @@ export function BackofficeSetupBookingRulesPage() {
         <div className="space-y-2">
           <Label htmlFor="cancellation-deadline">キャンセル期限（時間）</Label>
           <p className="text-xs text-muted-foreground">
-            予約開始の何時間前までキャンセル可能か（デフォルト: 2時間）
+            予約開始の何時間前までキャンセル可能にするか、設定してください。
           </p>
           <Input
             id="cancellation-deadline"
@@ -476,7 +480,7 @@ export function BackofficeSetupBookingRulesPage() {
         <div className="space-y-2">
           <Label htmlFor="max-advance-days">予約受付期間（日）</Label>
           <p className="text-xs text-muted-foreground">
-            何日先まで予約を受け付けるか（デフォルト: 60日）
+            何日先まで予約を受け付けるか、設定してください。
           </p>
           <Input
             id="max-advance-days"
@@ -506,7 +510,7 @@ export function BackofficeSetupBookingRulesPage() {
             disabled={saving}
             onClick={() => setShowCancelConfirm(true)}
           >
-            登録をやめる
+            {fromAdminSalonSettings ? "キャンセル" : "登録をやめる"}
           </Button>
           <Button type="submit" disabled={saving}>
             {saving ? "保存中..." : "登録内容を確認"}
@@ -525,6 +529,7 @@ export function BackofficeSetupBookingRulesPage() {
 
       {showCancelConfirm ? (
         <SetupCancelConfirmModal
+          returnToDashboard={fromAdminSalonSettings}
           onClose={() => setShowCancelConfirm(false)}
           onConfirm={() => void handleConfirmCancel()}
         />
@@ -592,9 +597,11 @@ function SetupSaveConfirmModal({
 }
 
 function SetupCancelConfirmModal({
+  returnToDashboard,
   onClose,
   onConfirm,
 }: {
+  returnToDashboard: boolean
   onClose: () => void
   onConfirm: () => void
 }) {
@@ -628,14 +635,16 @@ function SetupCancelConfirmModal({
           確認
         </h3>
         <p className="mt-2 text-sm text-neutral-700">
-          初期設定の入力内容を破棄してログイン画面に戻りますか？
+          {returnToDashboard
+            ? "予約ルールの変更をキャンセルして前の画面へ戻りますか？"
+            : "初期設定の入力内容を破棄してログイン画面に戻りますか？"}
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>
             キャンセル
           </Button>
           <Button type="button" onClick={onConfirm}>
-            はい、ログイン画面へ
+            {returnToDashboard ? "前の画面へ戻る" : "ログイン画面へ"}
           </Button>
         </div>
       </div>

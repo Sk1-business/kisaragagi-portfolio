@@ -575,10 +575,6 @@ export function AdminNewReservationPage() {
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">新規予約（代理登録）</h2>
-        <p className="text-sm text-muted-foreground">
-          メニューは GET /api/admin/menus、スタッフは GET /api/admin/trainers、シフトは GET
-          /api/admin/trainers/&#123;trainer_id&#125;/shifts を参照します。開始時刻は予約ルールの刻み・営業時間に合わせ、現在時刻より後の枠のみ選べます。
-        </p>
       </div>
 
       <Card className="border-border shadow-xs">
@@ -751,10 +747,6 @@ export function AdminNewReservationPage() {
                   予約またはシフト情報の取得に失敗しました。
                 </p>
               ) : null}
-              <p className="text-xs text-muted-foreground">
-                ※メニューと開始時刻を入力すると、当該メニューの所要時間から終了時刻を算出し、その時間帯にシフトがあり、かつ確定予約と重複しないスタッフのみ選択できます。確定時はサーバー側でも再チェックされ、メニューと担当の対応（DB の{" "}
-                <span className="font-mono">trainer_menus</span>）が無いと登録できません。
-              </p>
             </div>
           ) : null}
 

@@ -480,7 +480,7 @@ export function BackofficeSetupBusinessHoursPage() {
   async function handleConfirmCancel() {
     setShowCancelConfirm(false)
     if (fromAdminSalonSettings) {
-      navigate(resolveAdminSalonReturnTo(navState), { replace: true })
+      navigate(-1)
       return
     }
     try {
@@ -515,14 +515,18 @@ export function BackofficeSetupBusinessHoursPage() {
       ) : null}
 
       <div className="mb-6">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-400">
-          初期設定 - ステップ 2 / 3
-        </p>
+        {!fromAdminSalonSettings ? (
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-400">
+            初期設定 - ステップ 2 / 3
+          </p>
+        ) : null}
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
           営業日・営業時間の登録
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          各曜日の営業時間・定休日と、個別の休業日（任意）を設定してください。後からも変更できます。
+          {!fromAdminSalonSettings
+            ? "各曜日の営業時間・定休日と、個別の休業日（任意）を設定してください。後からも変更できます。"
+            : "各曜日の営業時間・定休日と、個別の休業日（任意）を設定してください。"}
         </p>
         {initialEmail ? (
           <p className="mt-2 text-xs text-emerald-700">
@@ -709,7 +713,7 @@ export function BackofficeSetupBusinessHoursPage() {
             disabled={saving}
             onClick={() => setShowCancelConfirm(true)}
           >
-            登録をやめる
+            キャンセル
           </Button>
           <Button type="submit" disabled={saving}>
             {saving ? "保存中..." : "登録内容を確認"}
@@ -728,6 +732,7 @@ export function BackofficeSetupBusinessHoursPage() {
 
       {showCancelConfirm ? (
         <SetupCancelConfirmModal
+          returnToDashboard={fromAdminSalonSettings}
           onClose={() => setShowCancelConfirm(false)}
           onConfirm={() => void handleConfirmCancel()}
         />
@@ -795,9 +800,11 @@ function SetupSaveConfirmModal({
 }
 
 function SetupCancelConfirmModal({
+  returnToDashboard,
   onClose,
   onConfirm,
 }: {
+  returnToDashboard: boolean
   onClose: () => void
   onConfirm: () => void
 }) {
@@ -831,14 +838,16 @@ function SetupCancelConfirmModal({
           確認
         </h3>
         <p className="mt-2 text-sm text-neutral-700">
-          初期設定（サロン情報・営業日/時間）の入力内容を破棄してログイン画面に戻りますか？
+          {returnToDashboard
+            ? "営業時間・定休日の変更をキャンセルして前の画面へ戻りますか？"
+            : "初期設定（サロン情報・営業日/時間）の入力内容を破棄してログイン画面に戻りますか？"}
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>
             キャンセル
           </Button>
           <Button type="button" onClick={onConfirm}>
-            はい、ログイン画面へ
+            {returnToDashboard ? "前の画面へ戻る" : "ログイン画面へ"}
           </Button>
         </div>
       </div>
