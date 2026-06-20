@@ -12,9 +12,9 @@ const salonSettingItems = [
     key: "profile",
     title: "サロン基本情報",
     description: "サロン名・住所・連絡先・予約ページの表示内容",
-    to: null as string | null,
+    to: ROUTES.adminSalonProfile,
     icon: Store,
-    disabled: true,
+    disabled: false,
   },
   {
     key: "business-hours",

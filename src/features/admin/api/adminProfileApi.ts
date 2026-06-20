@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/api"
  * - 既存プロフィールが無ければ新規作成、有れば既存を UPDATE
  */
 export type AdminProfileUpdateInput = {
+  salon_name?: string
   slug?: string
   description?: string | null
   logo_url?: string | null

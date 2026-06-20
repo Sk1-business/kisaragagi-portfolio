@@ -7,7 +7,7 @@ export type SalonSettingsFlowNavState = {
   fromBookingRules?: boolean
   /** ダッシュボードのサロン設定から開いた */
   fromAdminSalonSettings?: boolean
-  /** 完了・キャンセル時の戻り先（既定: 管理者ダッシュボード） */
+  /** 完了・キャンセル時の戻り先（既定: サロン設定一覧） */
   returnTo?: string
   email?: string
 }
@@ -16,7 +16,7 @@ export type SalonSettingsFlowNavState = {
 export const ADMIN_SALON_SETTINGS_NAV_STATE: SalonSettingsFlowNavState = {
   fromInitialSetup: true,
   fromAdminSalonSettings: true,
-  returnTo: ROUTES.adminHome,
+  returnTo: ROUTES.adminSalonSettings,
 }
 
 export function isAdminSalonSettingsFlow(
@@ -29,7 +29,7 @@ export function resolveAdminSalonReturnTo(
   state: SalonSettingsFlowNavState | null | undefined,
 ): string {
   const to = state?.returnTo
-  return typeof to === "string" && to.startsWith("/") ? to : ROUTES.adminHome
+  return typeof to === "string" && to.startsWith("/") ? to : ROUTES.adminSalonSettings
 }
 
 /** 管理画面フローなら `fromAdminSalonSettings` / `returnTo` を引き継ぐ */

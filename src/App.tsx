@@ -25,6 +25,7 @@ import { AdminShiftCalendarPage } from "@/features/admin/pages/AdminShiftCalenda
 import { AdminMenusPage } from "@/features/admin/pages/AdminMenusPage"
 import { AdminPaymentsPage } from "@/features/admin/pages/AdminPaymentsPage"
 import { AdminSalonSettingsPage } from "@/features/admin/pages/AdminSalonSettingsPage"
+import { AdminSalonProfilePage } from "@/features/admin/pages/AdminSalonProfilePage"
 import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
@@ -190,6 +191,14 @@ function App() {
             element={
               <OwnerOnlyRoute>
                 <AdminSalonSettingsPage />
+              </OwnerOnlyRoute>
+            }
+          />
+          <Route
+            path={ROUTES.adminSalonProfile}
+            element={
+              <OwnerOnlyRoute>
+                <AdminSalonProfilePage />
               </OwnerOnlyRoute>
             }
           />

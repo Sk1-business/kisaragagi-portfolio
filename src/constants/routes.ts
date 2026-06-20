@@ -39,6 +39,8 @@ export const ROUTES = {
   adminPayments: "/admin/payments",
   /** オーナー向けサロン設定（営業時間・予約ルール等） */
   adminSalonSettings: "/admin/salon",
+  /** サロン基本情報の編集 */
+  adminSalonProfile: "/admin/salon/profile",
   /** 管理者による代理予約（入力） */
   adminNewReservation: "/admin/reservations/new",
   /** 代理予約の確認・確定 */
