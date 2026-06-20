@@ -6,6 +6,16 @@ export type AdminSessionResult = "ok" | "unauthorized" | "error"
 /** `admin_users.role`（バックエンドは `owner` / `staff` を返す） */
 export type AdminRole = "owner" | "staff"
 
+/**
+ * `GET /api/admin/me` の `role` を正規化する。
+ * バックエンドは `owner` / `staff` を返すが、旧データや別表記も吸収する。
+ */
+export function normalizeAdminRole(raw: unknown): AdminRole {
+  const normalized = typeof raw === "string" ? raw.trim().toLowerCase() : ""
+  if (normalized === "owner" || normalized === "admin") return "owner"
+  return "staff"
+}
+
 /** `admin_users` 相当の `GET /api/admin/me` レスポンス（JSON は snake_case を想定） */
 export type AdminMeProfile = {
   /** `admin_users.admin_id`（ログイン中の管理者 ID。シフト編集権限の判定に使用） */
@@ -51,8 +61,7 @@ export function mapAdminMeJson(raw: unknown): AdminMeProfile {
 
   const adminId = trimOrNull(o.admin_id) ?? trimOrNull(o.adminId)
 
-  const rawRole = trimOrNull(o.role)?.toLowerCase() ?? null
-  const role: AdminRole = rawRole === "owner" ? "owner" : "staff"
+  const role = normalizeAdminRole(o.role)
 
   return {
     adminId,

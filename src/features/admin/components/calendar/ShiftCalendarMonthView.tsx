@@ -83,6 +83,7 @@ export function ShiftCalendarMonthView({
   const [editing, setEditing] = useState<{ staff: Staff; day: Date } | null>(null)
 
   const canEditStaff = (staff: Staff) => isShiftEditableForStaff(profile, staff)
+  const shiftCalendarReadOnly = profile.role === "staff"
   const todayKey = getShiftCalendarTodayKey()
   const viewingCurrentCalendarMonth = isViewingShiftCalendarCurrentMonth(date, todayKey)
 
@@ -236,8 +237,13 @@ export function ShiftCalendarMonthView({
                       /** staff は自分以外のシフトを編集できない（参照のみ） */
                       const isOtherStaffForViewer = !canEditStaff(staff)
                       const disableShiftEdit =
-                        isPastDay || disableByClosedDay || isOtherStaffForViewer
-                      const titleText = isPastDay
+                        shiftCalendarReadOnly ||
+                        isPastDay ||
+                        disableByClosedDay ||
+                        isOtherStaffForViewer
+                      const titleText = shiftCalendarReadOnly
+                        ? `${rowLabel(resolved, staff)}（参照のみ。シフトの変更はできません）`
+                        : isPastDay
                         ? `${rowLabel(resolved, staff)}（過去日のため登録・変更できません）`
                         : isOtherStaffForViewer
                           ? `${rowLabel(resolved, staff)}（他のスタッフのシフトのため編集できません。参照のみ）`
@@ -250,10 +256,13 @@ export function ShiftCalendarMonthView({
                           type="button"
                           disabled={disableShiftEdit}
                           className={cn(
-                            "block w-full truncate rounded border px-1 py-0.5 text-left text-[10px] leading-tight transition-opacity hover:opacity-90",
+                            "block w-full truncate rounded border px-1 py-0.5 text-left text-[10px] leading-tight transition-opacity",
+                            !shiftCalendarReadOnly && "hover:opacity-90",
                             !work && !isPastDay && "border-dashed opacity-90",
                             disableShiftEdit &&
+                              !shiftCalendarReadOnly &&
                               "cursor-not-allowed opacity-50 hover:opacity-50",
+                            shiftCalendarReadOnly && "cursor-default",
                           )}
                           style={
                             work

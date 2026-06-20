@@ -41,18 +41,20 @@ export function AdminShiftCalendarPage() {
   const [adminUsersLoading, setAdminUsersLoading] = useState(true)
   const [registerView, setRegisterView] = useState<ShiftRegisterView>("individual")
 
-  /** カレンダー表示用: オーナー行を除くスタッフ全員（staff ログイン時も他者のシフトを参照表示） */
-  const staffListForShifts = useMemo(
-    () => resolveDisplayStaffTrainers(staffList, adminUsers, profile),
-    [staffList, adminUsers, profile],
-  )
+  const isOwner = profile.role === "owner"
+
+  /** カレンダー表示用: 店舗のスタッフ全員（管理者行のみ除外） */
+  const staffListForShifts = useMemo(() => {
+    const filtered = resolveDisplayStaffTrainers(staffList, adminUsers, profile)
+    return filtered.length > 0 ? filtered : staffList
+  }, [staffList, adminUsers, profile])
 
   const editableStaffForShifts = useMemo(
     () => filterEditableStaff(staffListForShifts, profile),
     [staffListForShifts, profile],
   )
 
-  const canUseBulkRegister = editableStaffForShifts.length > 0 && !settingsError
+  const canUseBulkRegister = isOwner && editableStaffForShifts.length > 0 && !settingsError
 
   const { loading: shiftsLoading, error: shiftsError, refetch } = useTrainerShiftsForMonth(
     staffListForShifts,
@@ -180,7 +182,9 @@ export function AdminShiftCalendarPage() {
             </CardTitle>
             {registerView === "individual" ? (
               <p className="mt-1 text-sm text-muted-foreground">
-                カレンダーから日ごとにシフトを登録・編集します（当日以降のみ）。
+                {isOwner
+                  ? "カレンダーから日ごとにシフトを登録・編集します（当日以降のみ）。"
+                  : "店舗に所属するスタッフ全員のシフトを確認できます（表示のみ。変更はできません）。"}
               </p>
             ) : null}
           </div>
@@ -248,7 +252,7 @@ export function AdminShiftCalendarPage() {
             </p>
           ) : staffListForShifts.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              表示できるスタッフがいません。スタッフ管理から担当者を追加してください。
+              表示できるスタッフがいません。スタッフ管理で担当者を登録し、有効（is_active）になっているか確認してください。
             </p>
           ) : registerView === "bulk" ? (
             <ShiftBulkMonthPanel

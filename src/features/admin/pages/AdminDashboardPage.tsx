@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom"
 import { ROUTES } from "@/constants/routes"
 import { AdminSalonSlugCard } from "@/features/admin/components/AdminSalonSlugCard"
 import { AdminOwnerFeatureHub } from "@/features/admin/components/AdminOwnerFeatureHub"
+import { AdminStaffFeatureHub } from "@/features/admin/components/AdminStaffFeatureHub"
 import { TodayReservationsCard } from "@/features/admin/components/TodayReservationsCard"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import { useStaff } from "@/features/admin/hooks/useStaff"
@@ -92,9 +93,11 @@ export function AdminDashboardPage() {
       timeZone: ADMIN_CALENDAR_TIME_ZONE,
     }) ?? ""
 
+  const isOwner = profile.role === "owner"
+
   return (
     <div className="space-y-6">
-      {profile.role === "owner" ? <AdminOwnerFeatureHub /> : null}
+      {isOwner ? <AdminOwnerFeatureHub /> : <AdminStaffFeatureHub />}
       <TodayReservationsCard
         reservations={todayReservations}
         staffList={staffList}
@@ -102,7 +105,7 @@ export function AdminDashboardPage() {
         refreshing={todayRefreshing}
         onRefresh={() => void refetchTodayReservations()}
       />
-      <AdminSalonSlugCard />
+      {isOwner ? <AdminSalonSlugCard /> : null}
     </div>
   )
 }

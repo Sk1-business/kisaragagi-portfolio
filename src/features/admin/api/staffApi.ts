@@ -67,25 +67,49 @@ export function filterStaffRoleTrainers(
     return trainers.filter((t) => t.id !== viewerId && t.adminId !== viewerId)
   }
 
-  return trainers.filter((t) => t.id === viewerId || t.adminId === viewerId)
+  return trainers
 }
 
 /**
- * カレンダー・シフト等の表示・絞り込み用。
- * オーナー（admin_users.role=owner）に紐づくトレーナー行を除き、スタッフのみ残す。
+ * 予約カレンダー「トレーナーで絞り込み」の候補。
+ * `trainers` テーブルの同一店舗スタッフをすべて表示し、
+ * `admin_users.role === "owner"` の管理者行のみ除外する。
+ */
+export function resolveTrainerFilterStaff(
+  trainers: Staff[],
+  adminUsers: AdminUserListItem[],
+  profile: { adminId: string | null; role: "owner" | "staff" },
+): Staff[] {
+  const ownerAdminIds = new Set(
+    adminUsers.filter((u) => u.role === "owner").map((u) => u.adminId),
+  )
+
+  if (ownerAdminIds.size === 0 && profile.role === "owner" && profile.adminId?.trim()) {
+    ownerAdminIds.add(profile.adminId.trim())
+  }
+
+  if (ownerAdminIds.size === 0) {
+    return trainers
+  }
+
+  return trainers.filter((t) => {
+    const linkedIds = [t.id, t.adminId].filter(
+      (id): id is string => typeof id === "string" && id.length > 0,
+    )
+    return !linkedIds.some((id) => ownerAdminIds.has(id))
+  })
+}
+
+/**
+ * カレンダー・シフト等の表示用。
+ * `trainers` テーブルの店舗スタッフを表示し、管理者（owner）行のみ除外する。
  */
 export function resolveDisplayStaffTrainers(
   trainers: Staff[],
   adminUsers: AdminUserListItem[],
   profile: { adminId: string | null; role: "owner" | "staff" },
 ): Staff[] {
-  if (adminUsers.length > 0) {
-    return filterStaffRoleTrainers(trainers, adminUsers, {
-      viewerAdminId: profile.adminId,
-      viewerRole: profile.role,
-    })
-  }
-  return trainers.filter((t) => !(t.adminId && t.id === t.adminId))
+  return resolveTrainerFilterStaff(trainers, adminUsers, profile)
 }
 
 export function staffTrainerNames(trainers: Staff[]): string[] {

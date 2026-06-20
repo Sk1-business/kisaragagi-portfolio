@@ -170,12 +170,12 @@ function mapAdminUserListRow(raw: unknown): AdminUserListItem | null {
   const email = typeof o.email === "string" ? o.email.trim() : ""
   const role = typeof o.role === "string" ? o.role.trim().toLowerCase() : "staff"
   const isActive = o.is_active === false || o.isActive === false ? false : true
-  if (!name || !email) return null
+  if (!name) return null
   return { adminId, name, email, role, isActive }
 }
 
 /**
- * `GET /api/admin/admin-users` — 同一サロンの管理者/スタッフ一覧（オーナー専用）。
+ * `GET /api/admin/admin-users` — 同一サロンの管理者/スタッフ一覧（参照はオーナー・スタッフ可）。
  */
 export async function fetchAdminUsersList(): Promise<AdminUserListItem[]> {
   const res = await apiFetch(ADMIN_USERS_LIST_PATH, { method: "GET" })

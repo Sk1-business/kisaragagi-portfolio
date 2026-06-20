@@ -2,19 +2,10 @@ import type { AdminMeProfile } from "@/features/auth/api/adminSessionApi"
 import type { Staff } from "@/features/admin/types/staff"
 
 /**
- * シフト編集可否。owner は全員、staff は自分のシフトのみ。
+ * シフト編集可否。owner は全スタッフ分を編集可。staff は参照のみ（一切編集不可）。
  */
-export function isShiftEditableForStaff(profile: AdminMeProfile, staff: Staff): boolean {
-  if (profile.role === "owner") return true
-  if (profile.adminId && staff.adminId && staff.adminId === profile.adminId) {
-    return true
-  }
-  if (profile.role === "staff") {
-    const pn = profile.name.trim()
-    const sn = staff.name.trim()
-    if (pn && sn && pn === sn) return true
-  }
-  return false
+export function isShiftEditableForStaff(profile: AdminMeProfile, _staff: Staff): boolean {
+  return profile.role === "owner"
 }
 
 export function filterEditableStaff(

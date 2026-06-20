@@ -10,7 +10,7 @@ import {
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import { fetchAdminUsersList } from "@/features/admin/api/adminUsersApi"
 import {
-  resolveDisplayStaffTrainers,
+  resolveTrainerFilterStaff,
   staffTrainerNames,
 } from "@/features/admin/api/staffApi"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
@@ -86,7 +86,7 @@ export function AdminCalendarPage() {
   )
 
   const staffListForFilter = useMemo(
-    () => resolveDisplayStaffTrainers(staffList, adminUsers, profile),
+    () => resolveTrainerFilterStaff(staffList, adminUsers, profile),
     [staffList, adminUsers, profile],
   )
 
@@ -153,11 +153,6 @@ export function AdminCalendarPage() {
   ])
 
   useEffect(() => {
-    if (profile.role !== "owner") {
-      setAdminUsers([])
-      setAdminUsersLoading(false)
-      return
-    }
     let cancelled = false
     void (async () => {
       setAdminUsersLoading(true)
@@ -178,7 +173,7 @@ export function AdminCalendarPage() {
     return () => {
       cancelled = true
     }
-  }, [navigate, profile.role])
+  }, [navigate])
 
   useEffect(() => {
     let cancelled = false
@@ -305,12 +300,12 @@ export function AdminCalendarPage() {
     return reservations.filter((r) => {
       const t = r.trainerName?.trim()
       if (t && selectedTrainerNames.has(t)) return true
-      const staff = staffList.find((s) => s.id === r.assigneeId)
+      const staff = staffListForFilter.find((s) => s.id === r.assigneeId)
       const byStaffName = staff?.name.trim()
       if (byStaffName && selectedTrainerNames.has(byStaffName)) return true
       return false
     })
-  }, [reservations, selectedTrainerNames, staffList])
+  }, [reservations, selectedTrainerNames, staffListForFilter])
 
   const toggleTrainerName = (name: string) => {
     setSelectedTrainerNames((prev) => {
@@ -326,7 +321,7 @@ export function AdminCalendarPage() {
   if (
     loading ||
     staffLoading ||
-    (profile.role === "owner" && adminUsersLoading) ||
+    adminUsersLoading ||
     calendarListLoading
   ) {
     return (
@@ -358,7 +353,7 @@ export function AdminCalendarPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">トレーナーで絞り込み</CardTitle>
           <p className="text-sm text-muted-foreground">
-            スタッフ（施術者）の名前から選びます。オーナー用の管理者行は含みません。複数選べます。未選択のときは全員分を表示します。
+            店舗に登録されているスタッフ（trainers）の名前から選びます。管理者（admin）アカウントは含みません。複数選べます。未選択のときは店舗の予約をすべて表示します。
           </p>
         </CardHeader>
         <CardContent>
@@ -457,7 +452,7 @@ export function AdminCalendarPage() {
             <CalendarDayView
               date={currentDate}
               reservations={filteredReservations}
-              staffList={staffList}
+              staffList={staffListForFilter}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
               holidayDateKeys={holidayDateKeys}
               businessHoursItems={businessHoursItems}
@@ -467,7 +462,7 @@ export function AdminCalendarPage() {
             <CalendarWeekView
               date={currentDate}
               reservations={filteredReservations}
-              staffList={staffList}
+              staffList={staffListForFilter}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
               holidayDateKeys={holidayDateKeys}
               businessHoursItems={businessHoursItems}
@@ -477,7 +472,7 @@ export function AdminCalendarPage() {
             <CalendarMonthView
               date={currentDate}
               reservations={filteredReservations}
-              staffList={staffList}
+              staffList={staffListForFilter}
               onSelectReservation={(r) => handleSelectReservation(r.id)}
               onSelectDay={(day) => {
                 patchSearchParams((p) => {
