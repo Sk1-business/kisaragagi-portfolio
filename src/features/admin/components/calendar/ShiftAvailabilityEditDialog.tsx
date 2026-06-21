@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react"
+import { useLayoutEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
+import { ShiftRegisterConfirmDialog } from "@/features/admin/components/calendar/ShiftRegisterConfirmDialog"
+import { isShiftRegisterableDay } from "@/features/admin/lib/shiftDatePolicy"
+import { ShiftTimeRangeFields } from "@/features/admin/components/calendar/ShiftTimeRangeFields"
 import { formatTimeRangeInAdminCalendarTz, toDateKey } from "@/features/admin/lib/calendarUtils"
 import type { ResolvedShiftDay } from "@/features/admin/context/AdminShiftAvailabilityContext"
 import type { AvailabilitySlot } from "@/features/admin/lib/shiftAvailability"
 import type { BusinessWindowForDay } from "@/features/admin/lib/businessHours"
 import {
-  buildEndTimeOptions,
-  buildStartTimeOptions,
   padTimePart,
   shiftSlotWithinBusinessHours,
   timeToMinutes,
@@ -18,12 +18,6 @@ import {
 } from "@/features/admin/lib/shiftReservationConflict"
 import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
-import { cn } from "@/lib/utils"
-
-const selectClassName = cn(
-  "border-input bg-background h-9 min-w-[4.5rem] rounded-md border px-2 text-sm shadow-xs",
-  "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
-)
 
 export type ShiftEditCommit =
   | { type: "save"; slot: AvailabilitySlot }
@@ -60,132 +54,55 @@ export function ShiftAvailabilityEditDialog({
 }: ShiftAvailabilityEditDialogProps) {
   const [start, setStart] = useState("10:00")
   const [end, setEnd] = useState("19:00")
+  const [initialStart, setInitialStart] = useState("10:00")
+  const [initialEnd, setInitialEnd] = useState("19:00")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pendingCommit, setPendingCommit] = useState<ShiftEditCommit | null>(null)
 
   const biz = businessDay && !businessDay.isClosed ? businessDay : null
-
-  const validStartTimes = useMemo(() => {
-    if (!biz) return []
-    return buildStartTimeOptions(biz.start, biz.end)
-  }, [biz])
-
-  const validEndTimes = useMemo(() => {
-    if (!biz) return []
-    return buildEndTimeOptions(biz.end, start)
-  }, [biz, start])
-
-  const hoursForStart = useMemo(() => {
-    const s = new Set<number>()
-    for (const t of validStartTimes) {
-      s.add(parseInt(t.split(":")[0], 10))
-    }
-    return [...s].sort((a, b) => a - b)
-  }, [validStartTimes])
-
-  const minutesForStartHour = useCallback(
-    (hour: number) =>
-      validStartTimes
-        .filter((t) => parseInt(t.split(":")[0], 10) === hour)
-        .map((t) => t.split(":")[1]),
-    [validStartTimes],
-  )
-
-  const hoursForEnd = useMemo(() => {
-    const s = new Set<number>()
-    for (const t of validEndTimes) {
-      s.add(parseInt(t.split(":")[0], 10))
-    }
-    return [...s].sort((a, b) => a - b)
-  }, [validEndTimes])
-
-  const minutesForEndHour = useCallback(
-    (hour: number) =>
-      validEndTimes
-        .filter((t) => parseInt(t.split(":")[0], 10) === hour)
-        .map((t) => t.split(":")[1]),
-    [validEndTimes],
-  )
 
   /** 描画前に同期し、カレンダー表示と編集欄の時刻のずれを防ぐ */
   useLayoutEffect(() => {
     if (!open || !resolved) return
     setError(null)
+    setConfirmOpen(false)
+    setPendingCommit(null)
+    let s: string
+    let e: string
     if (resolved.kind === "work") {
-      setStart(padTimePart(resolved.slot.start))
-      setEnd(padTimePart(resolved.slot.end))
+      s = padTimePart(resolved.slot.start)
+      e = padTimePart(resolved.slot.end)
     } else {
       const b = businessDay && !businessDay.isClosed ? businessDay : null
-      setStart(b ? padTimePart(b.start) : "10:00")
-      setEnd(b ? padTimePart(b.end) : "19:00")
+      s = b ? padTimePart(b.start) : "10:00"
+      e = b ? padTimePart(b.end) : "19:00"
     }
+    setStart(s)
+    setEnd(e)
+    setInitialStart(s)
+    setInitialEnd(e)
   }, [open, resolved, businessDay])
 
-  /** 開始が変わったら、終了が営業範囲外または開始以前なら補正（刻みに無い値は最も近い選択肢へ） */
-  useEffect(() => {
-    if (!biz) return
-    const ends = buildEndTimeOptions(biz.end, start)
-    if (ends.length === 0) return
-    setEnd((prev) => {
-      const p = padTimePart(prev)
-      const pm = timeToMinutes(p)
-      const sm = timeToMinutes(start)
-      const be = timeToMinutes(biz.end)
-      if (pm <= sm) return ends[0]
-      if (pm > be) return ends[ends.length - 1]
-      if (ends.includes(p)) return p
-      let nearest = ends[0]
-      let bestDiff = Infinity
-      for (const e of ends) {
-        const d = Math.abs(timeToMinutes(e) - pm)
-        if (d < bestDiff) {
-          bestDiff = d
-          nearest = e
-        }
-      }
-      return nearest
-    })
-  }, [start, biz])
-
-  if (!open || !staff || !day) return null
+  if (!open || !staff || !day || !resolved) return null
 
   const dateLabel = `${day.getFullYear()}年${day.getMonth() + 1}月${day.getDate()}日`
-
-  const startHour = parseInt(start.split(":")[0], 10)
-  const startMinuteStr = start.split(":")[1] ?? "00"
-  const endHour = parseInt(end.split(":")[0], 10)
-  const endMinuteStr = end.split(":")[1] ?? "00"
-
-  const setStartFromHour = (hourStr: string) => {
-    const hour = Number(hourStr)
-    const mins = minutesForStartHour(hour)
-    const nextMin = mins.includes(startMinuteStr) ? startMinuteStr : mins[0] ?? "00"
-    setStart(`${String(hour).padStart(2, "0")}:${nextMin}`)
-  }
-
-  const setStartFromMinute = (minStr: string) => {
-    setStart(`${String(startHour).padStart(2, "0")}:${minStr}`)
-  }
-
-  const setEndFromHour = (hourStr: string) => {
-    const hour = Number(hourStr)
-    const mins = minutesForEndHour(hour)
-    const nextMin = mins.includes(endMinuteStr) ? endMinuteStr : mins[0] ?? "00"
-    setEnd(`${String(hour).padStart(2, "0")}:${nextMin}`)
-  }
-
-  const setEndFromMinute = (minStr: string) => {
-    setEnd(`${String(endHour).padStart(2, "0")}:${minStr}`)
-  }
 
   const runCommit = async (commit: ShiftEditCommit) => {
     setSaving(true)
     setError(null)
     try {
       await onCommit(commit)
+      setConfirmOpen(false)
+      setPendingCommit(null)
       onClose()
     } catch (e) {
       if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        return
+      }
+      if (e instanceof Error && e.message === "PAST_DATE") {
+        setError("当日以前の日付にはシフトを登録・変更できません。")
         return
       }
       setError("保存に失敗しました。通信またはサーバーを確認してください。")
@@ -195,6 +112,10 @@ export function ShiftAvailabilityEditDialog({
   }
 
   const handleSave = () => {
+    if (day && !isShiftRegisterableDay(day)) {
+      setError("当日以前の日付にはシフトを登録・変更できません。")
+      return
+    }
     if (settingsLoading || !businessDay) {
       setError("営業時間を読み込み中です。しばらく待ってから再度お試しください。")
       return
@@ -242,14 +163,34 @@ export function ShiftAvailabilityEditDialog({
       const first = outside[0]
       const range = formatTimeRangeInAdminCalendarTz(first.startAt, first.endAt)
       setError(
-        `この担当者には、変更後のシフトの勤務時間内に収まらない予約が入っているため、シフトを変更できません。例えば、10:00〜19:00のシフトで10:00〜11:00の予約がある場合、シフトを11:00〜19:00に変更することはできません。${outside.length === 1 ? `（該当: ${range}）` : `（例: ${range} ほか${outside.length - 1}件）`}`,
+        outside.length === 1
+          ? `既に予約が入っているためシフトを変更できません。（該当: ${range}）`
+          : `既に予約が入っているためシフトを変更できません。（該当: ${range} ほか${outside.length - 1}件）`,
       )
+      return
+    }
+    const timesChanged =
+      padTimePart(a) !== initialStart || padTimePart(b) !== initialEnd
+    const needsConfirm = resolved.kind !== "work" || timesChanged
+
+    if (needsConfirm) {
+      setPendingCommit({ type: "save", slot })
+      setConfirmOpen(true)
       return
     }
     void runCommit({ type: "save", slot })
   }
 
+  const handleConfirmRegister = () => {
+    if (!pendingCommit) return
+    void runCommit(pendingCommit)
+  }
+
   const handleOff = () => {
+    if (day && !isShiftRegisterableDay(day)) {
+      setError("当日以前の日付にはシフトを登録・変更できません。")
+      return
+    }
     if (reservationsFetchFailed) {
       setError(
         "予約一覧を取得できなかったため、シフトを休みにできません。しばらくしてから再度お試しください。",
@@ -339,76 +280,16 @@ export function ShiftAvailabilityEditDialog({
           </p>
         )}
 
-        <div className="mt-4 space-y-4">
-          <div className="space-y-2">
-            <Label>開始</Label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <select
-                aria-label="開始の時"
-                className={selectClassName}
-                disabled={disabledFields || validStartTimes.length === 0}
-                value={String(startHour).padStart(2, "0")}
-                onChange={(e) => setStartFromHour(e.target.value)}
-              >
-                {hoursForStart.map((h) => (
-                  <option key={h} value={String(h).padStart(2, "0")}>
-                    {h}
-                  </option>
-                ))}
-              </select>
-              <span className="text-sm text-muted-foreground">時</span>
-              <select
-                aria-label="開始の分"
-                className={selectClassName}
-                disabled={disabledFields || minutesForStartHour(startHour).length === 0}
-                value={startMinuteStr}
-                onChange={(e) => setStartFromMinute(e.target.value)}
-              >
-                {minutesForStartHour(startHour).map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-              <span className="text-sm text-muted-foreground">分</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>終了</Label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <select
-                aria-label="終了の時"
-                className={selectClassName}
-                disabled={disabledFields || validEndTimes.length === 0}
-                value={String(endHour).padStart(2, "0")}
-                onChange={(e) => setEndFromHour(e.target.value)}
-              >
-                {hoursForEnd.map((h) => (
-                  <option key={h} value={String(h).padStart(2, "0")}>
-                    {h}
-                  </option>
-                ))}
-              </select>
-              <span className="text-sm text-muted-foreground">時</span>
-              <select
-                aria-label="終了の分"
-                className={selectClassName}
-                disabled={disabledFields || minutesForEndHour(endHour).length === 0}
-                value={endMinuteStr}
-                onChange={(e) => setEndFromMinute(e.target.value)}
-              >
-                {minutesForEndHour(endHour).map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-              <span className="text-sm text-muted-foreground">分</span>
-            </div>
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
+        <div className="mt-4">
+          <ShiftTimeRangeFields
+            start={start}
+            end={end}
+            onStartChange={setStart}
+            onEndChange={setEnd}
+            businessWindow={biz}
+            disabled={disabledFields}
+          />
+          {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
         </div>
 
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
@@ -428,6 +309,38 @@ export function ShiftAvailabilityEditDialog({
           </Button>
         </div>
       </div>
+
+      <ShiftRegisterConfirmDialog
+        open={confirmOpen}
+        saving={saving}
+        summary={
+          staff && day && pendingCommit?.type === "save" ? (
+            <dl className="space-y-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              <div className="flex gap-2">
+                <dt className="shrink-0 text-muted-foreground">スタッフ</dt>
+                <dd>{staff.name}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="shrink-0 text-muted-foreground">日付</dt>
+                <dd>{toDateKey(day)}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="shrink-0 text-muted-foreground">勤務時間</dt>
+                <dd>
+                  {pendingCommit.slot.start} 〜 {pendingCommit.slot.end}
+                </dd>
+              </div>
+            </dl>
+          ) : null
+        }
+        onCancel={() => {
+          if (!saving) {
+            setConfirmOpen(false)
+            setPendingCommit(null)
+          }
+        }}
+        onConfirm={handleConfirmRegister}
+      />
     </div>
   )
 }

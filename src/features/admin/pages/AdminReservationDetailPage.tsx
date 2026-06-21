@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { ROUTES } from "@/constants/routes"
 import {
   fetchTrainerShifts,
@@ -23,47 +23,11 @@ import {
   getIsoDateKeyInTimeZone,
 } from "@/features/admin/lib/calendarUtils"
 import { reservationFullyWithinTrainerShifts } from "@/features/admin/lib/reservationShiftCoverage"
+import { appendReservationOperationLogFile } from "@/features/admin/lib/reservationOperationLogFile"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { useAdminProfile } from "@/features/auth/context/AdminProfileContext"
 import { useStaff } from "@/features/admin/hooks/useStaff"
 import type { Reservation } from "@/features/admin/types/reservation"
-
-type ReservationEventLog = {
-  timestamp: string
-  actor: string
-  action: "status_changed" | "memo_updated" | "assignee_changed"
-  message: string
-}
-
-const RESERVATION_EVENT_LOGS_KEY = "saas_admin_reservation_event_logs_v1"
-
-function loadReservationEventLogs(reservationId: string): ReservationEventLog[] {
-  try {
-    const raw = localStorage.getItem(RESERVATION_EVENT_LOGS_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as Record<string, ReservationEventLog[]>
-    const list = parsed?.[reservationId]
-    return Array.isArray(list) ? list : []
-  } catch {
-    return []
-  }
-}
-
-function appendReservationEventLog(reservationId: string, log: ReservationEventLog): void {
-  try {
-    const raw = localStorage.getItem(RESERVATION_EVENT_LOGS_KEY)
-    const parsed = raw ? (JSON.parse(raw) as Record<string, ReservationEventLog[]>) : {}
-    const prev = Array.isArray(parsed[reservationId]) ? parsed[reservationId] : []
-    parsed[reservationId] = [log, ...prev].slice(0, 200)
-    localStorage.setItem(RESERVATION_EVENT_LOGS_KEY, JSON.stringify(parsed))
-    console.info("[admin-reservation-event]", {
-      reservationId,
-      ...log,
-    })
-  } catch {
-    // ignore
-  }
-}
 
 export function AdminReservationDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -90,7 +54,6 @@ export function AdminReservationDetailPage() {
   >({})
   const [shiftCoverageLoading, setShiftCoverageLoading] = useState(true)
   const [shiftCoverageError, setShiftCoverageError] = useState(false)
-  const [eventLogs, setEventLogs] = useState<ReservationEventLog[]>([])
 
   const mergeReservationIntoList = (fresh: Reservation) => {
     const prev = reservationsRef.current
@@ -127,11 +90,6 @@ export function AdminReservationDetailPage() {
       cancelled = true
     }
   }, [id, staffList, staffLoading, navigate])
-
-  useEffect(() => {
-    if (!id) return
-    setEventLogs(loadReservationEventLogs(id))
-  }, [id])
 
   useEffect(() => {
     if (!detail || staffLoading) {
@@ -274,14 +232,13 @@ export function AdminReservationDetailPage() {
       mergeReservationIntoList(fresh)
       const actor = profile.name.trim() || "管理者"
       const nextMemo = memo?.trim() ? memo.trim() : "（空）"
-      const log: ReservationEventLog = {
+      const log = {
         timestamp: new Date().toISOString(),
         actor,
-        action: "memo_updated",
+        action: "memo_updated" as const,
         message: `メモを更新: ${nextMemo}`,
       }
-      appendReservationEventLog(detail.id, log)
-      setEventLogs((prev) => [log, ...prev].slice(0, 200))
+      await appendReservationOperationLogFile({ reservationId: detail.id, ...log })
     } catch (e) {
       if (e instanceof Error && e.message === "UNAUTHORIZED") {
         navigate(ROUTES.backofficeLogin, { replace: true })
@@ -323,14 +280,13 @@ export function AdminReservationDetailPage() {
       setDetail(fresh)
       mergeReservationIntoList(fresh)
       const actor = profile.name.trim() || "管理者"
-      const log: ReservationEventLog = {
+      const log = {
         timestamp: new Date().toISOString(),
         actor,
-        action: "status_changed",
+        action: "status_changed" as const,
         message: `ステータスを ${apiStatus} に変更`,
       }
-      appendReservationEventLog(detail.id, log)
-      setEventLogs((prev) => [log, ...prev].slice(0, 200))
+      await appendReservationOperationLogFile({ reservationId: detail.id, ...log })
     } catch (e) {
       if (e instanceof Error && e.message === "UNAUTHORIZED") {
         navigate(ROUTES.backofficeLogin, { replace: true })
@@ -358,14 +314,13 @@ export function AdminReservationDetailPage() {
       setDetail(fresh)
       mergeReservationIntoList(fresh)
       const actor = profile.name.trim() || "管理者"
-      const log: ReservationEventLog = {
+      const log = {
         timestamp: new Date().toISOString(),
         actor,
-        action: "status_changed",
+        action: "status_changed" as const,
         message: "決済を返金しました",
       }
-      appendReservationEventLog(detail.id, log)
-      setEventLogs((prev) => [log, ...prev].slice(0, 200))
+      await appendReservationOperationLogFile({ reservationId: detail.id, ...log })
     } catch (e) {
       if (e instanceof Error && e.message === "UNAUTHORIZED") {
         navigate(ROUTES.backofficeLogin, { replace: true })
@@ -400,14 +355,13 @@ export function AdminReservationDetailPage() {
       const actor = profile.name.trim() || "管理者"
       const assigneeName =
         staffList.find((s) => s.id === assigneeId)?.name ?? assigneeId
-      const log: ReservationEventLog = {
+      const log = {
         timestamp: new Date().toISOString(),
         actor,
-        action: "assignee_changed",
+        action: "assignee_changed" as const,
         message: `担当者を ${assigneeName} に変更`,
       }
-      appendReservationEventLog(detail.id, log)
-      setEventLogs((prev) => [log, ...prev].slice(0, 200))
+      await appendReservationOperationLogFile({ reservationId: detail.id, ...log })
     } catch (e) {
       if (e instanceof Error && e.message === "UNAUTHORIZED") {
         navigate(ROUTES.backofficeLogin, { replace: true })
@@ -425,7 +379,7 @@ export function AdminReservationDetailPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-2xl space-y-4">
       <Button
         variant="outline"
         size="sm"
@@ -449,7 +403,6 @@ export function AdminReservationDetailPage() {
             ? assigneeValidationReservations
             : reservationsForOverlap
         }
-        onClose={() => navigate(-1)}
         onUpdateMemo={handleUpdateMemo}
         onUpdateStatus={handleUpdateStatus}
         onRefundPayment={handleRefundPayment}
@@ -461,28 +414,8 @@ export function AdminReservationDetailPage() {
         shiftCoverageByStaffId={shiftCoverageByStaffId}
         shiftCoverageLoading={shiftCoverageLoading}
         shiftCoverageError={shiftCoverageError}
+        onClose={() => navigate(-1)}
       />
-      <Card className="border-border shadow-xs">
-        <CardHeader>
-          <CardTitle className="text-base">操作ログ</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {eventLogs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">この予約の操作ログはまだありません。</p>
-          ) : (
-            <ul className="space-y-2">
-              {eventLogs.map((log, idx) => (
-                <li key={`${log.timestamp}-${idx}`} className="rounded-md border border-border p-2 text-sm">
-                  <p className="font-medium">{log.message}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(log.timestamp).toLocaleString("ja-JP")} / {log.actor}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
     </div>
   )
 }

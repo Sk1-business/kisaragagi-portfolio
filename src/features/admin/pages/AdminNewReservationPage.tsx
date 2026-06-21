@@ -6,6 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
+import {
+  fetchAdminBookingRules,
+  fetchAdminSettings,
+  type BusinessHoursItem,
+} from "@/features/admin/api/adminSettingsApi"
 import { fetchAdminMenus, filterBookableMenus } from "@/features/admin/api/menusApi"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import {
@@ -18,12 +23,15 @@ import {
   type NewReservationStaffBlockReason,
 } from "@/features/admin/lib/adminNewReservationStaffEligibility"
 import {
+  DEFAULT_ADMIN_NEW_RESERVATION_SLOT_MINUTES,
+  defaultAdminNewReservationSlot,
+  isAdminNewReservationStartSlot,
+  snapAdminNewReservationSlot,
+} from "@/features/admin/lib/adminNewReservationTimeSlot"
+import {
   ADMIN_CALENDAR_TIME_ZONE,
   addMinutesToIso,
   combineDateAndTimeToAdminTzIso,
-  defaultNextReservationSlotAdminTz,
-  ensureSlotNotBeforeAdminTz,
-  formatTimeHmInAdminTz,
   formatTimeInAdminCalendarTz,
   getDateKeyInTimeZone,
   getIsoDateKeyInTimeZone,
@@ -90,31 +98,33 @@ export function AdminNewReservationPage() {
   )
 
   const minDateYmd = useMemo(
-    () => getDateKeyInTimeZone(new Date(bookingNotBeforeIso), ADMIN_CALENDAR_TIME_ZONE),
-    [bookingNotBeforeIso],
-  )
-  const minTimeHmOnMinDate = useMemo(
-    () => formatTimeHmInAdminTz(bookingNotBeforeIso),
-    [bookingNotBeforeIso],
+    () => getDateKeyInTimeZone(new Date(), ADMIN_CALENDAR_TIME_ZONE),
+    [],
   )
 
   const [menus, setMenus] = useState<Awaited<ReturnType<typeof fetchAdminMenus>>>([])
+  const [businessHoursItems, setBusinessHoursItems] = useState<BusinessHoursItem[]>([])
+  const [holidayDateKeys, setHolidayDateKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  )
+  const [slotIncrementMinutes, setSlotIncrementMinutes] = useState(
+    DEFAULT_ADMIN_NEW_RESERVATION_SLOT_MINUTES,
+  )
+  const [settingsLoading, setSettingsLoading] = useState(true)
+  const [settingsError, setSettingsError] = useState(false)
   const [menusLoading, setMenusLoading] = useState(true)
   const [menusError, setMenusError] = useState(false)
 
   const initialSlot = useMemo(() => {
-    const st = location.state
-    const bookingIso = getBookingNotBeforeIsoFromState(st)
-    const draft = isAdminNewReservationDraft(st) ? st : null
+    const draft = isAdminNewReservationDraft(location.state) ? location.state : null
     if (draft) {
-      return ensureSlotNotBeforeAdminTz(
-        draft.dateYmd,
-        draft.timeHm,
-        draft.bookingNotBeforeIso,
-      )
+      return { dateYmd: draft.dateYmd, timeHm: draft.timeHm }
     }
-    return defaultNextReservationSlotAdminTz(bookingIso)
-  }, [location.state])
+    return {
+      dateYmd: minDateYmd,
+      timeHm: "10:00",
+    }
+  }, [location.state, minDateYmd])
 
   const initialDraft = useMemo(
     () => (isAdminNewReservationDraft(location.state) ? location.state : null),
@@ -128,7 +138,6 @@ export function AdminNewReservationPage() {
   const [trainerId, setTrainerId] = useState(() => initialDraft?.trainerId ?? "")
   const [customerName, setCustomerName] = useState(() => initialDraft?.customerName ?? "")
   const [customerEmail, setCustomerEmail] = useState(() => initialDraft?.customerEmail ?? "")
-  const [customerId, setCustomerId] = useState(() => initialDraft?.customerId ?? "")
   const [customerPhone, setCustomerPhone] = useState(() => initialDraft?.customerPhone ?? "")
   const [notes, setNotes] = useState(() => initialDraft?.notes ?? "")
   const [formError, setFormError] = useState("")
@@ -148,37 +157,72 @@ export function AdminNewReservationPage() {
 
   const timeHm = useMemo(() => tryBuildTimeHm(hourStr, minuteStr), [hourStr, minuteStr])
 
+  const reservationTimeContextReady =
+    !settingsLoading && !settingsError && businessHoursItems.length > 0
+
   /**
-   * `bookingNotBeforeIso` 未満にならないよう日付・時刻を補正する。
+   * 予約ルール（刻み）・営業時間に沿う有効枠へ日付・時刻を補正する。
    * 時・分の入力中は呼ばない（キー入力のたびに走ると「1」が「08」などに化けるため）。
    */
-  function commitSlotToBookingMin(
+  function commitSlotToValidRules(
     date: string,
     hour: string,
     minute: string,
   ): void {
+    if (!reservationTimeContextReady) return
     const hm = tryBuildTimeHm(hour, minute)
     if (!hm) return
-    const s = ensureSlotNotBeforeAdminTz(date, hm, bookingNotBeforeIso)
-    setDateYmd(s.dateYmd)
-    const { hour: h, minute: m } = splitTimeHm(s.timeHm)
+    const now = new Date()
+    const snapped = snapAdminNewReservationSlot(
+      date,
+      hm,
+      businessHoursItems,
+      holidayDateKeys,
+      slotIncrementMinutes,
+      now,
+      durationMinutes,
+    )
+    if (!snapped) return
+    setDateYmd(snapped.dateYmd)
+    const { hour: h, minute: m } = splitTimeHm(snapped.timeHm)
     setHourStr(h)
     setMinuteStr(m)
   }
 
-  /** カレンダーで開始日を変えたときだけ、時刻を下限に合わせて補正 */
+  /** 開始日の変更時、または設定読込後に時刻を有効枠へ補正 */
   useEffect(() => {
-    commitSlotToBookingMin(dateYmd, hourStr, minuteStr)
+    if (!reservationTimeContextReady) return
+    commitSlotToValidRules(dateYmd, hourStr, minuteStr)
     // hourStr / minuteStr は依存に含めない（入力中に再実行しない）
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- dateYmd（開始日）の変更時のみ
-  }, [dateYmd, bookingNotBeforeIso])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dateYmd・設定の変更時のみ
+  }, [dateYmd, reservationTimeContextReady, slotIncrementMinutes, durationMinutes])
 
   const startAtIso = useMemo(() => {
-    if (!menuId.trim() || !dateYmd || !timeHm) return null
-    const s = combineDateAndTimeToAdminTzIso(dateYmd, timeHm)
-    if (new Date(s).getTime() < new Date(bookingNotBeforeIso).getTime()) return null
-    return s
-  }, [menuId, dateYmd, timeHm, bookingNotBeforeIso])
+    if (!menuId.trim() || !dateYmd || !timeHm || !reservationTimeContextReady) return null
+    if (
+      !isAdminNewReservationStartSlot(
+        dateYmd,
+        timeHm,
+        businessHoursItems,
+        holidayDateKeys,
+        slotIncrementMinutes,
+        new Date(),
+        durationMinutes,
+      )
+    ) {
+      return null
+    }
+    return combineDateAndTimeToAdminTzIso(dateYmd, timeHm)
+  }, [
+    menuId,
+    dateYmd,
+    timeHm,
+    reservationTimeContextReady,
+    businessHoursItems,
+    holidayDateKeys,
+    slotIncrementMinutes,
+    durationMinutes,
+  ])
 
   const endAtIso = useMemo(() => {
     if (!startAtIso || durationMinutes === undefined || durationMinutes <= 0) return null
@@ -214,6 +258,40 @@ export function AdminNewReservationPage() {
   }, [navigate])
 
   useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      setSettingsLoading(true)
+      setSettingsError(false)
+      try {
+        const [settings, rules] = await Promise.all([
+          fetchAdminSettings(),
+          fetchAdminBookingRules(),
+        ])
+        if (cancelled) return
+        setBusinessHoursItems(settings.business_hours)
+        setHolidayDateKeys(new Set(settings.holidays))
+        if (rules?.slot_increment_minutes) {
+          setSlotIncrementMinutes(rules.slot_increment_minutes)
+        }
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+          return
+        }
+        setSettingsError(true)
+        setBusinessHoursItems([])
+        setHolidayDateKeys(new Set())
+      } finally {
+        if (!cancelled) setSettingsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
+
+  useEffect(() => {
     if (menusLoading || menusError) return
     if (!menuId.trim()) return
     if (!menus.some((m) => m.menu_id === menuId)) {
@@ -222,43 +300,63 @@ export function AdminNewReservationPage() {
   }, [menus, menusLoading, menusError, menuId])
 
   useEffect(() => {
+    if (settingsLoading || settingsError || businessHoursItems.length === 0) return
+
     const st = location.state
-    const bookingIso = getBookingNotBeforeIsoFromState(st)
     const draft = isAdminNewReservationDraft(st) ? st : null
+    const now = new Date()
 
     if (draft) {
-      const s = ensureSlotNotBeforeAdminTz(
+      const snapped = snapAdminNewReservationSlot(
         draft.dateYmd,
         draft.timeHm,
-        draft.bookingNotBeforeIso,
+        businessHoursItems,
+        holidayDateKeys,
+        slotIncrementMinutes,
+        now,
+        draft.durationMinutes,
       )
       setMenuId(draft.menuId)
-      setDateYmd(s.dateYmd)
-      const parts = splitTimeHm(s.timeHm)
-      setHourStr(parts.hour)
-      setMinuteStr(parts.minute)
+      if (snapped) {
+        setDateYmd(snapped.dateYmd)
+        const parts = splitTimeHm(snapped.timeHm)
+        setHourStr(parts.hour)
+        setMinuteStr(parts.minute)
+      }
       setTrainerId(draft.trainerId)
       setCustomerName(draft.customerName)
       setCustomerEmail(draft.customerEmail)
-      setCustomerId(draft.customerId ?? "")
       setCustomerPhone(draft.customerPhone ?? "")
       setNotes(draft.notes ?? "")
       return
     }
 
-    const slot = defaultNextReservationSlotAdminTz(bookingIso)
-    setDateYmd(slot.dateYmd)
-    const slotParts = splitTimeHm(slot.timeHm)
-    setHourStr(slotParts.hour)
-    setMinuteStr(slotParts.minute)
+    const slot = defaultAdminNewReservationSlot(
+      businessHoursItems,
+      holidayDateKeys,
+      slotIncrementMinutes,
+      now,
+    )
+    if (slot) {
+      setDateYmd(slot.dateYmd)
+      const slotParts = splitTimeHm(slot.timeHm)
+      setHourStr(slotParts.hour)
+      setMinuteStr(slotParts.minute)
+    }
     setMenuId("")
     setTrainerId("")
     setCustomerName("")
     setCustomerEmail("")
-    setCustomerId("")
     setCustomerPhone("")
     setNotes("")
-  }, [location.state])
+  }, [
+    location.state,
+    settingsLoading,
+    settingsError,
+    businessHoursItems,
+    holidayDateKeys,
+    slotIncrementMinutes,
+  ])
 
   useEffect(() => {
     if (!staffList.length || staffLoading || !startAtIso || !endAtIso) {
@@ -355,7 +453,7 @@ export function AdminNewReservationPage() {
   }
 
   function handleHourBlur() {
-    commitSlotToBookingMin(dateYmd, hourStr, minuteStr)
+    commitSlotToValidRules(dateYmd, hourStr, minuteStr)
   }
 
   function handleMinuteBlur() {
@@ -368,7 +466,7 @@ export function AdminNewReservationPage() {
       nextMin = ""
     }
     setMinuteStr(nextMin)
-    commitSlotToBookingMin(dateYmd, hourStr, nextMin)
+    commitSlotToValidRules(dateYmd, hourStr, nextMin)
   }
 
   function handleConfirmClick() {
@@ -381,13 +479,40 @@ export function AdminNewReservationPage() {
       setFormError("メニューに所要時間（分）が含まれていません。API のメニュー定義を確認してください。")
       return
     }
-    const ensuredSlot = (() => {
-      const hm = tryBuildTimeHm(hourStr, minuteStr)
-      if (!hm) return null
-      return ensureSlotNotBeforeAdminTz(dateYmd, hm, bookingNotBeforeIso)
-    })()
-    if (!ensuredSlot) {
+    if (!reservationTimeContextReady) {
+      setFormError("営業時間・予約ルールを読み込み中です。しばらく待ってから再度お試しください。")
+      return
+    }
+    const hm = tryBuildTimeHm(hourStr, minuteStr)
+    if (!hm) {
       setFormError("日付と時刻を入力してください。")
+      return
+    }
+    const now = new Date()
+    const ensuredSlot = snapAdminNewReservationSlot(
+      dateYmd,
+      hm,
+      businessHoursItems,
+      holidayDateKeys,
+      slotIncrementMinutes,
+      now,
+      durationMinutes,
+    )
+    if (
+      !ensuredSlot ||
+      !isAdminNewReservationStartSlot(
+        ensuredSlot.dateYmd,
+        ensuredSlot.timeHm,
+        businessHoursItems,
+        holidayDateKeys,
+        slotIncrementMinutes,
+        now,
+        durationMinutes,
+      )
+    ) {
+      setFormError(
+        `開始時刻は営業時間内かつ ${slotIncrementMinutes} 分刻みで、現在時刻より後の時刻を選んでください。`,
+      )
       return
     }
     const finalDateYmd = ensuredSlot.dateYmd
@@ -431,7 +556,6 @@ export function AdminNewReservationPage() {
       trainerName,
       customerName: customerName.trim(),
       customerEmail: customerEmail.trim(),
-      customerId: customerId.trim() || undefined,
       customerPhone: customerPhone.trim() || undefined,
       notes: notes.trim() || undefined,
     }
@@ -451,10 +575,6 @@ export function AdminNewReservationPage() {
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">新規予約（代理登録）</h2>
-        <p className="text-sm text-muted-foreground">
-          メニューは GET /api/admin/menus、スタッフは GET /api/admin/trainers、シフトは GET
-          /api/admin/trainers/&#123;trainer_id&#125;/shifts を参照します。開始日時はヘッダの「新規予約」を押した時刻以降のみ選べます。
-        </p>
       </div>
 
       <Card className="border-border shadow-xs">
@@ -463,7 +583,7 @@ export function AdminNewReservationPage() {
           <CardDescription>
             必須: メニュー、開始日時、顧客名、メール。
             {staffList.length > 0 ? " メニュー・開始時刻入力後に担当者を選択、" : null}
-            任意: 既存顧客 ID、電話、メモ。
+            任意: 電話、メモ。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -560,9 +680,12 @@ export function AdminNewReservationPage() {
                   aria-label="分（00〜59、数字のみ）"
                 />
               </div>
-              {dateYmd === minDateYmd ? (
-                <p className="text-xs text-muted-foreground">
-                  この日は {minTimeHmOnMinDate} 以降のみ選択できます（入力後に自動で調整される場合があります）。
+              {settingsLoading ? (
+                <p className="text-xs text-muted-foreground">営業時間・予約ルールを読み込み中…</p>
+              ) : null}
+              {settingsError ? (
+                <p className="text-xs text-destructive" role="alert">
+                  営業時間または予約ルールの取得に失敗しました。
                 </p>
               ) : null}
             </div>
@@ -624,10 +747,6 @@ export function AdminNewReservationPage() {
                   予約またはシフト情報の取得に失敗しました。
                 </p>
               ) : null}
-              <p className="text-xs text-muted-foreground">
-                ※メニューと開始時刻を入力すると、当該メニューの所要時間から終了時刻を算出し、その時間帯にシフトがあり、かつ確定予約と重複しないスタッフのみ選択できます。確定時はサーバー側でも再チェックされ、メニューと担当の対応（DB の{" "}
-                <span className="font-mono">trainer_menus</span>）が無いと登録できません。
-              </p>
             </div>
           ) : null}
 
@@ -651,16 +770,6 @@ export function AdminNewReservationPage() {
               value={customerEmail}
               onChange={(e) => setCustomerEmail(e.target.value)}
               placeholder="example@example.com"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="admin-new-cid">既存顧客 ID（任意）</Label>
-            <Input
-              id="admin-new-cid"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              placeholder="指定するとその顧客に紐づけます"
             />
           </div>
 

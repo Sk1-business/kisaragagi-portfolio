@@ -7,36 +7,35 @@ import { buildPathWithShopId } from "@/features/user/hooks/useShopId"
 import { persistShopSlug } from "@/lib/shopSlug"
 
 export function SalonPublicEntryPage() {
-  const { slug } = useParams()
+  const { shopId, slug } = useParams()
   const navigate = useNavigate()
-  const [error, setError] = useState("")
+  const [requestError, setRequestError] = useState("")
+  const resolvedSlug = shopId ?? slug
+  const error = resolvedSlug ? requestError : "Salon not found."
 
   useEffect(() => {
-    if (!slug) {
-      queueMicrotask(() => setError("サロンが見つかりません。"))
-      return
-    }
+    if (!resolvedSlug) return
 
     let mounted = true
-    void fetchSalonPage(slug)
+    void fetchSalonPage(resolvedSlug)
       .then(() => {
         if (!mounted) return
-        persistShopSlug(slug)
-        navigate(buildPathWithShopId(ROUTES.userHome, slug), { replace: true })
+        persistShopSlug(resolvedSlug)
+        navigate(buildPathWithShopId(ROUTES.userHome, resolvedSlug), { replace: true })
       })
       .catch(() => {
-        if (mounted) setError("サロンが見つかりません。")
+        if (mounted) setRequestError("Salon not found.")
       })
 
     return () => {
       mounted = false
     }
-  }, [navigate, slug])
+  }, [navigate, resolvedSlug])
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-white px-4">
       <p className={error ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
-        {error || "読み込み中..."}
+        {error || "Loading..."}
       </p>
     </main>
   )

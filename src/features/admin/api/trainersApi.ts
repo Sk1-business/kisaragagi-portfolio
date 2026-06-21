@@ -68,10 +68,14 @@ export function mapTrainerRowToStaff(row: unknown): Staff | null {
     display_order = Math.round(Number(doRaw.trim()))
   }
   const menuIds = parseTrainerMenuIds(o)
+  const adminIdRaw = o.admin_id ?? o.adminId
+  const adminId =
+    typeof adminIdRaw === "string" && adminIdRaw.trim() ? adminIdRaw.trim() : null
   const staff: Staff = { id, name, color, description }
   if (image_url) staff.image_url = image_url
   if (display_order !== undefined) staff.display_order = display_order
   if (menuIds) staff.menuIds = menuIds
+  if (adminId) staff.adminId = adminId
   return staff
 }
 
@@ -102,10 +106,14 @@ export function mapTrainerDetailRowToStaff(row: unknown): Staff | null {
     display_order = Math.round(Number(doRaw.trim()))
   }
   const menuIds = parseTrainerMenuIds(o)
+  const adminIdRaw = o.admin_id ?? o.adminId
+  const adminId =
+    typeof adminIdRaw === "string" && adminIdRaw.trim() ? adminIdRaw.trim() : null
   const staff: Staff = { id, name, color, description }
   if (image_url) staff.image_url = image_url
   if (display_order !== undefined) staff.display_order = display_order
   if (menuIds) staff.menuIds = menuIds
+  if (adminId) staff.adminId = adminId
   return staff
 }
 
@@ -244,7 +252,16 @@ export async function fetchAdminTrainers(): Promise<Staff[]> {
     const s = mapTrainerRowToStaff(row)
     if (s) list.push(s)
   }
-  return list.sort((a, b) => a.name.localeCompare(b.name, "ja"))
+  /**
+   * バックエンドが `display_order` 昇順 → `name` 昇順で返しているため、
+   * フロントでも同じソート規則を適用する（`display_order` が無いものは末尾）。
+   */
+  return list.sort((a, b) => {
+    const oa = a.display_order ?? Number.MAX_SAFE_INTEGER
+    const ob = b.display_order ?? Number.MAX_SAFE_INTEGER
+    if (oa !== ob) return oa - ob
+    return a.name.localeCompare(b.name, "ja")
+  })
 }
 
 /**
@@ -357,6 +374,8 @@ export async function postAdminTrainer(input: {
   description?: string
   image_url?: string
   display_order?: number
+  /** ログインアカウント（admin_users）との紐付け */
+  admin_id?: string
   /** 対応メニューID（同一 trainer_id に紐づける） */
   menu_ids?: string[]
 }): Promise<Staff> {
@@ -377,6 +396,10 @@ export async function postAdminTrainer(input: {
     Number.isFinite(input.display_order)
   ) {
     payload.display_order = Math.round(input.display_order)
+  }
+  const adminId = input.admin_id?.trim()
+  if (adminId) {
+    payload.admin_id = adminId
   }
   const mids = (input.menu_ids ?? [])
     .map((id) => String(id).trim())

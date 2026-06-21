@@ -73,8 +73,8 @@ export function AdminNewReservationConfirmPage() {
       setSubmitError("開始・終了時刻が無効です。入力画面に戻って確認してください。")
       return
     }
-    if (new Date(startIso).getTime() < new Date(draft.bookingNotBeforeIso).getTime()) {
-      setSubmitError("開始日時が無効です。入力画面でやり直してください。")
+    if (new Date(startIso).getTime() <= Date.now()) {
+      setSubmitError("開始日時が過去になっています。入力画面でやり直してください。")
       return
     }
     setSubmitting(true)
@@ -118,12 +118,6 @@ export function AdminNewReservationConfirmPage() {
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">予約内容の確認</h2>
-        <p className="text-sm text-muted-foreground">
-          内容を確認し、「予約確定」で{" "}
-          <code className="rounded bg-muted px-1 text-xs">POST /api/admin/reservations</code>{" "}
-          を呼び出します。サーバーは重複のほか、メニューと担当の対応（{" "}
-          <code className="rounded bg-muted px-1 text-xs">trainer_menus</code>）も検証します。
-        </p>
       </div>
 
       <Card className="border-border shadow-xs">
@@ -155,12 +149,6 @@ export function AdminNewReservationConfirmPage() {
             <dd>{draft.customerName}</dd>
             <dt className="text-muted-foreground">メール</dt>
             <dd className="break-all">{draft.customerEmail}</dd>
-            {draft.customerId ? (
-              <>
-                <dt className="text-muted-foreground">顧客 ID</dt>
-                <dd className="font-mono text-xs">{draft.customerId}</dd>
-              </>
-            ) : null}
             {draft.customerPhone ? (
               <>
                 <dt className="text-muted-foreground">電話</dt>

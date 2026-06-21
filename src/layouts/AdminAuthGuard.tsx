@@ -12,9 +12,11 @@ import { AdminProfileProvider } from "@/features/auth/context/AdminProfileContex
 type GuardStatus = "checking" | "ok" | "error"
 
 const EMPTY_PROFILE: AdminMeProfile = {
+  adminId: null,
   name: "",
   avatarUrl: null,
   salonName: null,
+  role: "staff",
 }
 
 /**

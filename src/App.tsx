@@ -5,8 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ROUTES } from "@/constants/routes"
 import {
+  BackofficeInitialSetupPage,
   BackofficeLoginPage,
+  BackofficeSetupBusinessHoursPage,
+  BackofficeSetupBookingRulesPage,
+  BackofficeSetupDonePage,
   BackofficeSignupPage,
+  BackofficeSignupVerifyPage,
+  BackofficeSignupVerifySentPage,
   CustomerLoginPage,
   CustomerSignupPage,
 } from "@/features/auth/pages"
@@ -17,6 +23,9 @@ import { AdminNewReservationPage } from "@/features/admin/pages/AdminNewReservat
 import { AdminReservationDetailPage } from "@/features/admin/pages/AdminReservationDetailPage"
 import { AdminShiftCalendarPage } from "@/features/admin/pages/AdminShiftCalendarPage"
 import { AdminMenusPage } from "@/features/admin/pages/AdminMenusPage"
+import { AdminPaymentsPage } from "@/features/admin/pages/AdminPaymentsPage"
+import { AdminSalonSettingsPage } from "@/features/admin/pages/AdminSalonSettingsPage"
+import { AdminSalonProfilePage } from "@/features/admin/pages/AdminSalonProfilePage"
 import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
@@ -29,6 +38,7 @@ import { UserReservationInputPage } from "@/features/user/pages/UserReservationI
 import { UserPayPayReturnPage } from "@/features/user/pages/UserPayPayReturnPage"
 import { UserSchedulePage } from "@/features/user/pages/UserSchedulePage"
 import { AdminLayout } from "./layouts/AdminLayout"
+import { OwnerOnlyRoute } from "./layouts/OwnerOnlyRoute"
 import { UserLayout } from "./layouts/UserLayout"
 
 function LandingPage() {
@@ -102,6 +112,30 @@ function App() {
         <Route path={ROUTES.backofficeLogin} element={<BackofficeLoginPage />} />
         <Route path={ROUTES.backofficeSignup} element={<BackofficeSignupPage />} />
         <Route path={ROUTES.salonPublic} element={<SalonPublicEntryPage />} />
+        <Route
+          path={ROUTES.backofficeSignupVerifySent}
+          element={<BackofficeSignupVerifySentPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSignupVerify}
+          element={<BackofficeSignupVerifyPage />}
+        />
+        <Route
+          path={ROUTES.backofficeInitialSetup}
+          element={<BackofficeInitialSetupPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSetupBusinessHours}
+          element={<BackofficeSetupBusinessHoursPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSetupBookingRules}
+          element={<BackofficeSetupBookingRulesPage />}
+        />
+        <Route
+          path={ROUTES.backofficeSetupDone}
+          element={<BackofficeSetupDonePage />}
+        />
         <Route element={<UserLayout />}>
           <Route path={ROUTES.userHome} element={<UserDashboardPage />} />
           <Route path={ROUTES.userReservationLookup} element={<UserReservationLookupPage />} />
@@ -123,8 +157,46 @@ function App() {
             path={ROUTES.adminCancelled}
             element={<Navigate to={ROUTES.adminHome} replace />}
           />
-          <Route path={ROUTES.adminStaff} element={<AdminStaffPage />} />
-          <Route path={ROUTES.adminMenus} element={<AdminMenusPage />} />
+          <Route
+            path={ROUTES.adminStaff}
+            element={
+              <OwnerOnlyRoute>
+                <AdminStaffPage />
+              </OwnerOnlyRoute>
+            }
+          />
+          <Route
+            path={ROUTES.adminMenus}
+            element={
+              <OwnerOnlyRoute>
+                <AdminMenusPage />
+              </OwnerOnlyRoute>
+            }
+          />
+          <Route
+            path={ROUTES.adminPayments}
+            element={
+              <OwnerOnlyRoute>
+                <AdminPaymentsPage />
+              </OwnerOnlyRoute>
+            }
+          />
+          <Route
+            path={ROUTES.adminSalonSettings}
+            element={
+              <OwnerOnlyRoute>
+                <AdminSalonSettingsPage />
+              </OwnerOnlyRoute>
+            }
+          />
+          <Route
+            path={ROUTES.adminSalonProfile}
+            element={
+              <OwnerOnlyRoute>
+                <AdminSalonProfilePage />
+              </OwnerOnlyRoute>
+            }
+          />
           <Route
             path={ROUTES.adminNewReservationConfirm}
             element={<AdminNewReservationConfirmPage />}

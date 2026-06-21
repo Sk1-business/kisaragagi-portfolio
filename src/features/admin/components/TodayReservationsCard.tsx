@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom"
+import { RefreshCw } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
@@ -17,12 +18,16 @@ interface TodayReservationsCardProps {
   staffList: Staff[]
   /** ヘッダー右端に表示（例: 更新日時） */
   updatedAtLabel?: string
+  refreshing?: boolean
+  onRefresh?: () => void
 }
 
 export function TodayReservationsCard({
   reservations,
   staffList,
   updatedAtLabel,
+  refreshing = false,
+  onRefresh,
 }: TodayReservationsCardProps) {
   const todayLabel = formatDateJaInTimeZone(new Date(), ADMIN_CALENDAR_TIME_ZONE)
 
@@ -37,19 +42,32 @@ export function TodayReservationsCard({
           <CardTitle className="text-lg leading-tight">本日の予約一覧</CardTitle>
           <CardDescription>{todayLabel}</CardDescription>
         </div>
-        {updatedAtLabel ? (
-          <p className="shrink-0 text-right text-sm leading-tight text-muted-foreground/75">
-            更新日時
-            <br />
-            <span className="whitespace-nowrap tabular-nums">{updatedAtLabel}</span>
-          </p>
-        ) : null}
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {updatedAtLabel ? (
+            <p className="text-right text-sm leading-tight text-muted-foreground/75">
+              更新日時
+              <br />
+              <span className="whitespace-nowrap tabular-nums">{updatedAtLabel}</span>
+            </p>
+          ) : null}
+          {onRefresh ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-md"
+              disabled={refreshing}
+              onClick={onRefresh}
+            >
+              <RefreshCw className={`mr-1 size-4 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "読み込み中..." : "再読み込み"}
+            </Button>
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent>
         {sorted.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            本日のうち、これからの確定予約はありません。
-          </p>
+          <p className="text-sm text-muted-foreground">本日の予約はありません。</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {sorted.map((r) => {

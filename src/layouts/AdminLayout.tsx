@@ -1,10 +1,11 @@
 import { useState } from "react"
-import { NavLink, Outlet, useNavigate } from "react-router-dom"
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
 import { AdminHeaderAvatar } from "@/features/auth/components/AdminHeaderAvatar"
 import { useAdminProfile } from "@/features/auth/context/AdminProfileContext"
+import { getBackofficeHeaderCopy } from "@/features/auth/lib/backofficeHeaderCopy"
 import { postAdminLogout } from "@/features/auth/api/adminLogoutApi"
 import { AdminReservationsProvider } from "@/features/admin/context/AdminReservationsContext"
 import { AdminShiftAvailabilityProvider } from "@/features/admin/context/AdminShiftAvailabilityContext"
@@ -19,6 +20,11 @@ import {
 function AdminLayoutContent() {
   const profile = useAdminProfile()
   const navigate = useNavigate()
+  const location = useLocation()
+  const isOwner = profile.role === "owner"
+  const headerCopy = getBackofficeHeaderCopy(profile.role)
+  const profileName = profile.name.trim()
+  const onAdminHome = location.pathname === ROUTES.adminHome
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -62,58 +68,55 @@ function AdminLayoutContent() {
         <div className="flex min-w-0 items-start gap-3">
           <AdminHeaderAvatar name={profile.name} avatarUrl={profile.avatarUrl} />
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Admin</p>
+            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+              {headerCopy.roleLabel}
+            </p>
             {profile.salonName ? (
               <p className="truncate text-sm font-medium text-muted-foreground">{profile.salonName}</p>
             ) : null}
-            <h1 className="text-lg font-semibold leading-tight">管理者画面</h1>
-            {profile.name.trim() && profile.avatarUrl?.trim() ? (
-              <p className="truncate text-sm text-muted-foreground">{profile.name.trim()}</p>
+            <h1 className="text-lg font-semibold leading-tight">{headerCopy.screenTitle}</h1>
+            {profileName ? (
+              <p className="truncate text-sm text-muted-foreground">{profileName}</p>
             ) : null}
           </div>
         </div>
-        <nav className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminHome} end>
-              ダッシュボード
-            </NavLink>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminCalendar}>予約カレンダー</NavLink>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="rounded-md"
-            onClick={() =>
-              navigate(ROUTES.adminNewReservation, {
-                state: { bookingNotBeforeIso: new Date().toISOString() },
-              })
-            }
-          >
-            新規予約
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminShiftCalendar}>シフトカレンダー</NavLink>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminStaff}>スタッフ管理</NavLink>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="rounded-md">
-            <NavLink to={ROUTES.adminMenus}>メニュー管理</NavLink>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="ml-2 rounded-md"
-            disabled={loggingOut}
-            onClick={openLogoutConfirm}
-          >
-            ログアウト
-          </Button>
-        </nav>
+        {isOwner ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {!onAdminHome ? (
+              <Button asChild variant="ghost" size="sm" className="rounded-md">
+                <Link to={ROUTES.adminHome}>ダッシュボードへ</Link>
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-md"
+              disabled={loggingOut}
+              onClick={openLogoutConfirm}
+            >
+              ログアウト
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {!onAdminHome ? (
+              <Button asChild variant="ghost" size="sm" className="rounded-md">
+                <Link to={ROUTES.adminHome}>ダッシュボードへ</Link>
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-md"
+              disabled={loggingOut}
+              onClick={openLogoutConfirm}
+            >
+              ログアウト
+            </Button>
+          </div>
+        )}
       </header>
       <Outlet />
     </main>
