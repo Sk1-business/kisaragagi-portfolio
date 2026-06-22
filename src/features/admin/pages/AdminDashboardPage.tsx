@@ -6,7 +6,6 @@ import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
 import { AdminOwnerFeatureHub } from "@/features/admin/components/AdminOwnerFeatureHub"
 import { AdminSalonSlugCard } from "@/features/admin/components/AdminSalonSlugCard"
 import { AdminStaffFeatureHub } from "@/features/admin/components/AdminStaffFeatureHub"
-import { AdminStripeConnectCard } from "@/features/admin/components/AdminStripeConnectCard"
 import { TodayReservationsCard } from "@/features/admin/components/TodayReservationsCard"
 import { useStaff } from "@/features/admin/hooks/useStaff"
 import {
@@ -108,7 +107,6 @@ export function AdminDashboardPage() {
         onRefresh={() => void refetchTodayReservations()}
       />
       {isOwner ? <AdminSalonSlugCard /> : null}
-      {isOwner ? <AdminStripeConnectCard /> : null}
     </div>
   )
 }
