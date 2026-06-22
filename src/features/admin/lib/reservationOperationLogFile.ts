@@ -7,7 +7,7 @@ export type ReservationOperationLogEntry = {
   /** ISO 8601 */
   timestamp: string
   actor: string
-  action: "status_changed" | "memo_updated" | "assignee_changed"
+  action: "status_changed" | "memo_updated" | "assignee_changed" | "schedule_changed"
   message: string
 }
 

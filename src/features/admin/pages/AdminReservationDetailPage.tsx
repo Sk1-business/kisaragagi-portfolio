@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 
-import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ROUTES } from "@/constants/routes"
 import {
@@ -15,6 +14,7 @@ import {
   patchAdminReservationStatus,
   postAdminPaymentRefund,
   putAdminReservationNotes,
+  putAdminReservationStartAt,
   putAdminReservationTrainerId,
 } from "@/features/admin/api/reservationsApi"
 import { ReservationDetailCard } from "@/features/admin/components/ReservationDetailCard"
@@ -27,6 +27,11 @@ import { appendReservationOperationLogFile } from "@/features/admin/lib/reservat
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { useAdminProfile } from "@/features/auth/context/AdminProfileContext"
 import { useStaff } from "@/features/admin/hooks/useStaff"
+import {
+  type BusinessHoursItem,
+  fetchAdminBookingRules,
+  fetchAdminSettings,
+} from "@/features/admin/api/adminSettingsApi"
 import type { Reservation } from "@/features/admin/types/reservation"
 
 export function AdminReservationDetailPage() {
@@ -46,6 +51,10 @@ export function AdminReservationDetailPage() {
   const [statusSaving, setStatusSaving] = useState(false)
   const [refundSaving, setRefundSaving] = useState(false)
   const [assigneeSaving, setAssigneeSaving] = useState(false)
+  const [scheduleSaving, setScheduleSaving] = useState(false)
+  const [slotIncrementMinutes, setSlotIncrementMinutes] = useState(15)
+  const [businessHoursItems, setBusinessHoursItems] = useState<BusinessHoursItem[]>([])
+  const [holidayDateKeys, setHolidayDateKeys] = useState<Set<string>>(new Set())
   const [assigneeValidationReservations, setAssigneeValidationReservations] = useState<
     Reservation[]
   >([])
@@ -90,6 +99,32 @@ export function AdminReservationDetailPage() {
       cancelled = true
     }
   }, [id, staffList, staffLoading, navigate])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const [settings, rules] = await Promise.all([
+          fetchAdminSettings(),
+          fetchAdminBookingRules(),
+        ])
+        if (cancelled) return
+        setBusinessHoursItems(settings.business_hours)
+        setHolidayDateKeys(new Set(settings.holidays))
+        if (rules?.slot_increment_minutes) {
+          setSlotIncrementMinutes(rules.slot_increment_minutes)
+        }
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof Error && e.message === "UNAUTHORIZED") {
+          navigate(ROUTES.backofficeLogin, { replace: true })
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
 
   useEffect(() => {
     if (!detail || staffLoading) {
@@ -301,6 +336,45 @@ export function AdminReservationDetailPage() {
     }
   }
 
+  const handleUpdateSchedule = async (startAt: string) => {
+    if (detail.status === "COMPLETED") {
+      setSaveError("完了済み予約のため、日時は変更できません。")
+      return
+    }
+    setSaveError(null)
+    setScheduleSaving(true)
+    try {
+      await putAdminReservationStartAt(detail.id, startAt)
+      const fresh = await fetchAdminReservationById(id, staffList)
+      if (!fresh) {
+        throw new Error("FETCH_FAILED")
+      }
+      setDetail(fresh)
+      mergeReservationIntoList(fresh)
+      const actor = profile.name.trim() || "管理者"
+      const log = {
+        timestamp: new Date().toISOString(),
+        actor,
+        action: "schedule_changed" as const,
+        message: `日時を ${new Date(startAt).toLocaleString("ja-JP")} に変更`,
+      }
+      await appendReservationOperationLogFile({ reservationId: detail.id, ...log })
+    } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHORIZED") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
+      setSaveError(
+        e instanceof Error && e.message && e.message !== "FETCH_FAILED"
+          ? `日時の変更に失敗しました: ${e.message}`
+          : "日時の変更に失敗しました。通信またはサーバーを確認してください。",
+      )
+      throw e
+    } finally {
+      setScheduleSaving(false)
+    }
+  }
+
   const handleRefundPayment = async (paymentId: string) => {
     if (!detail || !id) return
     setSaveError(null)
@@ -379,15 +453,13 @@ export function AdminReservationDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <Button
-        variant="outline"
-        size="sm"
-        className="rounded-md"
-        onClick={() => navigate(-1)}
-      >
-        戻る
-      </Button>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-lg font-semibold tracking-tight">予約詳細</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          予約内容の確認、担当者・ステータス・メモ・決済情報を管理します。
+        </p>
+      </div>
 
       {saveError ? (
         <p className="text-sm text-destructive" role="alert">
@@ -405,16 +477,20 @@ export function AdminReservationDetailPage() {
         }
         onUpdateMemo={handleUpdateMemo}
         onUpdateStatus={handleUpdateStatus}
+        onUpdateSchedule={handleUpdateSchedule}
         onRefundPayment={handleRefundPayment}
         onUpdateAssignee={handleUpdateAssignee}
         memoSaving={memoSaving}
         statusSaving={statusSaving}
+        scheduleSaving={scheduleSaving}
+        slotIncrementMinutes={slotIncrementMinutes}
+        businessHoursItems={businessHoursItems}
+        holidayDateKeys={holidayDateKeys}
         refundSaving={refundSaving}
         assigneeSaving={assigneeSaving}
         shiftCoverageByStaffId={shiftCoverageByStaffId}
         shiftCoverageLoading={shiftCoverageLoading}
         shiftCoverageError={shiftCoverageError}
-        onClose={() => navigate(-1)}
       />
     </div>
   )

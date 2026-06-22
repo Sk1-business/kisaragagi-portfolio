@@ -680,6 +680,29 @@ export async function putAdminReservationTrainerId(
 }
 
 /**
+ * `PUT /api/admin/reservations/{reservation_id}` — `start_at` のみ更新。
+ * 終了時刻はサーバー側でメニュー所要時間から再計算される。
+ */
+export async function putAdminReservationStartAt(
+  reservationId: string,
+  startAt: string,
+): Promise<void> {
+  const url = `${ADMIN_RESERVATIONS_LIST_PATH}/${encodeURIComponent(reservationId)}`
+  const res = await apiFetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ start_at: startAt }),
+  })
+  if (res.status === 401) {
+    throw new Error("UNAUTHORIZED")
+  }
+  if (!res.ok) {
+    const detail = await parseAdminApiErrorDetail(res)
+    throw new Error(detail ?? "FETCH_FAILED")
+  }
+}
+
+/**
  * `PUT /api/admin/reservations/{reservation_id}` — `notes` のみ更新（他列はサーバー側で据え置き）。
  */
 export async function putAdminReservationNotes(

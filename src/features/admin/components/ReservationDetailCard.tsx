@@ -1,13 +1,18 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import type { BusinessHoursItem } from "@/features/admin/api/adminSettingsApi"
 import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
 import {
+  ADMIN_CALENDAR_TIME_ZONE,
+  combineDateAndTimeToAdminTzIso,
   formatTime,
   formatDateJa,
   formatReservationDurationJa,
+  formatTimeHmInAdminTz,
+  getIsoDateKeyInTimeZone,
 } from "@/features/admin/lib/calendarUtils"
 import {
   getReservationAssigneeDisplayName,
@@ -17,13 +22,20 @@ import {
   resolveReservationStaffIdForUi,
 } from "@/features/admin/api/staffApi"
 import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
-import { hasConfirmedOverlapForAssignee } from "@/features/admin/lib/reservationOverlap"
+import {
+  hasConfirmedOverlapForAssignee,
+  reservationIntervalsOverlap,
+} from "@/features/admin/lib/reservationOverlap"
+import {
+  buildStartTimeOptions,
+  getBusinessHoursForJsDate,
+  timeToMinutes,
+} from "@/features/admin/lib/businessHours"
 import {
   type AdminReservationApiStatus,
   adminReservationApiStatusLabel,
   mapReservationStatusToApiStatus,
 } from "@/features/admin/api/reservationsApi"
-import { X } from "lucide-react"
 
 function formatYen(amount?: number): string {
   if (typeof amount !== "number") return "-"
@@ -45,12 +57,48 @@ function paymentStatusLabel(status?: string): string {
   return status || "-"
 }
 
+function timeHmToMinutes(value: string): number | null {
+  const [hourRaw, minuteRaw] = value.split(":")
+  const hour = Number(hourRaw)
+  const minute = Number(minuteRaw)
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null
+  }
+  return hour * 60 + minute
+}
+
+function dateYmdToJsDate(dateYmd: string): Date {
+  return new Date(`${dateYmd}T12:00:00+09:00`)
+}
+
+function buildScheduleTimeOptions(
+  dateYmd: string,
+  businessHoursItems: BusinessHoursItem[],
+  holidayDateKeys: ReadonlySet<string>,
+  stepMinutes: number,
+  durationMinutes: number,
+): string[] {
+  if (!dateYmd || holidayDateKeys.has(dateYmd)) return []
+  const biz = getBusinessHoursForJsDate(businessHoursItems, dateYmdToJsDate(dateYmd))
+  if (!biz || biz.isClosed) return []
+  const bizEndMin = timeToMinutes(biz.end)
+  return buildStartTimeOptions(biz.start, biz.end, stepMinutes).filter(
+    (hm) => timeToMinutes(hm) + durationMinutes <= bizEndMin,
+  )
+}
+
 interface ReservationDetailCardProps {
   reservation: Reservation
   staffList?: Staff[]
   /** 担当者の空き判定用（この予約以外の重複を見る） */
   reservations?: Reservation[]
-  onClose: () => void
   /** 指定時はメモを管理者が編集可能（非同期可・失敗時は編集を閉じない） */
   onUpdateMemo?: (memo: string | undefined) => void | Promise<void>
   /**
@@ -64,10 +112,20 @@ interface ReservationDetailCardProps {
   onRefundPayment?: (paymentId: string) => void | Promise<void>
   /** 指定時は担当者を編集可能（非同期可・失敗時は確認を閉じない） */
   onUpdateAssignee?: (assigneeId: string) => void | Promise<void>
+  /** 指定時は予約日時を編集可能（開始日時のみ送信し、終了時刻はサーバーで再計算） */
+  onUpdateSchedule?: (startAt: string) => void | Promise<void>
   /** メモ保存 API 実行中 */
   memoSaving?: boolean
   /** ステータス変更 API 実行中 */
   statusSaving?: boolean
+  /** 日時変更 API 実行中 */
+  scheduleSaving?: boolean
+  /** 予約ルールの空き枠刻み（分） */
+  slotIncrementMinutes?: number
+  /** 曜日ごとの営業時間 */
+  businessHoursItems?: BusinessHoursItem[]
+  /** 個別休業日（YYYY-MM-DD） */
+  holidayDateKeys?: ReadonlySet<string>
   refundSaving?: boolean
   /** 担当者変更 API 実行中 */
   assigneeSaving?: boolean
@@ -86,13 +144,17 @@ export function ReservationDetailCard({
   reservation,
   staffList = [],
   reservations = [],
-  onClose,
   onUpdateMemo,
   onUpdateStatus,
   onRefundPayment,
   onUpdateAssignee,
+  onUpdateSchedule,
   memoSaving = false,
   statusSaving = false,
+  scheduleSaving = false,
+  slotIncrementMinutes = 15,
+  businessHoursItems = [],
+  holidayDateKeys = new Set(),
   refundSaving = false,
   assigneeSaving = false,
   shiftCoverageByStaffId,
@@ -105,6 +167,11 @@ export function ReservationDetailCard({
   const nowMs = Date.now()
   const startMs = new Date(reservation.startAt).getTime()
   const endMs = new Date(reservation.endAt).getTime()
+  const durationMinutes =
+    Number.isFinite(startMs) && Number.isFinite(endMs)
+      ? Math.max(1, Math.round((endMs - startMs) / 60_000))
+      : 1
+  const scheduleStepMinutes = Math.max(1, slotIncrementMinutes)
   const reservationNotStarted = Number.isFinite(startMs) && startMs > nowMs
   const reservationEnded = Number.isFinite(endMs) && endMs < nowMs
   const refundable =
@@ -168,6 +235,31 @@ export function ReservationDetailCard({
 
   const [editingMemo, setEditingMemo] = useState(false)
   const [memoDraft, setMemoDraft] = useState(reservation.memo ?? "")
+  const [editingSchedule, setEditingSchedule] = useState(false)
+  const [scheduleDateDraft, setScheduleDateDraft] = useState(() =>
+    getIsoDateKeyInTimeZone(reservation.startAt, ADMIN_CALENDAR_TIME_ZONE),
+  )
+  const [scheduleTimeDraft, setScheduleTimeDraft] = useState(() =>
+    formatTimeHmInAdminTz(reservation.startAt),
+  )
+  const [scheduleError, setScheduleError] = useState("")
+  const scheduleTimeOptions = useMemo(
+    () =>
+      buildScheduleTimeOptions(
+        scheduleDateDraft,
+        businessHoursItems,
+        holidayDateKeys,
+        scheduleStepMinutes,
+        durationMinutes,
+      ),
+    [
+      scheduleDateDraft,
+      businessHoursItems,
+      holidayDateKeys,
+      scheduleStepMinutes,
+      durationMinutes,
+    ],
+  )
   const [editingStatus, setEditingStatus] = useState(false)
   const [statusDraft, setStatusDraft] = useState<AdminReservationApiStatus>(() =>
     mapReservationStatusToApiStatus(reservation.status),
@@ -201,6 +293,26 @@ export function ReservationDetailCard({
   }, [reservation.status, reservation.id, editingStatus])
 
   useEffect(() => {
+    if (!editingSchedule) {
+      queueMicrotask(() => {
+        setScheduleDateDraft(
+          getIsoDateKeyInTimeZone(reservation.startAt, ADMIN_CALENDAR_TIME_ZONE),
+        )
+        setScheduleTimeDraft(formatTimeHmInAdminTz(reservation.startAt))
+        setScheduleError("")
+      })
+    }
+  }, [reservation.startAt, reservation.id, editingSchedule])
+
+  useEffect(() => {
+    if (!editingSchedule) return
+    if (scheduleTimeOptions.includes(scheduleTimeDraft)) return
+    queueMicrotask(() => {
+      setScheduleTimeDraft(scheduleTimeOptions[0] ?? "")
+    })
+  }, [editingSchedule, scheduleTimeDraft, scheduleTimeOptions])
+
+  useEffect(() => {
     if (!editingAssignee) {
       queueMicrotask(() => {
         setAssigneeDraft(resolveReservationStaffIdForUi(reservation, staffList))
@@ -211,6 +323,8 @@ export function ReservationDetailCard({
   useEffect(() => {
     if (!isDoneReservation) return
     setEditingMemo(false)
+    setEditingSchedule(false)
+    setScheduleError("")
     setEditingAssignee(false)
     setAssigneeConfirm(null)
     setAssigneeSlotError("")
@@ -252,68 +366,225 @@ export function ReservationDetailCard({
     setEditingAssignee(true)
   }
 
+  const openScheduleEdit = () => {
+    setScheduleDateDraft(
+      getIsoDateKeyInTimeZone(reservation.startAt, ADMIN_CALENDAR_TIME_ZONE),
+    )
+    setScheduleTimeDraft(formatTimeHmInAdminTz(reservation.startAt))
+    setScheduleError("")
+    setEditingSchedule(true)
+  }
+
+  const handleSubmitSchedule = async () => {
+    if (!onUpdateSchedule) return
+    if (!scheduleDateDraft || !scheduleTimeDraft) {
+      setScheduleError("日付と時刻を入力してください。")
+      return
+    }
+    if (scheduleTimeOptions.length === 0) {
+      setScheduleError("この日は営業時間内に選択できる予約枠がありません。")
+      return
+    }
+    if (!scheduleTimeOptions.includes(scheduleTimeDraft)) {
+      setScheduleError("営業時間内の時刻を選択してください。")
+      return
+    }
+    const scheduleMinutes = timeHmToMinutes(scheduleTimeDraft)
+    if (scheduleMinutes === null || scheduleMinutes % scheduleStepMinutes !== 0) {
+      setScheduleError(`開始時刻は${scheduleStepMinutes}分刻みで選択してください。`)
+      return
+    }
+    const nextStartAt = combineDateAndTimeToAdminTzIso(
+      scheduleDateDraft,
+      scheduleTimeDraft,
+    )
+    if (!Number.isFinite(new Date(nextStartAt).getTime())) {
+      setScheduleError("日時の形式が正しくありません。")
+      return
+    }
+    if (new Date(nextStartAt).getTime() === new Date(reservation.startAt).getTime()) {
+      setEditingSchedule(false)
+      return
+    }
+    const nextEndAt = new Date(
+      new Date(nextStartAt).getTime() + durationMinutes * 60_000,
+    ).toISOString()
+    const assigneeId = resolveReservationStaffIdForUi(reservation, staffList)
+    const overlappingReservation = reservations.find(
+      (r) =>
+        r.status === "CONFIRMED" &&
+        r.id !== reservation.id &&
+        r.assigneeId === assigneeId &&
+        reservationIntervalsOverlap(nextStartAt, nextEndAt, r.startAt, r.endAt),
+    )
+    if (overlappingReservation) {
+      setScheduleError("この時間帯にはすでに予約があります。別の日時を選択してください。")
+      return
+    }
+    setScheduleError("")
+    try {
+      await Promise.resolve(onUpdateSchedule(nextStartAt))
+      setEditingSchedule(false)
+    } catch {
+      setScheduleError("日時の保存に失敗しました。")
+    }
+  }
+
+  const detailValueClass =
+    "min-h-9 rounded-md border border-border bg-background px-3 py-2 text-sm leading-5"
+
   return (
-    <Card className="w-full border-border shadow-md sm:max-w-md">
-      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-base">予約詳細</CardTitle>
-        <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={onClose} aria-label="閉じる">
-          <X className="size-4" />
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">予約ID</p>
-          <p className="font-mono">{reservation.id}</p>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">お客様名</p>
-          <p>{reservation.customerName}</p>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">メニュー</p>
-          <p>{reservation.menuName?.trim() ? reservation.menuName : "—"}</p>
-        </div>
-        {reservation.customerPhone?.trim() ? (
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">電話番号</p>
-            <p className="tabular-nums">{reservation.customerPhone.trim()}</p>
-          </div>
-        ) : null}
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">メールアドレス</p>
-          <p>{reservation.customerEmail}</p>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">日時</p>
-          <p>
-            {formatDateJa(startDate)} {formatTime(reservation.startAt)} ～ {formatTime(reservation.endAt)}
-          </p>
-          <p className="mt-0.5 text-muted-foreground">
-            所要時間 {formatReservationDurationJa(reservation.startAt, reservation.endAt)}
-          </p>
-        </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-muted-foreground">担当者</p>
-            {onUpdateAssignee &&
-              staffList.length > 0 &&
-              !editingAssignee &&
-              !isDoneReservation && (
+    <section className="space-y-4 text-sm">
+      <div className="space-y-4">
+        <dl className="grid grid-cols-[8rem_minmax(0,1fr)_3rem] gap-x-3 gap-y-2">
+          <dt className="py-2 font-medium text-foreground">予約ID</dt>
+          <dd className={`${detailValueClass} break-all text-foreground`}>
+            {reservation.id}
+          </dd>
+          <dd aria-hidden="true" />
+          <dt className="py-2 font-medium text-foreground">お客様名</dt>
+          <dd className={`${detailValueClass} text-foreground`}>
+            {reservation.customerName}
+          </dd>
+          <dd aria-hidden="true" />
+          <dt className="py-2 font-medium text-foreground">メニュー</dt>
+          <dd className={`${detailValueClass} text-foreground`}>
+            {reservation.menuName?.trim() ? reservation.menuName : "—"}
+          </dd>
+          <dd aria-hidden="true" />
+          {reservation.customerPhone?.trim() ? (
+            <>
+              <dt className="py-2 font-medium text-foreground">電話番号</dt>
+              <dd className={`${detailValueClass} tabular-nums text-foreground`}>
+                {reservation.customerPhone.trim()}
+              </dd>
+              <dd aria-hidden="true" />
+            </>
+          ) : null}
+          <dt className="py-2 font-medium text-foreground">メール</dt>
+          <dd className={`${detailValueClass} break-all text-foreground`}>
+            {reservation.customerEmail}
+          </dd>
+          <dd aria-hidden="true" />
+          <dt className="py-2 font-medium text-foreground">日時</dt>
+          <dd>
+            {onUpdateSchedule && editingSchedule && !isDoneReservation ? (
+              <div className="space-y-2">
+                <div className="grid gap-2 sm:grid-cols-[1fr_9rem]">
+                  <div>
+                    <Label htmlFor="reservation-schedule-date" className="sr-only">
+                      予約日
+                    </Label>
+                    <input
+                      id="reservation-schedule-date"
+                      type="date"
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={scheduleDateDraft}
+                      disabled={scheduleSaving}
+                      onChange={(e) => {
+                        setScheduleError("")
+                        setScheduleDateDraft(e.target.value)
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="reservation-schedule-time" className="sr-only">
+                      開始時刻
+                    </Label>
+                    <select
+                      id="reservation-schedule-time"
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={scheduleTimeDraft}
+                      disabled={scheduleSaving || scheduleTimeOptions.length === 0}
+                      onChange={(e) => {
+                        setScheduleError("")
+                        setScheduleTimeDraft(e.target.value)
+                      }}
+                    >
+                      <option value="" disabled>
+                        {scheduleTimeOptions.length === 0 ? "候補なし" : "時刻を選択"}
+                      </option>
+                      {scheduleTimeOptions.map((time) => (
+                        <option key={time} value={time}>
+                          {time}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  開始時刻は営業時間内の{scheduleStepMinutes}分刻みから選択してください。終了時刻はメニューの所要時間から自動で再計算されます。
+                </p>
+                {scheduleError ? (
+                  <p className="text-sm text-destructive" role="alert">
+                    {scheduleError}
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-md"
+                    disabled={scheduleSaving}
+                    onClick={handleSubmitSchedule}
+                  >
+                    {scheduleSaving ? "保存中…" : "変更する"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-md"
+                    disabled={scheduleSaving}
+                    onClick={() => {
+                      setScheduleDateDraft(
+                        getIsoDateKeyInTimeZone(
+                          reservation.startAt,
+                          ADMIN_CALENDAR_TIME_ZONE,
+                        ),
+                      )
+                      setScheduleTimeDraft(formatTimeHmInAdminTz(reservation.startAt))
+                      setScheduleError("")
+                      setEditingSchedule(false)
+                    }}
+                  >
+                    キャンセル
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className={`${detailValueClass} text-foreground`}>
+                <p>
+                  {formatDateJa(startDate)} {formatTime(reservation.startAt)} ～{" "}
+                  {formatTime(reservation.endAt)}
+                </p>
+                <p className="mt-0.5 text-sm leading-5 text-muted-foreground">
+                  所要時間 {formatReservationDurationJa(reservation.startAt, reservation.endAt)}
+                </p>
+              </div>
+            )}
+          </dd>
+          <dd className="py-1">
+            {onUpdateSchedule && !editingSchedule && !isDoneReservation ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="h-7 rounded-md px-2 text-xs"
-                onClick={openAssigneeEdit}
+                onClick={openScheduleEdit}
               >
                 編集
               </Button>
-            )}
-          </div>
-          {onUpdateAssignee &&
-          staffList.length > 0 &&
-          editingAssignee &&
-          !isDoneReservation ? (
+            ) : null}
+          </dd>
+        </dl>
+        <div className="grid grid-cols-[8rem_minmax(0,1fr)_3rem] gap-x-3">
+          <p className="py-2 font-medium text-foreground">担当者</p>
+          <div className="space-y-2">
+            {onUpdateAssignee &&
+            staffList.length > 0 &&
+            editingAssignee &&
+            !isDoneReservation ? (
             <div className="space-y-2">
               <Label htmlFor="reservation-assignee-edit" className="sr-only">
                 担当者を変更
@@ -437,7 +708,7 @@ export function ReservationDetailCard({
               </div>
             </div>
           ) : (
-            <p className="flex items-center gap-2">
+            <p className={`${detailValueClass} flex items-center gap-2 text-foreground`}>
               <span
                 className="inline-block size-3 shrink-0 rounded-full"
                 style={{
@@ -447,27 +718,28 @@ export function ReservationDetailCard({
               {getReservationAssigneeDisplayName(reservation, staffList)}
             </p>
           )}
-        </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-muted-foreground">ステータス</p>
-            {onUpdateStatus && !editingStatus && (
+          </div>
+          <div className="py-1">
+            {onUpdateAssignee &&
+            staffList.length > 0 &&
+            !editingAssignee &&
+            !isDoneReservation ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="h-7 rounded-md px-2 text-xs"
-                onClick={() => {
-                  setStatusRuleError("")
-                  setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
-                  setEditingStatus(true)
-                }}
+                onClick={openAssigneeEdit}
               >
                 編集
               </Button>
-            )}
+            ) : null}
           </div>
-          {onUpdateStatus && editingStatus ? (
+        </div>
+        <div className="grid grid-cols-[8rem_minmax(0,1fr)_3rem] gap-x-3">
+          <p className="py-2 font-medium text-foreground">ステータス</p>
+          <div className="space-y-2">
+            {onUpdateStatus && editingStatus ? (
             <div className="space-y-2">
               <Label htmlFor="reservation-status-edit" className="sr-only">
                 ステータスを変更
@@ -544,12 +816,66 @@ export function ReservationDetailCard({
               </div>
             </div>
           ) : (
-            <p>{adminReservationApiStatusLabel(currentApiStatus)}</p>
+            <p className={`${detailValueClass} text-foreground`}>
+              {adminReservationApiStatusLabel(currentApiStatus)}
+            </p>
           )}
+          </div>
+          <div className="py-1">
+            {onUpdateStatus && !editingStatus ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 rounded-md px-2 text-xs"
+                onClick={() => {
+                  setStatusRuleError("")
+                  setStatusDraft(mapReservationStatusToApiStatus(reservation.status))
+                  setEditingStatus(true)
+                }}
+              >
+                編集
+              </Button>
+            ) : null}
+          </div>
         </div>
-        <div className="rounded-md border border-border bg-muted/20 p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-muted-foreground">決済情報</p>
+        <div className="grid grid-cols-[8rem_minmax(0,1fr)_3rem] gap-x-3">
+          <p className="py-2 font-medium text-foreground">決済情報</p>
+          <div className="space-y-2">
+            {reservation.paymentId ? (
+            <dl className="grid grid-cols-[88px_1fr] gap-x-3 gap-y-2 text-sm">
+              <dt className="py-2 font-medium text-foreground">方法</dt>
+              <dd className={`${detailValueClass} text-foreground`}>
+                {paymentProviderLabel(reservation.paymentProvider ?? reservation.paymentMethod)}
+              </dd>
+              <dt className="py-2 font-medium text-foreground">状態</dt>
+              <dd className={`${detailValueClass} text-foreground`}>
+                {paymentStatusLabel(reservation.paymentRecordStatus ?? reservation.paymentStatus)}
+              </dd>
+              <dt className="py-2 font-medium text-foreground">金額</dt>
+              <dd className={`${detailValueClass} text-foreground`}>
+                {formatYen(reservation.paymentAmountYen)}
+              </dd>
+              <dt className="py-2 font-medium text-foreground">返金額</dt>
+              <dd className={`${detailValueClass} text-foreground`}>
+                {formatYen(reservation.paymentRefundAmount ?? 0)}
+              </dd>
+              {reservation.paymentPaidAt ? (
+                <>
+                  <dt className="py-2 font-medium text-foreground">支払日時</dt>
+                  <dd className={`${detailValueClass} text-foreground`}>
+                    {new Date(reservation.paymentPaidAt).toLocaleString("ja-JP")}
+                  </dd>
+                </>
+              ) : null}
+            </dl>
+          ) : (
+            <p className={`${detailValueClass} text-muted-foreground`}>
+              この予約に紐づく決済はありません。
+            </p>
+          )}
+          </div>
+          <div className="py-1">
             {onRefundPayment && refundable ? (
               <Button
                 type="button"
@@ -563,45 +889,10 @@ export function ReservationDetailCard({
               </Button>
             ) : null}
           </div>
-          {reservation.paymentId ? (
-            <dl className="grid grid-cols-[88px_1fr] gap-x-3 gap-y-1 text-xs">
-              <dt className="text-muted-foreground">方法</dt>
-              <dd>{paymentProviderLabel(reservation.paymentProvider ?? reservation.paymentMethod)}</dd>
-              <dt className="text-muted-foreground">状態</dt>
-              <dd>{paymentStatusLabel(reservation.paymentRecordStatus ?? reservation.paymentStatus)}</dd>
-              <dt className="text-muted-foreground">金額</dt>
-              <dd>{formatYen(reservation.paymentAmountYen)}</dd>
-              <dt className="text-muted-foreground">返金額</dt>
-              <dd>{formatYen(reservation.paymentRefundAmount ?? 0)}</dd>
-              {reservation.paymentPaidAt ? (
-                <>
-                  <dt className="text-muted-foreground">支払日時</dt>
-                  <dd>{new Date(reservation.paymentPaidAt).toLocaleString("ja-JP")}</dd>
-                </>
-              ) : null}
-            </dl>
-          ) : (
-            <p className="text-xs text-muted-foreground">この予約に紐づく決済はありません。</p>
-          )}
         </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-muted-foreground">メモ</p>
-            {onUpdateMemo && !editingMemo && !isDoneReservation && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 rounded-md px-2 text-xs"
-                onClick={() => {
-                  setMemoDraft(reservation.memo ?? "")
-                  setEditingMemo(true)
-                }}
-              >
-                編集
-              </Button>
-            )}
-          </div>
+        <div className="grid grid-cols-[8rem_minmax(0,1fr)_3rem] gap-x-3">
+          <p className="py-2 font-medium text-foreground">メモ</p>
+          <div className="space-y-2">
           {onUpdateMemo && editingMemo && !isDoneReservation ? (
             <div className="space-y-2">
               <Label htmlFor="reservation-memo-edit" className="sr-only">
@@ -649,16 +940,36 @@ export function ReservationDetailCard({
               </div>
             </div>
           ) : (
-            <p className="whitespace-pre-wrap text-muted-foreground">
+            <p className={`${detailValueClass} whitespace-pre-wrap text-muted-foreground`}>
               {reservation.memo?.trim() ? reservation.memo : "（メモはありません）"}
             </p>
           )}
+          </div>
+          <div className="py-1">
+            {onUpdateMemo && !editingMemo && !isDoneReservation ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 rounded-md px-2 text-xs"
+                onClick={() => {
+                  setMemoDraft(reservation.memo ?? "")
+                  setEditingMemo(true)
+                }}
+              >
+                編集
+              </Button>
+            ) : null}
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">予約作成日時</p>
-          <p>{new Date(reservation.createdAt).toLocaleString("ja-JP")}</p>
+        <div className="grid grid-cols-[8rem_minmax(0,1fr)_3rem] gap-x-3">
+          <p className="py-2 font-medium text-foreground">予約作成日時</p>
+          <p className={`${detailValueClass} text-foreground`}>
+            {new Date(reservation.createdAt).toLocaleString("ja-JP")}
+          </p>
+          <div />
         </div>
-      </CardContent>
+      </div>
 
       {statusConfirm && onUpdateStatus && (
         <div
@@ -869,6 +1180,6 @@ export function ReservationDetailCard({
           </Card>
         </div>
       )}
-    </Card>
+    </section>
   )
 }
