@@ -2,7 +2,13 @@ import { ADMIN_STAFF_INVITATIONS_PATH } from "@/constants/adminApi"
 import { apiFetch } from "@/lib/api"
 
 export type StaffInvitationResult =
-  | { kind: "ok"; adminId: string; email: string }
+  | {
+      kind: "ok"
+      inviteId: string
+      email: string
+      signupUrl: string
+      expiresAt: string
+    }
   | { kind: "unauthorized" }
   | { kind: "duplicate"; message: string }
   | { kind: "validation"; message: string }
@@ -24,10 +30,10 @@ function readableDetail(raw: unknown): string {
   return typeof message === "string" ? message : ""
 }
 
-function pickAdminId(raw: unknown): string {
+function pickString(raw: unknown, ...keys: string[]): string {
   if (!raw || typeof raw !== "object") return ""
   const o = raw as Record<string, unknown>
-  const value = o.admin_id ?? o.adminId
+  const value = keys.map((key) => o[key]).find((v) => typeof v === "string")
   return typeof value === "string" ? value.trim() : ""
 }
 
@@ -41,28 +47,26 @@ async function parseJson(res: Response): Promise<unknown> {
 
 export async function postStaffInvitation(payload: {
   email: string
-  name: string
-  initialPassword: string
 }): Promise<StaffInvitationResult> {
   const email = payload.email.trim().toLowerCase()
   try {
     const res = await apiFetch(ADMIN_STAFF_INVITATIONS_PATH, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        name: payload.name.trim(),
-        initial_password: payload.initialPassword,
-      }),
+      body: JSON.stringify({ email }),
     })
     const data = await parseJson(res)
     const message = readableDetail(data)
 
     if (res.status === 401) return { kind: "unauthorized" }
     if (res.ok) {
-      const adminId = pickAdminId(data)
-      if (adminId) return { kind: "ok", adminId, email }
-      return { kind: "error", message: "サーバーからスタッフIDを取得できませんでした" }
+      const inviteId = pickString(data, "invite_id", "inviteId")
+      const signupUrl = pickString(data, "signup_url", "signupUrl")
+      const expiresAt = pickString(data, "expires_at", "expiresAt")
+      if (inviteId && signupUrl && expiresAt) {
+        return { kind: "ok", inviteId, email, signupUrl, expiresAt }
+      }
+      return { kind: "error", message: "サーバーから招待情報を取得できませんでした" }
     }
     if (res.status === 409) {
       return {

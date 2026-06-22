@@ -12,7 +12,15 @@ export type AdminRole = "owner" | "staff"
  */
 export function normalizeAdminRole(raw: unknown): AdminRole {
   const normalized = typeof raw === "string" ? raw.trim().toLowerCase() : ""
-  if (normalized === "owner" || normalized === "admin") return "owner"
+  if (
+    normalized === "owner" ||
+    normalized === "admin" ||
+    normalized === "administrator" ||
+    normalized === "管理者" ||
+    normalized === "オーナー"
+  ) {
+    return "owner"
+  }
   return "staff"
 }
 

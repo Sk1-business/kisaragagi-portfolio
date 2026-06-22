@@ -13,10 +13,6 @@ import {
   postAdminTrainer,
   putAdminTrainer,
 } from "@/features/admin/api/trainersApi"
-import {
-  postStaffInvitation,
-  type StaffInvitationResult,
-} from "@/features/admin/api/staffInvitationsApi"
 import type { Staff } from "@/features/admin/types/staff"
 
 function isValidHexColor(s: string): boolean {
@@ -43,14 +39,8 @@ function sortStaffByDisplayOrder(list: Staff[]): Staff[] {
   })
 }
 
-/** addStaff の結果。スタッフ自体は作れても admin_users 連携が失敗するケースがある */
 export type AddStaffResult =
   | { kind: "ok"; staff: Staff }
-  | {
-      kind: "admin_user_failed"
-      message: string
-      reason: Exclude<StaffInvitationResult["kind"], "ok">
-    }
   | { kind: "trainer_failed"; message: string }
 
 type AdminStaffContextValue = {
@@ -67,13 +57,6 @@ type AdminStaffContextValue = {
     display_order?: number
     /** サロンメニューID。POST /api/admin/trainers の menu_ids にまとめて送る */
     menuIds: string[]
-    /**
-     * 入力された場合、`POST /api/admin/admin-users` でスタッフ用のログイン
-     * アカウント（`role: "staff"`）も同時に作成する。これがあると本人が
-     * 管理者ログイン画面から自分のメール/パスワードでログインできるようになる。
-     */
-    loginEmail?: string
-    loginPassword?: string
   }) => Promise<AddStaffResult>
   updateStaff: (
     id: string,
@@ -127,8 +110,6 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
       image_url?: string
       display_order?: number
       menuIds: string[]
-      loginEmail?: string
-      loginPassword?: string
     }): Promise<AddStaffResult> => {
       const name = input.name.trim()
       const color = input.color.trim()
@@ -143,35 +124,11 @@ export function AdminStaffProvider({ children }: { children: ReactNode }) {
         .map((id) => String(id).trim())
         .filter(Boolean)
 
-      const loginEmail = input.loginEmail?.trim()
-      const loginPassword = input.loginPassword
-      let linkedAdminId: string | undefined
-      if (loginEmail && loginPassword) {
-        const result = await postStaffInvitation({
-          email: loginEmail,
-          name,
-          initialPassword: loginPassword,
-        })
-        if (result.kind !== "ok") {
-          if (result.kind === "unauthorized") {
-            throw new Error("UNAUTHORIZED")
-          }
-          return {
-            kind: "admin_user_failed",
-            reason: result.kind,
-            message:
-              "message" in result ? result.message : "スタッフ招待メールの送信に失敗しました",
-          }
-        }
-        linkedAdminId = result.adminId
-      }
-
       const base: Parameters<typeof postAdminTrainer>[0] = {
         name,
         color: normalized,
         description: input.description?.trim() || undefined,
         image_url: input.image_url?.trim() || undefined,
-        admin_id: linkedAdminId,
       }
       if (
         input.display_order !== undefined &&

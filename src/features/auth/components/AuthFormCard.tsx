@@ -84,11 +84,15 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   const [phoneSegments, setPhoneSegments] = useState<PhoneSegments>(["", "", ""])
   const [gender, setGender] = useState<Gender | "">("")
   const [birthDateInput, setBirthDateInput] = useState("")
-  const [backofficeSignupRole, setBackofficeSignupRole] = useState<Exclude<UserRole, "CUSTOMER">>("ADMIN")
   const [initialInviteToken] = useState(() => searchParams.get("inviteToken")?.trim() ?? "")
+  const [backofficeSignupRole, setBackofficeSignupRole] = useState<Exclude<UserRole, "CUSTOMER">>(
+    () => (initialInviteToken ? "STAFF" : "ADMIN"),
+  )
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [showTermsModal, setShowTermsModal] = useState(false)
   const isDev = import.meta.env.DEV
+  const isBackofficeInviteSignup =
+    mode === "signup" && !isCustomerPortal && Boolean(initialInviteToken)
   const developmentUsers = (mockUsers as MockUser[]).filter((user) =>
     VISIBLE_ROLES[audience].includes(user.role),
   )
@@ -555,6 +559,16 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
                       />
                     </FieldGroup>
+                  ) : isBackofficeInviteSignup ? (
+                    <>
+                      <input type="hidden" name="role" value="STAFF" />
+                      <input type="hidden" name="inviteToken" value={initialInviteToken} />
+                      <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3">
+                        <p className="text-sm text-neutral-700">
+                          スタッフ招待リンクから登録しています。氏名とパスワードを設定してください。
+                        </p>
+                      </div>
+                    </>
                   ) : (
                     <FieldGroup label="招待トークン">
                       <Input
@@ -570,7 +584,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                 </>
               ) : null}
 
-              {mode === "signup" && !isCustomerPortal ? (
+              {mode === "signup" && !isCustomerPortal && !isBackofficeInviteSignup ? (
                 <FieldGroup label="ロール">
                   <select
                     id="role"

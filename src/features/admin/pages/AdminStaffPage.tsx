@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Pencil, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -12,7 +12,7 @@ import {
 import { fetchAdminMenus } from "@/features/admin/api/menusApi"
 import { fetchAdminTrainerById } from "@/features/admin/api/trainersApi"
 import { isStaffNameTaken } from "@/features/admin/api/staffApi"
-import { postAdminStaffInvite, type AdminStaffInviteOut } from "@/features/admin/api/staffInvitesApi"
+import { postStaffInvitation } from "@/features/admin/api/staffInvitationsApi"
 import { useAdminStaff } from "@/features/admin/context/AdminStaffContext"
 import { ROUTES } from "@/constants/routes"
 import type { Staff } from "@/features/admin/types/staff"
@@ -75,7 +75,11 @@ export function AdminStaffPage() {
   const [deletePrecheckLoading, setDeletePrecheckLoading] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteSaving, setInviteSaving] = useState(false)
-  const [inviteResult, setInviteResult] = useState<AdminStaffInviteOut | null>(null)
+  const [inviteResult, setInviteResult] = useState<{
+    email: string
+    signupUrl: string
+    expiresAt: string
+  } | null>(null)
   const [inviteError, setInviteError] = useState("")
 
   const createInvite = async () => {
@@ -88,8 +92,22 @@ export function AdminStaffPage() {
     setInviteError("")
     setInviteResult(null)
     try {
-      const invite = await postAdminStaffInvite(email)
-      setInviteResult(invite)
+      const result = await postStaffInvitation({ email })
+      if (result.kind === "unauthorized") {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
+      if (result.kind !== "ok") {
+        setInviteError(
+          "message" in result ? result.message : "スタッフ招待の作成に失敗しました。",
+        )
+        return
+      }
+      setInviteResult({
+        email: result.email,
+        signupUrl: result.signupUrl,
+        expiresAt: result.expiresAt,
+      })
       setInviteEmail("")
     } catch (e) {
       if (e instanceof Error && e.message === "UNAUTHORIZED") {
@@ -517,6 +535,10 @@ export function AdminStaffPage() {
       <Card className="border-border shadow-xs">
         <CardHeader>
           <CardTitle className="text-lg">スタッフ招待</CardTitle>
+          <CardDescription>
+            メールアドレス宛に登録URLを送信します。スタッフ本人がリンク先で氏名と
+            パスワードを設定します。
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
@@ -539,7 +561,7 @@ export function AdminStaffPage() {
               disabled={inviteSaving}
               onClick={() => void createInvite()}
             >
-              {inviteSaving ? "作成中..." : "招待を作成"}
+              {inviteSaving ? "送信中..." : "招待メールを送信"}
             </Button>
           </div>
           {inviteError ? (
@@ -549,10 +571,10 @@ export function AdminStaffPage() {
           ) : null}
           {inviteResult ? (
             <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
-              <p className="font-medium">招待URLを作成しました。</p>
-              <p className="mt-1 break-all font-mono text-xs">{inviteResult.signup_url}</p>
+              <p className="font-medium">招待メールを送信しました。</p>
+              <p className="mt-1 break-all font-mono text-xs">{inviteResult.signupUrl}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                有効期限: {new Date(inviteResult.expires_at).toLocaleString("ja-JP")}
+                有効期限: {new Date(inviteResult.expiresAt).toLocaleString("ja-JP")}
               </p>
             </div>
           ) : null}
