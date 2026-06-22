@@ -811,14 +811,6 @@ export function AdminNewReservationPage() {
             >
               確認
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-md"
-              onClick={() => navigate(ROUTES.adminHome)}
-            >
-              戻る
-            </Button>
           </div>
         </CardContent>
       </Card>

@@ -1,4 +1,4 @@
-import { ChevronLeft, Pencil, X } from "lucide-react"
+import { Pencil, X } from "lucide-react"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { Link, useNavigate } from "react-router-dom"
 
@@ -534,15 +534,6 @@ export function AdminSalonProfilePage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4 pb-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button asChild variant="ghost" size="sm" className="rounded-md">
-          <Link to={returnTo}>
-            <ChevronLeft className="size-4" aria-hidden />
-            サロン設定へ
-          </Link>
-        </Button>
-      </div>
-
       <div>
         <h1 className="text-lg font-semibold tracking-tight">サロン基本情報</h1>
         <p className="mt-1 text-sm text-muted-foreground">

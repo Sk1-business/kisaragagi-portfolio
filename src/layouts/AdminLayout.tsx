@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
+import { Outlet, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
@@ -16,19 +16,42 @@ import {
   LogoutSuccessDialog,
 } from "@/layouts/AdminLogoutDialogs"
 
+type AdminBackTarget = {
+  label: string
+  to: string
+}
+
+function adminBackTarget(pathname: string): AdminBackTarget | null {
+  if (pathname === ROUTES.adminHome) return null
+  if (pathname === ROUTES.adminSalonProfile) {
+    return { label: "サロン設定へ", to: ROUTES.adminSalonSettings }
+  }
+  if (
+    pathname === ROUTES.backofficeSetupBusinessHours ||
+    pathname === ROUTES.backofficeSetupBookingRules
+  ) {
+    return { label: "サロン設定へ", to: ROUTES.adminSalonSettings }
+  }
+  if (pathname === ROUTES.adminNewReservationConfirm) {
+    return { label: "新規予約へ", to: ROUTES.adminNewReservation }
+  }
+  if (/^\/admin\/reservations\/[^/]+$/.test(pathname)) {
+    return { label: "予約カレンダーへ", to: ROUTES.adminCalendar }
+  }
+  return { label: "ダッシュボードへ", to: ROUTES.adminHome }
+}
 /** `AdminAuthGuard` 内（`AdminProfileProvider` 配下）でマウントする */
 function AdminLayoutContent() {
   const profile = useAdminProfile()
   const navigate = useNavigate()
   const location = useLocation()
-  const isOwner = profile.role === "owner"
   const headerCopy = getBackofficeHeaderCopy(profile.role)
   const profileName = profile.name.trim()
-  const onAdminHome = location.pathname === ROUTES.adminHome
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState<string | null>(null)
+  const backTarget = adminBackTarget(location.pathname)
 
   function openLogoutConfirm() {
     setLogoutError(null)
@@ -80,43 +103,29 @@ function AdminLayoutContent() {
             ) : null}
           </div>
         </div>
-        {isOwner ? (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {!onAdminHome ? (
-              <Button asChild variant="ghost" size="sm" className="rounded-md">
-                <Link to={ROUTES.adminHome}>ダッシュボードへ</Link>
-              </Button>
-            ) : null}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {backTarget ? (
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               className="rounded-md"
-              disabled={loggingOut}
-              onClick={openLogoutConfirm}
+              onClick={() => navigate(backTarget.to)}
             >
-              ログアウト
+              {backTarget.label}
             </Button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {!onAdminHome ? (
-              <Button asChild variant="ghost" size="sm" className="rounded-md">
-                <Link to={ROUTES.adminHome}>ダッシュボードへ</Link>
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="rounded-md"
-              disabled={loggingOut}
-              onClick={openLogoutConfirm}
-            >
-              ログアウト
-            </Button>
-          </div>
-        )}
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-md"
+            disabled={loggingOut}
+            onClick={openLogoutConfirm}
+          >
+            ログアウト
+          </Button>
+        </div>
       </header>
       <Outlet />
     </main>

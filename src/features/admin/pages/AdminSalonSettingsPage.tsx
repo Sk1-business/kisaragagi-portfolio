@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { CalendarClock, ChevronLeft, ScrollText, Store } from "lucide-react"
+import { CalendarClock, ScrollText, Store } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,15 +37,6 @@ const salonSettingItems = [
 export function AdminSalonSettingsPage() {
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button asChild variant="ghost" size="sm" className="rounded-md">
-          <Link to={ROUTES.adminHome}>
-            <ChevronLeft className="size-4" aria-hidden />
-            ダッシュボードへ
-          </Link>
-        </Button>
-      </div>
-
       <div>
         <h1 className="text-lg font-semibold tracking-tight">サロン設定</h1>
         <p className="mt-1 text-sm text-muted-foreground">

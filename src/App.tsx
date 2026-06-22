@@ -125,14 +125,6 @@ function App() {
           element={<BackofficeInitialSetupPage />}
         />
         <Route
-          path={ROUTES.backofficeSetupBusinessHours}
-          element={<BackofficeSetupBusinessHoursPage />}
-        />
-        <Route
-          path={ROUTES.backofficeSetupBookingRules}
-          element={<BackofficeSetupBookingRulesPage />}
-        />
-        <Route
           path={ROUTES.backofficeSetupDone}
           element={<BackofficeSetupDonePage />}
         />
@@ -153,6 +145,14 @@ function App() {
           <Route path={ROUTES.adminHome} element={<AdminDashboardPage />} />
           <Route path={ROUTES.adminCalendar} element={<AdminCalendarPage />} />
           <Route path={ROUTES.adminShiftCalendar} element={<AdminShiftCalendarPage />} />
+          <Route
+            path={ROUTES.backofficeSetupBusinessHours}
+            element={<BackofficeSetupBusinessHoursPage />}
+          />
+          <Route
+            path={ROUTES.backofficeSetupBookingRules}
+            element={<BackofficeSetupBookingRulesPage />}
+          />
           <Route
             path={ROUTES.adminCancelled}
             element={<Navigate to={ROUTES.adminHome} replace />}

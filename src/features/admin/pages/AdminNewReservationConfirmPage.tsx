@@ -109,11 +109,6 @@ export function AdminNewReservationConfirmPage() {
     }
   }
 
-  function handleBackToEdit() {
-    if (!draft) return
-    navigate(ROUTES.adminNewReservation, { state: draft })
-  }
-
   return (
     <div className="space-y-4">
       <div>
@@ -180,15 +175,6 @@ export function AdminNewReservationConfirmPage() {
               onClick={() => void handleFinalize()}
             >
               {submitting ? "登録中…" : "予約確定"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-md"
-              disabled={submitting}
-              onClick={handleBackToEdit}
-            >
-              入力に戻る
             </Button>
             <Button
               type="button"

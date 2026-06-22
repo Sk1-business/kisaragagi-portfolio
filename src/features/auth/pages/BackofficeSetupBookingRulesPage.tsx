@@ -301,10 +301,6 @@ export function BackofficeSetupBookingRulesPage() {
 
   async function handleConfirmCancel() {
     setShowCancelConfirm(false)
-    if (fromAdminSalonSettings) {
-      navigate(-1)
-      return
-    }
     try {
       localStorage.removeItem(STORAGE_KEY)
       localStorage.removeItem(BUSINESS_HOURS_STORAGE_KEY)
@@ -504,14 +500,16 @@ export function BackofficeSetupBookingRulesPage() {
         ) : null}
 
         <div className="flex flex-wrap justify-end gap-2 pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={saving}
-            onClick={() => setShowCancelConfirm(true)}
-          >
-            {fromAdminSalonSettings ? "キャンセル" : "登録をやめる"}
-          </Button>
+          {!fromAdminSalonSettings ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={() => setShowCancelConfirm(true)}
+            >
+              登録をやめる
+            </Button>
+          ) : null}
           <Button type="submit" disabled={saving}>
             {saving ? "保存中..." : "登録内容を確認"}
           </Button>
@@ -529,7 +527,6 @@ export function BackofficeSetupBookingRulesPage() {
 
       {showCancelConfirm ? (
         <SetupCancelConfirmModal
-          returnToDashboard={fromAdminSalonSettings}
           onClose={() => setShowCancelConfirm(false)}
           onConfirm={() => void handleConfirmCancel()}
         />
@@ -597,11 +594,9 @@ function SetupSaveConfirmModal({
 }
 
 function SetupCancelConfirmModal({
-  returnToDashboard,
   onClose,
   onConfirm,
 }: {
-  returnToDashboard: boolean
   onClose: () => void
   onConfirm: () => void
 }) {
@@ -635,16 +630,14 @@ function SetupCancelConfirmModal({
           確認
         </h3>
         <p className="mt-2 text-sm text-neutral-700">
-          {returnToDashboard
-            ? "予約ルールの変更をキャンセルして前の画面へ戻りますか？"
-            : "初期設定の入力内容を破棄してログイン画面に戻りますか？"}
+          初期設定の入力内容を破棄してログイン画面に戻りますか？
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>
             キャンセル
           </Button>
           <Button type="button" onClick={onConfirm}>
-            {returnToDashboard ? "前の画面へ戻る" : "ログイン画面へ"}
+            ログイン画面へ
           </Button>
         </div>
       </div>
