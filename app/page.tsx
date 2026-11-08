@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   ArrowUpRight, 
   Layers, 
@@ -12,8 +12,6 @@ import {
   Volume2, 
   VolumeX, 
   Maximize2, 
-  ChevronRight, 
-  ChevronLeft, 
   ShieldCheck, 
   Activity, 
   Terminal, 
@@ -22,13 +20,8 @@ import {
   Radio, 
   Sparkles, 
   ExternalLink,
-  Layers3,
-  Network,
   Share2,
   Sliders,
-  Crosshair,
-  Code2,
-  Atom,
   Eye,
   X,
   Play,
@@ -36,39 +29,42 @@ import {
   MapPin,
   Headphones,
   RefreshCw,
-  GitCompare,
   Zap,
   Target
 } from "lucide-react";
 
 export default function App() {
-  const [lang, setLang] = useState("JA");
+  const [lang, setLang] = useState<"EN" | "JA">("JA");
   const toggleLang = () => setLang((prev) => (prev === "EN" ? "JA" : "EN"));
 
   const [soundEnabled, setSoundEnabled] = useState(false);
-  const [artModalUrl, setArtModalUrl] = useState(null);
+  const [artModalUrl, setArtModalUrl] = useState<string | null>(null);
   
   // CPS Slide Interactive State
-  const [cpsPhase, setCpsPhase] = useState("phase1");
+  const [cpsPhase, setCpsPhase] = useState<"phase1" | "phase2" | "phase3">("phase1");
   
   // Strategy Workflow Interactive State (As-Is / GAP / To-Be)
-  const [strategyStage, setStrategyStage] = useState("gap"); // "asis" | "marketin" | "gap" | "tobe"
+  const [strategyStage, setStrategyStage] = useState<string>("gap");
 
   // Ontology Graph Active Node State
-  const [activeOntoNode, setActiveOntoNode] = useState("tacit");
+  const [activeOntoNode, setActiveOntoNode] = useState<string>("tacit");
 
-  // Mouse Coordinate tracker for Ochiai-style digital nature spatial UI
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  // Mouse Coordinate tracker for spatial UI
+  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Web Audio Context for tactile micro-acoustics
-  const audioCtxRef = useRef(null);
-  const playChirp = (freq = 440, type = "sine") => {
-    if (!soundEnabled) return;
+  // Web Audio Context for tactile micro-acoustics (SSR safe)
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const playChirp = (freq = 440, type: OscillatorType = "sine") => {
+    if (!soundEnabled || typeof window === "undefined") return;
     try {
       if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        audioCtxRef.current = new AudioCtx();
       }
       const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = type;
@@ -79,38 +75,41 @@ export default function App() {
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.28);
-    } catch (e) {}
+    } catch {
+      // Audio context silently ignored if blocked by autoplay policies
+    }
   };
 
-  // Kinetic Particle Canvas (Yoichi Ochiai: Digital Nature particle waves)
-  const canvasRef = useRef(null);
+  // Kinetic Particle Canvas (Digital Nature particle waves)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    let animId;
+    if (!ctx) return;
+
+    let animId: number;
     let width = (canvas.width = window.innerWidth);
     let height = (canvas.height = window.innerHeight);
 
     const onResize = () => {
+      if (!canvas) return;
       width = canvas.width = window.innerWidth;
       height = canvas.height = window.innerHeight;
     };
     window.addEventListener("resize", onResize);
 
-    const count = 80;
+    const count = 70;
     const particles = Array.from({ length: count }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
-      vx: (Math.random() - 0.5) * 0.55,
-      vy: (Math.random() - 0.5) * 0.55,
-      radius: Math.random() * 1.8 + 0.5,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: (Math.random() - 0.5) * 0.5,
+      radius: Math.random() * 1.6 + 0.5,
       alpha: Math.random() * 0.6 + 0.2
     }));
 
-    let t = 0;
     const render = () => {
-      t += 0.012;
       ctx.clearRect(0, 0, width, height);
 
       // Deep atmospheric space gradient
@@ -144,11 +143,11 @@ export default function App() {
           const dx = p.x - p2.x;
           const dy = p.y - p2.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 125) {
+          if (dist < 120) {
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
             ctx.lineTo(p2.x, p2.y);
-            ctx.strokeStyle = `rgba(96, 165, 250, ${(1 - dist / 125) * 0.14})`;
+            ctx.strokeStyle = `rgba(96, 165, 250, ${(1 - dist / 120) * 0.14})`;
             ctx.lineWidth = 0.65;
             ctx.stroke();
           }
@@ -165,7 +164,7 @@ export default function App() {
     };
   }, []);
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     setMousePos({ x: e.clientX, y: e.clientY });
   };
 
@@ -232,9 +231,9 @@ export default function App() {
       {/* Background Interactive Kinetic Canvas */}
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />
 
-      {/* Ochiai Spatial Coordinate HUD in Corner */}
+      {/* Spatial Coordinate HUD in Corner */}
       <div className="fixed bottom-4 left-6 z-50 pointer-events-none hidden md:flex items-center gap-3 text-[10px] font-mono text-neutral-500 tracking-widest bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
-        <Crosshair size={11} className="text-blue-400 animate-spin" style={{ animationDuration: "12s" }} />
+        <Activity size={11} className="text-blue-400 animate-pulse" />
         <span>POS [ {String(mousePos.x).padStart(4, "0")} : {String(mousePos.y).padStart(4, "0")} ]</span>
         <span className="text-neutral-700">|</span>
         <span className="text-blue-400">DIGITAL NATURE MESH</span>
@@ -300,7 +299,7 @@ export default function App() {
       <section className="relative z-10 pt-28 pb-20 md:pt-40 md:pb-28 max-w-7xl mx-auto px-6">
         <div className="space-y-6 max-w-4xl">
           <div className="inline-flex items-center gap-2.5 px-3 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-400 text-[10px] font-mono tracking-widest uppercase backdrop-blur-md">
-            <Atom size={12} className="animate-spin text-cyan-400" style={{ animationDuration: "10s" }} />
+            <Sparkles size={12} className="text-cyan-400" />
             <span>MEANING OVER UTILITY // 意味がある &gt; 役に立つ</span>
           </div>
 
@@ -342,7 +341,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* NEW SECTION: STRATEGIC ENTERPRISE CONSULTING (As-Is / GAP Analysis / Market-In / To-Be) */}
+      {/* STRATEGIC ENTERPRISE CONSULTING */}
       <section id="strategy" className="relative z-10 py-20 border-t border-white/[0.06] bg-gradient-to-b from-[#05060b] to-[#030305]">
         <div className="max-w-7xl mx-auto px-6 space-y-12">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -386,7 +385,7 @@ export default function App() {
           <div className="rounded-3xl border border-white/10 bg-[#070810] p-6 sm:p-10 shadow-2xl relative overflow-hidden">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
               
-              {/* Left Column: Stage Diagram (Dynamic SVG Architecture) */}
+              {/* Left Column: Stage Diagram */}
               <div className="lg:col-span-7 h-80 sm:h-96 rounded-2xl bg-black/70 border border-white/[0.08] p-6 relative flex flex-col justify-between overflow-hidden">
                 <div className="flex justify-between items-center text-xs font-mono text-neutral-400">
                   <span className="flex items-center gap-2 text-blue-400">
@@ -396,7 +395,6 @@ export default function App() {
                   <span className="text-[10px] text-neutral-500">EXECUTIVE METHODOLOGY</span>
                 </div>
 
-                {/* SVG Visual Stage Morphing */}
                 <div className="relative w-full h-full flex items-center justify-center">
                   {strategyStage === "asis" && (
                     <div className="w-full space-y-4 animate-in fade-in duration-300">
@@ -532,7 +530,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* SECTION 2: ARTIFACTS & CONSULTING BLUEPRINTS */}
+      {/* ARTIFACTS & CONSULTING BLUEPRINTS */}
       <section id="artifacts" className="relative z-10 py-20 border-t border-white/[0.06] bg-[#050508]/60">
         <div className="max-w-7xl mx-auto px-6 space-y-16">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -577,7 +575,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Living Interactive Ontology Visualizer Canvas / SVG */}
+            {/* Living Interactive Ontology Visualizer */}
             <div className="py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
               <div className="lg:col-span-8 h-80 sm:h-96 w-full rounded-2xl bg-black/60 border border-white/[0.07] relative flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(139,92,246,0.12),transparent_70%)]" />
@@ -585,7 +583,7 @@ export default function App() {
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
                   {ontologyNodes.map((n, i) => {
                     const center = ontologyNodes.find(item => item.primary);
-                    if (n.id === center.id) return null;
+                    if (!center || n.id === center.id) return null;
                     const isActive = activeOntoNode === n.id || activeOntoNode === center.id;
                     return (
                       <line
@@ -707,7 +705,7 @@ export default function App() {
                   <button
                     key={tab.id}
                     onClick={() => {
-                      setCpsPhase(tab.id);
+                      setCpsPhase(tab.id as "phase1" | "phase2" | "phase3");
                       playChirp(490);
                     }}
                     className={`px-3 py-1.5 rounded-lg transition-all ${
@@ -811,13 +809,13 @@ export default function App() {
         </div>
       </section>
 
-      {/* SECTION 3: SAAS VENTURE (ST. COLLECTIVE - 10 MEMBERS / 3 REAL PRODUCTS) */}
+      {/* SAAS VENTURE (ST. COLLECTIVE) */}
       <section id="saas" className="relative z-10 py-24 border-t border-white/[0.06]">
         <div className="max-w-7xl mx-auto px-6 space-y-12">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
               <div className="inline-flex items-center gap-2 text-xs font-mono text-blue-400 tracking-widest uppercase mb-2">
-                <Layers3 size={12} />
+                <Layers size={12} />
                 <span>VENTURE STUDIO // 10 BUILDERS, 3 PRODUCTS</span>
               </div>
               <h2 className="text-3xl sm:text-5xl font-light text-white">
@@ -962,7 +960,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* SECTION 4: BIO-COMPUTATIONAL MEDIA ARTWORKS */}
+      {/* BIO-COMPUTATIONAL MEDIA ARTWORKS */}
       <section id="media-art" className="relative z-10 py-24 border-t border-white/[0.06] bg-[#050508]/60">
         <div className="max-w-7xl mx-auto px-6 space-y-12">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -1093,7 +1091,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* SECTION 5: DIALOGUE & CONTACT */}
+      {/* DIALOGUE & CONTACT */}
       <section id="dialogue" className="relative z-10 py-24 border-t border-white/[0.06] bg-gradient-to-t from-black to-transparent">
         <div className="max-w-7xl mx-auto px-6">
           <div className="max-w-3xl space-y-6">
