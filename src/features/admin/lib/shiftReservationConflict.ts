@@ -51,3 +51,24 @@ export function getReservationsOutsideShiftWindow(
     return !inside
   })
 }
+
+/** 複数の勤務枠（中抜けあり）の外にはみ出す予約 */
+export function getReservationsOutsideShiftWindows(
+  reservations: Reservation[],
+  staffId: string,
+  day: Date,
+  windows: { start: string; end: string }[],
+): Reservation[] {
+  const ranges = windows.map((window) => ({
+    start: timeToMinutes(padTimePart(window.start)),
+    end: timeToMinutes(padTimePart(window.end)),
+  }))
+  const dayRes = getReservationsForDay(reservations, day)
+  return dayRes.filter((reservation) => {
+    if (!isReservationBlockingShiftPolicy(reservation, staffId)) return false
+    const start = isoToMinutesInAdminCalendarTz(reservation.startAt)
+    const end = isoToMinutesInAdminCalendarTz(reservation.endAt)
+    if (end <= start) return true
+    return !ranges.some((range) => start >= range.start && end <= range.end)
+  })
+}

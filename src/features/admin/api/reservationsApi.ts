@@ -838,8 +838,9 @@ export async function postAdminReservationCreate(
     start_at: body.start_at,
     end_at: body.end_at,
     customer_name: body.customer_name.trim(),
-    customer_email: body.customer_email.trim(),
   }
+  const email = body.customer_email.trim()
+  if (email) payload.customer_email = email
   const tid = body.trainer_id?.trim()
   if (tid) payload.trainer_id = normalizeTrainerIdForApi(tid)
   const cid = body.customer_id?.trim()

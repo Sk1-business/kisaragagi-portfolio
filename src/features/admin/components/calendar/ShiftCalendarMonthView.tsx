@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import type { BusinessHoursItem } from "@/features/admin/api/adminSettingsApi"
 import {
-  applyTrainerDayShift,
+  applyTrainerDayShiftWindows,
   deleteTrainerShift,
 } from "@/features/admin/api/trainerShiftsApi"
 import { useAdminShiftAvailability } from "@/features/admin/context/AdminShiftAvailabilityContext"
@@ -127,13 +127,14 @@ export function ShiftCalendarMonthView({
 
     try {
       if (commit.type === "save") {
-        await applyTrainerDayShift(
+        const slots = commit.slots && commit.slots.length > 0 ? commit.slots : [commit.slot]
+        await applyTrainerDayShiftWindows(
           trainerId,
-          {
-            date: dateKey,
-            start_time: commit.slot.start,
-            end_time: commit.slot.end,
-          },
+          dateKey,
+          slots.map((slot) => ({
+            start_time: slot.start,
+            end_time: slot.end,
+          })),
           rows,
         )
         setOverride(trainerId, dateKey, null)

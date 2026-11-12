@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom"
-import { CalendarDays, CalendarRange, UserPlus } from "lucide-react"
+import { CalendarDays, CalendarRange, ContactRound, UserPlus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,6 +21,14 @@ const hubItems = [
     to: ROUTES.adminNewReservation,
     icon: UserPlus,
     action: "new-reservation" as const,
+  },
+  {
+    key: "customers",
+    title: "顧客マスタ",
+    description: "検索・フィルターで来店履歴とカルテを確認します",
+    to: ROUTES.adminCustomers,
+    icon: ContactRound,
+    action: "link" as const,
   },
   {
     key: "shifts",

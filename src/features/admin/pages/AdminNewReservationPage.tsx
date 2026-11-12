@@ -12,12 +12,18 @@ import {
   type BusinessHoursItem,
 } from "@/features/admin/api/adminSettingsApi"
 import { fetchAdminMenus, filterBookableMenus } from "@/features/admin/api/menusApi"
-import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
+import { fetchAdminReservations, fetchAllReservationsForAdmin } from "@/features/admin/api/reservationsApi"
 import {
   fetchTrainerShifts,
   groupTrainerShiftRowsByDate,
 } from "@/features/admin/api/trainerShiftsApi"
 import { useStaff } from "@/features/admin/hooks/useStaff"
+import {
+  countNoShows,
+  NO_SHOW_BLOCK_THRESHOLD,
+  noShowBlockMessage,
+  phoneDigits,
+} from "@/features/admin/lib/noShowBlock"
 import {
   computeNewReservationStaffEligibility,
   type NewReservationStaffBlockReason,
@@ -44,8 +50,13 @@ import {
 
 function isValidEmail(s: string): boolean {
   const t = s.trim()
-  if (!t) return false
+  if (!t) return true
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)
+}
+
+function isValidCustomerPhone(s: string): boolean {
+  const digits = phoneDigits(s)
+  return digits.length >= 10 && digits.length <= 15
 }
 
 /** `ReservationDetailCard` の assignee オプションと同じ文言 */
@@ -141,6 +152,9 @@ export function AdminNewReservationPage() {
   const [customerPhone, setCustomerPhone] = useState(() => initialDraft?.customerPhone ?? "")
   const [notes, setNotes] = useState(() => initialDraft?.notes ?? "")
   const [formError, setFormError] = useState("")
+  const [historyReservations, setHistoryReservations] = useState<
+    Awaited<ReturnType<typeof fetchAllReservationsForAdmin>>
+  >([])
 
   const [eligibleByStaffId, setEligibleByStaffId] = useState<Record<string, boolean>>({})
   const [blockReasonByStaffId, setBlockReasonByStaffId] = useState<
@@ -256,6 +270,21 @@ export function AdminNewReservationPage() {
       cancelled = true
     }
   }, [navigate])
+
+  useEffect(() => {
+    if (staffLoading) return
+    let cancelled = false
+    void fetchAllReservationsForAdmin(staffList)
+      .then((list) => {
+        if (!cancelled) setHistoryReservations(list)
+      })
+      .catch(() => {
+        if (!cancelled) setHistoryReservations([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [staffLoading, staffList])
 
   useEffect(() => {
     let cancelled = false
@@ -539,8 +568,17 @@ export function AdminNewReservationPage() {
       setFormError("顧客名を入力してください。")
       return
     }
+    if (!isValidCustomerPhone(customerPhone)) {
+      setFormError("電話番号は10桁以上15桁以下の数字で入力してください。")
+      return
+    }
     if (!isValidEmail(customerEmail)) {
-      setFormError("有効なメールアドレスを入力してください。")
+      setFormError("メールアドレスを入れる場合は、有効な形式で入力してください。")
+      return
+    }
+    const noShowCount = countNoShows(historyReservations, customerPhone, customerEmail)
+    if (noShowCount >= NO_SHOW_BLOCK_THRESHOLD) {
+      setFormError(noShowBlockMessage(noShowCount))
       return
     }
     const menuName = menus.find((m) => m.menu_id === menuId)?.name
@@ -581,9 +619,10 @@ export function AdminNewReservationPage() {
         <CardHeader>
           <CardTitle className="text-base">予約内容</CardTitle>
           <CardDescription>
-            必須: メニュー、開始日時、顧客名、メール。
+            必須: メニュー、開始日時、顧客名、電話番号。
             {staffList.length > 0 ? " メニュー・開始時刻入力後に担当者を選択、" : null}
-            任意: 電話、メモ。
+            任意: メール、メモ。
+            無断キャンセルが{NO_SHOW_BLOCK_THRESHOLD}回あるお客様は予約できません。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -762,7 +801,7 @@ export function AdminNewReservationPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="admin-new-email">顧客メールアドレス</Label>
+            <Label htmlFor="admin-new-email">顧客メールアドレス（任意）</Label>
             <Input
               id="admin-new-email"
               type="email"
@@ -774,7 +813,7 @@ export function AdminNewReservationPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="admin-new-phone">顧客電話番号（任意）</Label>
+            <Label htmlFor="admin-new-phone">顧客電話番号</Label>
             <Input
               id="admin-new-phone"
               type="tel"

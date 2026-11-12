@@ -26,6 +26,8 @@ import { AdminMenusPage } from "@/features/admin/pages/AdminMenusPage"
 import { AdminPaymentsPage } from "@/features/admin/pages/AdminPaymentsPage"
 import { AdminSalonSettingsPage } from "@/features/admin/pages/AdminSalonSettingsPage"
 import { AdminSalonProfilePage } from "@/features/admin/pages/AdminSalonProfilePage"
+import { AdminSecurityPage } from "@/features/admin/pages/AdminSecurityPage"
+import { AdminCustomersPage } from "@/features/admin/pages/AdminCustomersPage"
 import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
@@ -197,6 +199,8 @@ function App() {
               </OwnerOnlyRoute>
             }
           />
+          <Route path={ROUTES.adminSecurity} element={<AdminSecurityPage />} />
+          <Route path={ROUTES.adminCustomers} element={<AdminCustomersPage />} />
           <Route
             path={ROUTES.adminNewReservationConfirm}
             element={<AdminNewReservationConfirmPage />}

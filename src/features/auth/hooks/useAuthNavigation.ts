@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom"
 
 import { postAdminLogin, postAdminSignup } from "@/features/auth/api/adminLoginApi"
+import { isAdminTotpEnabled, markAdminTotpPending } from "@/features/auth/lib/adminTotp"
 import { loginCustomer, registerCustomer } from "@/features/auth/api/customerAuthApi"
 import { submitMockAuth } from "@/features/auth/api/mockAuthApi"
 import type { AuthFormValues } from "@/features/auth/types/auth"
@@ -54,6 +55,10 @@ export function useAuthNavigation(audience: AuthAudience, mode: AuthMode) {
         password: values.password,
       })
       if (result === "ok") {
+        if (isAdminTotpEnabled(values.email)) {
+          markAdminTotpPending(values.email)
+          return { ok: false, reason: "totp_required" }
+        }
         navigate(ROUTES.adminHome)
         return { ok: true }
       }

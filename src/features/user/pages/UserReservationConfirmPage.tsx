@@ -107,18 +107,21 @@ export function UserReservationConfirmPage() {
   const isPayAtVenue =
     !isReservationUpdate &&
     (input.paymentMethod === "free" ||
+      input.paymentMethod === "onsite" ||
       skipCardPayment ||
       (menuPrice != null && menuPrice <= 0))
 
   const displayMenuName = input.menuName?.trim() || "未定"
   const menuDurationMinutes = input.menuDurationMinutes ?? null
-  const displayPriceYen =
-    skipCardPayment ? 0 : stripeAmountYen > 0 ? stripeAmountYen : menuPrice
-  const displayPriceText = isPayAtVenue
-    ? "現地で決済"
-    : displayPriceYen != null
-      ? `¥${displayPriceYen.toLocaleString()}`
-      : "未定"
+  const pricedYen = skipCardPayment ? 0 : stripeAmountYen > 0 ? stripeAmountYen : menuPrice
+  const displayPriceText =
+    input.paymentMethod === "onsite" && pricedYen != null && pricedYen > 0
+      ? `¥${pricedYen.toLocaleString()}（当日払い）`
+      : isPayAtVenue
+        ? "現地で決済"
+        : pricedYen != null
+          ? `¥${pricedYen.toLocaleString()}`
+          : "未定"
 
   const expectedTimeRange = useMemo(() => {
     if (!input.time) return "未選択"

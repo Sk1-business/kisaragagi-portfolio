@@ -11,16 +11,17 @@ import {
   padTimePart,
   shiftSlotWithinBusinessHours,
   timeToMinutes,
+  minutesToHHmm,
 } from "@/features/admin/lib/businessHours"
 import {
   getReservationsBlockingShiftRemoval,
-  getReservationsOutsideShiftWindow,
+  getReservationsOutsideShiftWindows,
 } from "@/features/admin/lib/shiftReservationConflict"
 import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
 
 export type ShiftEditCommit =
-  | { type: "save"; slot: AvailabilitySlot }
+  | { type: "save"; slot: AvailabilitySlot; slots?: AvailabilitySlot[] }
   | { type: "off" }
 
 interface ShiftAvailabilityEditDialogProps {
@@ -60,6 +61,8 @@ export function ShiftAvailabilityEditDialog({
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingCommit, setPendingCommit] = useState<ShiftEditCommit | null>(null)
+  const [breakEnabled, setBreakEnabled] = useState(false)
+  const [breakStart, setBreakStart] = useState("13:00")
 
   const biz = businessDay && !businessDay.isClosed ? businessDay : null
 
@@ -73,11 +76,23 @@ export function ShiftAvailabilityEditDialog({
     let e: string
     if (resolved.kind === "work") {
       s = padTimePart(resolved.slot.start)
-      e = padTimePart(resolved.slot.end)
+      const last = resolved.moreSlots?.[resolved.moreSlots.length - 1]
+      e = padTimePart(last?.end ?? resolved.slot.end)
+      if (last) {
+        setBreakEnabled(true)
+        setBreakStart(padTimePart(resolved.slot.end))
+      } else {
+        setBreakEnabled(false)
+        const startMin = timeToMinutes(s)
+        const endMin = timeToMinutes(e)
+        const mid = startMin + Math.floor((endMin - startMin) / 2)
+        setBreakStart(minutesToHHmm(Math.min(Math.max(mid, startMin + 15), endMin - 75)))
+      }
     } else {
       const b = businessDay && !businessDay.isClosed ? businessDay : null
       s = b ? padTimePart(b.start) : "10:00"
       e = b ? padTimePart(b.end) : "19:00"
+      setBreakEnabled(false)
     }
     setStart(s)
     setEnd(e)
@@ -130,17 +145,33 @@ export function ShiftAvailabilityEditDialog({
       setError("終了時刻は開始時刻より後にしてください。")
       return
     }
-    const slot: AvailabilitySlot = { start: a, end: b }
-    if (
-      !shiftSlotWithinBusinessHours(slot, {
-        start: businessDay.start,
-        end: businessDay.end,
-      })
-    ) {
-      setError(
-        `シフトは営業時間（${businessDay.start}〜${businessDay.end}）の範囲内で入力してください。`,
-      )
-      return
+    let slots: AvailabilitySlot[] = [{ start: a, end: b }]
+    if (breakEnabled) {
+      const breakMin = timeToMinutes(padTimePart(breakStart.slice(0, 5)))
+      const startMin = timeToMinutes(a)
+      const endMin = timeToMinutes(b)
+      const resume = breakMin + 60
+      if (breakMin - startMin < 15 || endMin - resume < 15) {
+        setError("1時間の中抜けは、前後に15分以上残る位置にしてください。")
+        return
+      }
+      slots = [
+        { start: a, end: minutesToHHmm(breakMin) },
+        { start: minutesToHHmm(resume), end: b },
+      ]
+    }
+    for (const slot of slots) {
+      if (
+        !shiftSlotWithinBusinessHours(slot, {
+          start: businessDay.start,
+          end: businessDay.end,
+        })
+      ) {
+        setError(
+          `シフトは営業時間（${businessDay.start}〜${businessDay.end}）の範囲内で入力してください。`,
+        )
+        return
+      }
     }
     if (reservationsFetchFailed) {
       setError(
@@ -152,33 +183,30 @@ export function ShiftAvailabilityEditDialog({
       setError("予約情報を読み込み中です。しばらく待ってから再度お試しください。")
       return
     }
-    const outside = getReservationsOutsideShiftWindow(
-      reservations,
-      staff.id,
-      day,
-      a,
-      b,
-    )
+    const outside = getReservationsOutsideShiftWindows(reservations, staff.id, day, slots)
     if (outside.length > 0) {
       const first = outside[0]
       const range = formatTimeRangeInAdminCalendarTz(first.startAt, first.endAt)
       setError(
         outside.length === 1
-          ? `既に予約が入っているためシフトを変更できません。（該当: ${range}）`
-          : `既に予約が入っているためシフトを変更できません。（該当: ${range} ほか${outside.length - 1}件）`,
+          ? `この時間に予約があるため、シフトを変更できません。（該当: ${range}）`
+          : `この時間に予約があるため、シフトを変更できません。（該当: ${range} ほか${outside.length - 1}件）`,
       )
       return
     }
     const timesChanged =
-      padTimePart(a) !== initialStart || padTimePart(b) !== initialEnd
+      padTimePart(a) !== initialStart ||
+      padTimePart(b) !== initialEnd ||
+      breakEnabled
     const needsConfirm = resolved.kind !== "work" || timesChanged
+    const commit: ShiftEditCommit = { type: "save", slot: slots[0], slots }
 
     if (needsConfirm) {
-      setPendingCommit({ type: "save", slot })
+      setPendingCommit(commit)
       setConfirmOpen(true)
       return
     }
-    void runCommit({ type: "save", slot })
+    void runCommit(commit)
   }
 
   const handleConfirmRegister = () => {
@@ -289,6 +317,34 @@ export function ShiftAvailabilityEditDialog({
             businessWindow={biz}
             disabled={disabledFields}
           />
+          <label className="mt-4 flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={breakEnabled}
+              disabled={disabledFields}
+              onChange={(event) => setBreakEnabled(event.target.checked)}
+            />
+            <span>
+              1時間の中抜けを入れる
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                管理者側から勤務の途中を1時間ブロックします。
+              </span>
+            </span>
+          </label>
+          {breakEnabled ? (
+            <label className="mt-3 block text-xs text-muted-foreground">
+              中抜けの開始
+              <input
+                type="time"
+                step={60}
+                value={breakStart}
+                disabled={disabledFields}
+                onChange={(event) => setBreakStart(event.target.value.slice(0, 5))}
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              />
+            </label>
+          ) : null}
           {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
         </div>
 
@@ -327,7 +383,12 @@ export function ShiftAvailabilityEditDialog({
               <div className="flex gap-2">
                 <dt className="shrink-0 text-muted-foreground">勤務時間</dt>
                 <dd>
-                  {pendingCommit.slot.start} 〜 {pendingCommit.slot.end}
+                  {(pendingCommit.slots && pendingCommit.slots.length > 0
+                    ? pendingCommit.slots
+                    : [pendingCommit.slot]
+                  )
+                    .map((slot) => `${slot.start} 〜 ${slot.end}`)
+                    .join("、")}
                 </dd>
               </div>
             </dl>

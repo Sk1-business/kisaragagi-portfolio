@@ -61,6 +61,8 @@ export interface CustomerBookingRules {
   bookingDeadlineMinutes: number
   cancellationDeadlineHours: number
   maxAdvanceDays: number
+  /** 顧客向け空き枠の刻み。API が返さない場合は 15 分 */
+  slotIncrementMinutes?: number
 }
 
 const RESERVATION_STORAGE_KEY = "user:reservations:v2"
@@ -172,6 +174,7 @@ interface CustomerBookingRulesResponse {
   booking_deadline_minutes: number
   cancellation_deadline_hours: number
   max_advance_days: number
+  slot_increment_minutes?: number
 }
 
 const DEFAULT_CANCELLATION_POLICY: CancellationPolicy = {
@@ -281,8 +284,9 @@ export function formatReservationExpectedTimeRange(
 export function formatReservationPaymentMethod(method: string | null | undefined): string {
   if (!method?.trim()) return "—"
   const m = method.trim().toLowerCase()
-  if (m === "credit") return "クレジットカード"
-  if (m === "paypay") return "PayPay"
+  if (m === "credit") return "前払い（クレジットカード）"
+  if (m === "paypay") return "前払い（PayPay）"
+  if (m === "onsite") return "当日払い"
   if (m === "free") return "現地で決済"
   return method
 }
@@ -667,11 +671,14 @@ export async function fetchCustomerBookingRules(shopSlug?: string): Promise<Cust
       ? buildSalonApiPath(resolvedShopSlug, "/booking-rules")
       : "/api/my/booking-rules"
     const response = await apiRequest<CustomerBookingRulesResponse>(path)
+    const slotIncrement = response.slot_increment_minutes
     const rules: CustomerBookingRules = {
       allowSameDay: response.allow_same_day,
       bookingDeadlineMinutes: response.booking_deadline_minutes,
       cancellationDeadlineHours: response.cancellation_deadline_hours,
       maxAdvanceDays: response.max_advance_days,
+      slotIncrementMinutes:
+        typeof slotIncrement === "number" && slotIncrement > 0 ? slotIncrement : 15,
     }
     safeWriteStorage(CUSTOMER_BOOKING_RULES_STORAGE_KEY, rules)
     return rules

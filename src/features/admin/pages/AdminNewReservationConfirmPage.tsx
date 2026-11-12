@@ -143,13 +143,9 @@ export function AdminNewReservationConfirmPage() {
             <dt className="text-muted-foreground">顧客名</dt>
             <dd>{draft.customerName}</dd>
             <dt className="text-muted-foreground">メール</dt>
-            <dd className="break-all">{draft.customerEmail}</dd>
-            {draft.customerPhone ? (
-              <>
-                <dt className="text-muted-foreground">電話</dt>
-                <dd>{draft.customerPhone}</dd>
-              </>
-            ) : null}
+            <dd className="break-all">{draft.customerEmail.trim() || "未入力"}</dd>
+            <dt className="text-muted-foreground">電話</dt>
+            <dd>{draft.customerPhone?.trim() || "未入力"}</dd>
             {draft.notes ? (
               <>
                 <dt className="text-muted-foreground">メモ</dt>

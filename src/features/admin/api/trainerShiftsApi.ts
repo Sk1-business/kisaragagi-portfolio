@@ -243,21 +243,47 @@ export type DayShiftWriteBody = {
   end_time: string
 }
 
+/** 1日分のシフトを複数枠で保存する。中抜けは勤務を2枠に分ける。 */
+export async function applyTrainerDayShiftWindows(
+  trainerId: string,
+  date: string,
+  slots: { start_time: string; end_time: string }[],
+  existingRows: TrainerShiftRow[],
+): Promise<void> {
+  if (slots.length === 0) throw new Error("EMPTY")
+  const ids = existingRows.map((row) => row.shift_id)
+  const shared = Math.min(ids.length, slots.length)
+  for (let index = 0; index < shared; index += 1) {
+    await updateTrainerShift(trainerId, ids[index], {
+      date,
+      start_time: slots[index].start_time,
+      end_time: slots[index].end_time,
+    })
+  }
+  for (let index = shared; index < slots.length; index += 1) {
+    await createTrainerShift(trainerId, {
+      date,
+      start_time: slots[index].start_time,
+      end_time: slots[index].end_time,
+    })
+  }
+  for (const id of ids.slice(slots.length)) {
+    await deleteTrainerShift(trainerId, id)
+  }
+}
+
 /** 1日分のシフトを保存（既存があれば1件に集約して更新） */
 export async function applyTrainerDayShift(
   trainerId: string,
   body: DayShiftWriteBody,
   existingRows: TrainerShiftRow[],
 ): Promise<void> {
-  const ids = existingRows.map((r) => r.shift_id)
-  if (ids.length === 0) {
-    await createTrainerShift(trainerId, body)
-    return
-  }
-  for (const id of ids.slice(1)) {
-    await deleteTrainerShift(trainerId, id)
-  }
-  await updateTrainerShift(trainerId, ids[0], body)
+  await applyTrainerDayShiftWindows(
+    trainerId,
+    body.date,
+    [{ start_time: body.start_time, end_time: body.end_time }],
+    existingRows,
+  )
 }
 
 /** 一括登録プランを API に反映 */

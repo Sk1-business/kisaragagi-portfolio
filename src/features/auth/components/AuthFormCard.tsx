@@ -13,6 +13,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
+import { postAdminLogout } from "@/features/auth/api/adminLoginApi"
+import {
+  clearAdminTotpPending,
+  readAdminTotpPending,
+  readAdminTotpSecret,
+  verifyTotpCode,
+} from "@/features/auth/lib/adminTotp"
 import mockUsers from "@/features/auth/api/mockUsers.json"
 import { getLineLoginUrl } from "@/features/auth/api/customerAuthApi"
 import { AUTH_AUDIENCE_TEXT, AUTH_TEXT } from "@/features/auth/constants"
@@ -76,6 +83,8 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
   const { submit } = useAuthNavigation(audience, mode)
   const isCustomerPortal = audience === "CUSTOMER_PORTAL"
   const [loginError, setLoginError] = useState("")
+  const [totpEmail, setTotpEmail] = useState(() => readAdminTotpPending() ?? "")
+  const [totpCode, setTotpCode] = useState("")
   const [shopSlug] = useState(
     () => resolveShopSlug(searchParams.get("shopId") ?? undefined) ?? "",
   )
@@ -234,6 +243,13 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
       return
     }
 
+    if (result.reason === "totp_required") {
+      setTotpEmail(email)
+      setTotpCode("")
+      setLoginError("")
+      return
+    }
+
     if (mode === "login") {
       if (result.message) {
         setLoginError(result.message)
@@ -255,6 +271,32 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
     if (result.message) {
       setLoginError(result.message)
     }
+  }
+
+  async function handleTotpSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const secret = readAdminTotpSecret(totpEmail)
+    if (!secret) {
+      clearAdminTotpPending()
+      setTotpEmail("")
+      setLoginError("二要素認証の設定が見つかりません。パスワードからやり直してください。")
+      return
+    }
+    const matched = await verifyTotpCode(secret, totpCode)
+    if (!matched) {
+      setLoginError("認証コードが違います。")
+      return
+    }
+    clearAdminTotpPending()
+    navigate(ROUTES.adminHome)
+  }
+
+  async function handleTotpCancel() {
+    clearAdminTotpPending()
+    setTotpEmail("")
+    setTotpCode("")
+    setLoginError("")
+    await postAdminLogout()
   }
 
   return (
@@ -348,6 +390,34 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               </>
             ) : null}
 
+            {totpEmail && !isCustomerPortal ? (
+              <form onSubmit={(event) => void handleTotpSubmit(event)} className="space-y-4">
+                <p className="text-sm text-neutral-600">
+                  {totpEmail} の認証アプリに表示されている6桁のコードを入力してください。
+                </p>
+                <FieldGroup label="認証コード">
+                  <Input
+                    id="totp-code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={totpCode}
+                    onChange={(event) => {
+                      setTotpCode(event.target.value)
+                      setLoginError("")
+                    }}
+                    placeholder="123456"
+                    required
+                  />
+                </FieldGroup>
+                {loginError ? <p className="text-sm text-destructive">{loginError}</p> : null}
+                <Button type="submit" className="w-full">
+                  確認してログイン
+                </Button>
+                <Button type="button" variant="outline" className="w-full" onClick={() => void handleTotpCancel()}>
+                  パスワード入力に戻る
+                </Button>
+              </form>
+            ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <FieldGroup label="メールアドレス">
                 <Input
@@ -618,6 +688,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                 </div>
               ) : null}
             </form>
+            )}
 
             {showTermsModal ? (
               <TermsOfServiceModal onClose={() => setShowTermsModal(false)} />

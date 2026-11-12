@@ -23,7 +23,7 @@ export interface AuthFormCardProps {
 
 export type AuthSubmitResult =
   | { ok: true }
-  | { ok: false; reason?: "unauthorized" | "generic"; message?: string }
+  | { ok: false; reason?: "unauthorized" | "generic" | "totp_required"; message?: string }
 
 export interface MockUser {
   id: string

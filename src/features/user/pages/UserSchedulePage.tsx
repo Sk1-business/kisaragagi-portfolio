@@ -11,6 +11,7 @@ import {
 } from "@/features/user/api/userReservationApi"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { useAvailableTimeSlots } from "@/features/user/hooks/useAvailableTimeSlots"
+import { expandTimeSlots } from "@/features/user/lib/expandTimeSlots"
 import { useCustomerBookingRules } from "@/features/user/hooks/useCustomerBookingRules"
 import { usePersistentReservationId } from "@/features/user/hooks/usePersistentReservationId"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
@@ -116,12 +117,17 @@ export function UserSchedulePage() {
     assignMode === "nomination" ? selectedTrainerId || undefined : undefined,
     isUpdateFlow && reservationId ? reservationId : undefined,
   )
-  const availableTimeSlots = useAvailableTimeSlots(
+  const rawTimeSlots = useAvailableTimeSlots(
     selectedDate,
     shopId,
     selectedMenu?.id,
     assignMode === "nomination" ? selectedTrainerId || undefined : undefined,
     isUpdateFlow && reservationId ? reservationId : undefined,
+  )
+  const slotIncrementMinutes = bookingRules.slotIncrementMinutes ?? 15
+  const availableTimeSlots = useMemo(
+    () => expandTimeSlots(rawTimeSlots, slotIncrementMinutes),
+    [rawTimeSlots, slotIncrementMinutes],
   )
 
   const earliestBookableDate = useMemo(() => {
@@ -375,7 +381,9 @@ export function UserSchedulePage() {
         <div className="flex items-center gap-2 border-b border-slate-100 px-6 py-4">
           <Clock className="size-4 text-muted-foreground" />
           <h3 className="font-bold text-foreground">
-            {selectedDate ? `${formatDateShortWithWeekday(selectedDate)} の予約可能な日時` : "日付を選択してください"}
+            {selectedDate
+              ? `${formatDateShortWithWeekday(selectedDate)} の予約可能な日時（${slotIncrementMinutes}分刻み）`
+              : "日付を選択してください"}
           </h3>
         </div>
         <div className="p-5">

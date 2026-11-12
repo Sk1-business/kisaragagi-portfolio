@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { CalendarClock, ScrollText, Store } from "lucide-react"
+import { CalendarClock, ScrollText, ShieldCheck, Store } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -30,6 +30,14 @@ const salonSettingItems = [
     description: "予約締切・キャンセル期限・受付可能日数など",
     to: ROUTES.backofficeSetupBookingRules,
     icon: ScrollText,
+    disabled: false,
+  },
+  {
+    key: "security",
+    title: "二要素認証",
+    description: "ログイン時に認証アプリのコードを要求します",
+    to: ROUTES.adminSecurity,
+    icon: ShieldCheck,
     disabled: false,
   },
 ] as const

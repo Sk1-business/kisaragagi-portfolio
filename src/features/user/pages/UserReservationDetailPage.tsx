@@ -18,6 +18,7 @@ import {
   type UserReservation,
 } from "@/features/user/api/userReservationApi"
 import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
+import { CancellationPolicyNotice } from "@/features/user/components/CancellationPolicyNotice"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 import { useUserReservation } from "@/features/user/hooks/useUserReservation"
@@ -202,6 +203,8 @@ export function UserReservationDetailPage() {
             </div>
           </div>
 
+          <CancellationPolicyNotice shopSlug={shopId} />
+
           {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
         </div>
       </UserSectionCard>
@@ -241,7 +244,8 @@ export function UserReservationDetailPage() {
       <UserConfirmDialog
         open={isCancelConfirmOpen}
         title="予約をキャンセルしますか？"
-        description="決済済みの場合は返金処理を行います。"
+        description="キャンセル料は下記のポリシーに従います。決済済みの場合は返金処理を行います。"
+        content={<CancellationPolicyNotice shopSlug={shopId} compact />}
         onCancel={() => {
           if (isCancelling) return
           setIsCancelConfirmOpen(false)

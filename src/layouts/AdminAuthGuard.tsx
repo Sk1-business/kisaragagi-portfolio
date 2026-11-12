@@ -7,6 +7,7 @@ import {
   fetchAdminMe,
   type AdminMeProfile,
 } from "@/features/auth/api/adminSessionApi"
+import { readAdminTotpPending } from "@/features/auth/lib/adminTotp"
 import { AdminProfileProvider } from "@/features/auth/context/AdminProfileContext"
 
 type GuardStatus = "checking" | "ok" | "error"
@@ -33,6 +34,10 @@ export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
   const runCheck = useCallback(
     async (signal?: AbortSignal) => {
       setStatus("checking")
+      if (readAdminTotpPending()) {
+        navigate(ROUTES.backofficeLogin, { replace: true })
+        return
+      }
       const result = await fetchAdminMe()
       if (signal?.aborted) return
       if (result.kind === "ok") {

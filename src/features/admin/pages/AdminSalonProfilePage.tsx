@@ -17,6 +17,11 @@ import {
   parseSalonAddress,
 } from "@/features/auth/lib/formatSalonAddress"
 import { cn } from "@/lib/utils"
+import {
+  formatCancellationPolicySummary,
+  parseCancellationPolicyText,
+  serializeCancellationPolicy,
+} from "@/features/user/lib/cancellationPolicyContent"
 
 const TEXTAREA_CLASS =
   "min-h-14 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm leading-snug outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -57,7 +62,7 @@ const PROFILE_FIELDS: ProfileFieldDef[] = [
     description: "予約ページ上部に表示します",
   },
   { key: "salonDescription", label: "サロン紹介文" },
-  { key: "cancelPolicy", label: "キャンセルポリシー文" },
+  { key: "cancelPolicy", label: "キャンセルポリシー", description: "料率と案内文。予約時とキャンセル時に表示します" },
   { key: "instagramUrl", label: "Instagram URL" },
   { key: "lineOfficialUrl", label: "LINE公式アカウントURL" },
   { key: "websiteUrl", label: "WebサイトURL" },
@@ -265,7 +270,7 @@ export function AdminSalonProfilePage() {
       case "salonDescription":
         return displayOptional(salonDescription)
       case "cancelPolicy":
-        return displayOptional(cancelPolicy)
+        return formatCancellationPolicySummary(cancelPolicy)
       case "instagramUrl":
         return displayOptional(instagramUrl)
       case "lineOfficialUrl":
@@ -349,20 +354,66 @@ export function AdminSalonProfilePage() {
             autoFocus
           />
         )
-      case "cancelPolicy":
+      case "cancelPolicy": {
+        const parsed = parseCancellationPolicyText(cancelPolicy)
+        const writePolicy = (patch: Partial<typeof parsed>) => {
+          setCancelPolicy(
+            serializeCancellationPolicy({
+              dayBeforePercent: patch.dayBeforePercent ?? parsed.dayBeforePercent,
+              sameDayPercent: patch.sameDayPercent ?? parsed.sameDayPercent,
+              noShowPercent: patch.noShowPercent ?? parsed.noShowPercent,
+              body: patch.body ?? parsed.body,
+            }),
+          )
+          setError("")
+        }
         return (
-          <textarea
-            id="cancel-policy"
-            className={`${TEXTAREA_CLASS} min-h-20`}
-            value={cancelPolicy}
-            onChange={(e) => {
-              setCancelPolicy(e.target.value)
-              setError("")
-            }}
-            disabled={saving}
-            autoFocus
-          />
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <label className="space-y-1 text-xs text-muted-foreground">
+                1日前（%）
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={parsed.dayBeforePercent}
+                  onChange={(event) => writePolicy({ dayBeforePercent: Number(event.target.value) })}
+                  disabled={saving}
+                />
+              </label>
+              <label className="space-y-1 text-xs text-muted-foreground">
+                当日（%）
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={parsed.sameDayPercent}
+                  onChange={(event) => writePolicy({ sameDayPercent: Number(event.target.value) })}
+                  disabled={saving}
+                />
+              </label>
+              <label className="space-y-1 text-xs text-muted-foreground">
+                無断（%）
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={parsed.noShowPercent}
+                  onChange={(event) => writePolicy({ noShowPercent: Number(event.target.value) })}
+                  disabled={saving}
+                />
+              </label>
+            </div>
+            <textarea
+              id="cancel-policy"
+              className={`${TEXTAREA_CLASS} min-h-28 whitespace-pre-wrap`}
+              value={parsed.body}
+              onChange={(event) => writePolicy({ body: event.target.value })}
+              disabled={saving}
+            />
+          </div>
         )
+      }
       case "instagramUrl":
         return (
           <Input
@@ -455,7 +506,7 @@ export function AdminSalonProfilePage() {
       `電話番号: ${displayRequired(phone)}`,
       `サロンメッセージ: ${displayOptional(salonMessage)}`,
       `サロン紹介文: ${displayOptional(salonDescription)}`,
-      `キャンセルポリシー文: ${displayOptional(cancelPolicy)}`,
+      `キャンセルポリシー: ${formatCancellationPolicySummary(cancelPolicy)}`,
       `Instagram URL: ${displayOptional(instagramUrl)}`,
       `LINE公式アカウントURL: ${displayOptional(lineOfficialUrl)}`,
       `WebサイトURL: ${displayOptional(websiteUrl)}`,

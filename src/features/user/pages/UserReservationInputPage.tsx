@@ -28,6 +28,8 @@ import {
   type UserReservationStripePaymentHandle,
 } from "@/features/user/components/UserReservationStripePayment"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
+import { BookingVisitConfirmation, composeBookingNote } from "@/features/user/components/BookingVisitConfirmation"
+import { CancellationPolicyNotice } from "@/features/user/components/CancellationPolicyNotice"
 import { USER_PAYMENT_METHODS } from "@/features/user/constants/paymentMethods"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 import {
@@ -104,6 +106,7 @@ export function UserReservationInputPage() {
   const [resolvedMenuLoading, setResolvedMenuLoading] = useState(true)
   const [stripeConnectReady, setStripeConnectReady] = useState<boolean | null>(null)
 
+  const [paymentTiming, setPaymentTiming] = useState<"prepaid" | "onsite">("prepaid")
   const [paymentMethod, setPaymentMethod] = useState<string>("credit")
   const [creditFlowError, setCreditFlowError] = useState("")
   const [lastName, setLastName] = useState("")
@@ -112,6 +115,9 @@ export function UserReservationInputPage() {
   const [phoneSegments, setPhoneSegments] = useState<PhoneSegments>(["", "", ""])
   const [phoneError, setPhoneError] = useState("")
   const [note, setNote] = useState("")
+  const [agreedToNotices, setAgreedToNotices] = useState(false)
+  const [reviewChoice, setReviewChoice] = useState<"" | "review" | "no_review">("")
+  const [reviewNote, setReviewNote] = useState("")
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
   const [confirmDialogStep, setConfirmDialogStep] = useState<ConfirmDialogStep>("summary")
   const [reviewData, setReviewData] = useState<ReservationInputData | null>(null)
@@ -141,6 +147,7 @@ export function UserReservationInputPage() {
 
   const showInlineStripe =
     !isUpdateFlow &&
+    paymentTiming === "prepaid" &&
     paymentMethod === "credit" &&
     !isZeroPriceMenu &&
     creditPaymentAvailable
@@ -280,6 +287,11 @@ export function UserReservationInputPage() {
     const phone = joinPhoneSegments(phoneSegments)
     const isNomination = mode === "nomination"
     const selectedMenuName = isNomination ? preferredMenuName || resolvedMenu.name : resolvedMenu.name
+    const resolvedPaymentMethod = zeroPrice
+      ? "free"
+      : paymentTiming === "onsite"
+        ? "onsite"
+        : paymentMethod
     return {
       ...(isUpdateFlow && reservationId ? { reservationId } : {}),
       ...(returnSearch ? { returnSearch } : {}),
@@ -295,8 +307,14 @@ export function UserReservationInputPage() {
       fullName,
       email,
       phone,
-      note,
-      paymentMethod: zeroPrice ? "free" : paymentMethod,
+      note: isUpdateFlow
+        ? note
+        : composeBookingNote({
+            request: note,
+            reviewChoice: reviewChoice === "no_review" ? "no_review" : "review",
+            reviewNote,
+          }),
+      paymentMethod: resolvedPaymentMethod,
       cardNumber: "",
       cardExpiry: "",
       cardCvc: "",
@@ -314,6 +332,15 @@ export function UserReservationInputPage() {
     }
     setPhoneError("")
     setCreditFlowError("")
+
+    if (!isUpdateFlow && !agreedToNotices) {
+      setCreditFlowError("来店時の注意事項を確認し、チェックを入れてください。")
+      return
+    }
+    if (!isUpdateFlow && !reviewChoice) {
+      setCreditFlowError("サロンからの質問に回答してください。")
+      return
+    }
 
     if (!resolvedMenu) {
       setCreditFlowError("メニュー情報を取得できませんでした。しばらくしてから再度お試しください。")
@@ -444,7 +471,9 @@ export function UserReservationInputPage() {
 
   const reviewDisplayPriceText = useMemo(() => {
     if (!reviewData) return "未定"
-    if (reviewData.paymentMethod === "free" || skipCardPaymentInline) return "現地で決済"
+    if (reviewData.paymentMethod === "free" || reviewData.paymentMethod === "onsite" || skipCardPaymentInline) {
+      return reviewData.paymentMethod === "onsite" ? "当日払い" : "現地で決済"
+    }
     if (stripeAmountYen > 0) return `¥${stripeAmountYen.toLocaleString()}`
     if (reviewData.menuPrice != null) return `¥${reviewData.menuPrice.toLocaleString()}`
     return "未定"
@@ -637,11 +666,28 @@ export function UserReservationInputPage() {
             </div>
           </div>
 
+          {!isUpdateFlow ? (
+            <>
+              <div className="border-b border-slate-100 px-6 py-5">
+                <CancellationPolicyNotice shopSlug={shopId} />
+              </div>
+              <BookingVisitConfirmation
+                shopSlug={shopId}
+                agreed={agreedToNotices}
+                onAgreedChange={setAgreedToNotices}
+                reviewChoice={reviewChoice}
+                onReviewChoiceChange={setReviewChoice}
+                reviewNote={reviewNote}
+                onReviewNoteChange={setReviewNote}
+              />
+            </>
+          ) : null}
+
           <div className="space-y-4 border-b border-slate-100 px-6 py-5">
             <div className="flex items-center gap-2">
               <MessageSquare className="size-4 text-muted-foreground" />
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                {"ご要望・備考"}
+                {"ご要望・アレルギー"}
               </p>
             </div>
             <textarea
@@ -659,47 +705,84 @@ export function UserReservationInputPage() {
               <div className="flex items-center gap-2">
                 <CreditCard className="size-4 text-muted-foreground" />
                 <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  {"決済方法"}
+                  {"支払い時期"}
                 </p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                {USER_PAYMENT_METHODS.map((method) => {
-                  const isActive = paymentMethod === method.id
-                  const isDisabled = method.id === "credit" && !creditPaymentAvailable
-                  const Icon = method.icon
-                  return (
-                    <button
-                      key={method.id}
-                      type="button"
-                      onClick={() => {
-                        if (isDisabled) return
-                        setPaymentMethod(method.id)
-                      }}
-                      disabled={isDisabled}
-                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition ${
-                        isActive
-                          ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                          : isDisabled
-                            ? "cursor-not-allowed border-slate-200 bg-slate-50 text-muted-foreground opacity-70"
-                            : "border-slate-200 bg-white text-foreground hover:bg-slate-50"
-                      }`}
-                    >
-                      <Icon className="size-4" />
-                      {method.label}
-                    </button>
-                  )
-                })}
+                <button
+                  type="button"
+                  onClick={() => setPaymentTiming("prepaid")}
+                  className={`rounded-xl border px-4 py-3 text-left text-sm font-medium transition ${
+                    paymentTiming === "prepaid"
+                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                      : "border-slate-200 bg-white text-foreground hover:bg-slate-50"
+                  }`}
+                >
+                  前払い
+                  <span className={`mt-1 block text-xs font-normal ${paymentTiming === "prepaid" ? "text-white/70" : "text-muted-foreground"}`}>
+                    クレジットカードまたはPayPay
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentTiming("onsite")}
+                  className={`rounded-xl border px-4 py-3 text-left text-sm font-medium transition ${
+                    paymentTiming === "onsite"
+                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                      : "border-slate-200 bg-white text-foreground hover:bg-slate-50"
+                  }`}
+                >
+                  当日払い
+                  <span className={`mt-1 block text-xs font-normal ${paymentTiming === "onsite" ? "text-white/70" : "text-muted-foreground"}`}>
+                    お店でお支払い
+                  </span>
+                </button>
               </div>
+              {paymentTiming === "prepaid" ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {USER_PAYMENT_METHODS.map((method) => {
+                    const isActive = paymentMethod === method.id
+                    const isDisabled = method.id === "credit" && !creditPaymentAvailable
+                    const Icon = method.icon
+                    return (
+                      <button
+                        key={method.id}
+                        type="button"
+                        onClick={() => {
+                          if (isDisabled) return
+                          setPaymentMethod(method.id)
+                        }}
+                        disabled={isDisabled}
+                        className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition ${
+                          isActive
+                            ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                            : isDisabled
+                              ? "cursor-not-allowed border-slate-200 bg-slate-50 text-muted-foreground opacity-70"
+                              : "border-slate-200 bg-white text-foreground hover:bg-slate-50"
+                        }`}
+                      >
+                        <Icon className="size-4" />
+                        {method.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">当日払いは、お店でお支払い方法を選んでいただきます。</p>
+              )}
 
-              {paymentMethod === "credit" && creditFlowError ? (
+              {paymentTiming === "prepaid" && paymentMethod === "credit" && creditFlowError ? (
                 <p className="text-xs text-destructive">{creditFlowError}</p>
               ) : null}
-              {!creditPaymentAvailable ? (
+              {paymentTiming === "prepaid" && !creditPaymentAvailable ? (
                 <p className="text-xs text-muted-foreground">
                   この店舗では現在クレジットカード決済を利用できません。
                 </p>
               ) : null}
             </div>
+          ) : null}
+          {creditFlowError && (isUpdateFlow || isZeroPriceMenu || paymentTiming === "onsite" || paymentMethod !== "credit") ? (
+            <p className="px-6 text-sm text-destructive">{creditFlowError}</p>
           ) : null}
           </form>
 
@@ -753,9 +836,11 @@ export function UserReservationInputPage() {
                   <p className="text-[11px] text-muted-foreground">決済方法</p>
                   <p className="mt-1 text-sm font-semibold text-foreground">
                     {reviewData.paymentMethod === "credit"
-                      ? "クレジットカード"
+                      ? "前払い（クレジットカード）"
                       : reviewData.paymentMethod === "paypay"
-                        ? "PayPay"
+                        ? "前払い（PayPay）"
+                        : reviewData.paymentMethod === "onsite"
+                          ? "当日払い"
                         : reviewData.paymentMethod === "free"
                           ? "現地で決済"
                           : reviewData.paymentMethod || "未選択"}
