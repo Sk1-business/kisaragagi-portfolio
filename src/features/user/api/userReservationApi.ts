@@ -30,6 +30,7 @@ export interface UserReservation {
   /** payments.status */
   paymentRecordStatus?: string | null
   paymentPaidAt?: string | null
+  source?: string | null
 }
 
 export interface CancellationPolicy {
@@ -138,6 +139,7 @@ interface ReservationDetailResponse {
   payment_record_status?: string | null
   payment_paid_at?: string | null
   confirmation_token?: string | null
+  source?: string | null
 }
 
 interface AvailabilityResponse {
@@ -336,6 +338,7 @@ function toReservation(
     paymentCurrency: detail.payment_currency ?? null,
     paymentRecordStatus: detail.payment_record_status ?? null,
     paymentPaidAt: detail.payment_paid_at ?? null,
+    source: detail.source ?? null,
   }
 }
 
@@ -888,7 +891,7 @@ export async function createUserReservation(
     return { ok: false, error: "店舗情報が見つかりません。" }
   }
   if (payload.mode === "nomination" && !payload.trainerId?.trim()) {
-    return { ok: false, error: "指名予約ではトレーナーを選択してください。" }
+    return { ok: false, error: "指名予約ではスタイリストを選択してください。" }
   }
   try {
     const menu = await resolveMenuForNewReservation(resolvedShopSlug, {

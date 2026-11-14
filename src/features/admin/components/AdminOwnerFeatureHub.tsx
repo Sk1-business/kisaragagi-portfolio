@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { CalendarRange, ContactRound, CreditCard, Store, UtensilsCrossed, Users } from "lucide-react"
+import { CalendarRange, CalendarX2, ContactRound, CreditCard, Scissors, Store, Users } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,7 +28,7 @@ const hubItems = [
     title: "メニュー管理",
     description: "メニューの新規登録・編集・削除",
     to: ROUTES.adminMenus,
-    icon: UtensilsCrossed,
+    icon: Scissors,
     disabled: false,
   },
   {
@@ -37,6 +37,14 @@ const hubItems = [
     description: "全スタッフのシフト確認・編集",
     to: ROUTES.adminShiftCalendar,
     icon: CalendarRange,
+    disabled: false,
+  },
+  {
+    key: "cancelled",
+    title: "キャンセル一覧",
+    description: "キャンセル済みの予約を確認し、空きがあれば復活できます",
+    to: ROUTES.adminCancelled,
+    icon: CalendarX2,
     disabled: false,
   },
   {

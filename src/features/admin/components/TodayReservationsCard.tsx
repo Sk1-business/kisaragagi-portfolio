@@ -12,6 +12,7 @@ import {
   formatDateJaInTimeZone,
 } from "@/features/admin/lib/calendarUtils"
 import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
+import { reservationChannelLabel } from "@/features/admin/lib/reservationChannel"
 
 interface TodayReservationsCardProps {
   reservations: Reservation[]
@@ -82,7 +83,14 @@ export function TodayReservationsCard({
                   }}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium">{r.customerName}</p>
+                    <p className="font-medium">
+                      {r.customerName}
+                      {reservationChannelLabel(r.source) ? (
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          {reservationChannelLabel(r.source)}
+                        </span>
+                      ) : null}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {formatTime(r.startAt)} ～ {formatTime(r.endAt)}
                       <span className="ml-2 inline-flex items-center gap-1">

@@ -31,6 +31,7 @@ import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { BookingVisitConfirmation, composeBookingNote } from "@/features/user/components/BookingVisitConfirmation"
 import { CancellationPolicyNotice } from "@/features/user/components/CancellationPolicyNotice"
 import { USER_PAYMENT_METHODS } from "@/features/user/constants/paymentMethods"
+import { isDemoMode } from "@/demo/demoMode"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 import {
   clearReservationUpdateIntent,
@@ -106,7 +107,8 @@ export function UserReservationInputPage() {
   const [resolvedMenuLoading, setResolvedMenuLoading] = useState(true)
   const [stripeConnectReady, setStripeConnectReady] = useState<boolean | null>(null)
 
-  const [paymentTiming, setPaymentTiming] = useState<"prepaid" | "onsite">("prepaid")
+  const demoMode = isDemoMode()
+  const [paymentTiming, setPaymentTiming] = useState<"prepaid" | "onsite">(demoMode ? "onsite" : "prepaid")
   const [paymentMethod, setPaymentMethod] = useState<string>("credit")
   const [creditFlowError, setCreditFlowError] = useState("")
   const [lastName, setLastName] = useState("")
@@ -532,7 +534,7 @@ export function UserReservationInputPage() {
                   <UserRound className="size-5 text-slate-400" />
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">{"指名トレーナー"}</p>
+                  <p className="text-[11px] text-muted-foreground">{"指名スタイリスト"}</p>
                   <p className="text-sm font-semibold text-foreground">
                     {(selectedTrainer?.name ?? trainerName?.trim()) || "一覧の読み込み中"}
                   </p>
@@ -708,7 +710,11 @@ export function UserReservationInputPage() {
                   {"支払い時期"}
                 </p>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
+              {demoMode ? (
+                <p className="text-xs text-muted-foreground">デモでは当日払い（店頭会計）で予約が確定します。</p>
+              ) : null}
+              <div className={demoMode ? "grid gap-2" : "grid gap-2 sm:grid-cols-2"}>
+                {demoMode ? null : (
                 <button
                   type="button"
                   onClick={() => setPaymentTiming("prepaid")}
@@ -723,6 +729,7 @@ export function UserReservationInputPage() {
                     クレジットカードまたはPayPay
                   </span>
                 </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setPaymentTiming("onsite")}

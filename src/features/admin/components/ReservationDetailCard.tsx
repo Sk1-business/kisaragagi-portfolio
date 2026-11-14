@@ -22,6 +22,7 @@ import {
   resolveReservationStaffIdForUi,
 } from "@/features/admin/api/staffApi"
 import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
+import { reservationChannelLabel } from "@/features/admin/lib/reservationChannel"
 import {
   hasConfirmedOverlapForAssignee,
   reservationIntervalsOverlap,
@@ -445,6 +446,11 @@ export function ReservationDetailCard({
           <dt className="py-2 font-medium text-foreground">お客様名</dt>
           <dd className={`${detailValueClass} text-foreground`}>
             {reservation.customerName}
+          </dd>
+          <dd aria-hidden="true" />
+          <dt className="py-2 font-medium text-foreground">経路</dt>
+          <dd className={`${detailValueClass} text-foreground`}>
+            {reservationChannelLabel(reservation.source) ?? "—"}
           </dd>
           <dd aria-hidden="true" />
           <dt className="py-2 font-medium text-foreground">メニュー</dt>

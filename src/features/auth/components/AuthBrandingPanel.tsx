@@ -1,4 +1,4 @@
-import { Dumbbell } from "lucide-react"
+import { Scissors } from "lucide-react"
 
 type AuthBrandingPanelProps = {
   /** 例: 「管理者・スタッフ用」 */
@@ -28,7 +28,7 @@ export function AuthBrandingPanel({
       <div className="relative z-10 px-12 pt-12">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-lg border border-white/20">
-            <Dumbbell className="size-5 text-white" />
+            <Scissors className="size-5 text-white" />
           </div>
           <span className="text-sm font-medium tracking-widest text-white/60">予約ポータル</span>
         </div>
@@ -39,7 +39,7 @@ export function AuthBrandingPanel({
           {audienceTitle}
         </p>
         <h1 className="mt-4 text-5xl font-bold leading-[1.1] tracking-tight text-white">
-          快適な予約体験を
+          美容室の予約を
           <br />
           <span className="text-white/50">あなたに</span>
         </h1>
@@ -58,7 +58,7 @@ export function AuthMobileBrandingHeader() {
   return (
     <div className="flex items-center gap-3 border-b border-neutral-100 px-6 py-4 lg:hidden">
       <div className="flex size-8 items-center justify-center rounded-lg bg-black">
-        <Dumbbell className="size-4 text-white" />
+        <Scissors className="size-4 text-white" />
       </div>
       <span className="text-xs font-medium tracking-widest text-neutral-400">予約ポータル</span>
     </div>

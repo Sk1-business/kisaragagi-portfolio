@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -6,16 +6,45 @@ import { ROUTES } from "@/constants/routes"
 import { useAdminReservations } from "@/features/admin/context/AdminReservationsContext"
 import { useStaff } from "@/features/admin/hooks/useStaff"
 import { getReservationAssigneeDisplayName } from "@/features/admin/api/staffApi"
+import {
+  fetchAllReservationsForAdmin,
+  patchAdminReservationStatus,
+} from "@/features/admin/api/reservationsApi"
 import { formatTime, formatDateJa } from "@/features/admin/lib/calendarUtils"
+import { reservationChannelLabel } from "@/features/admin/lib/reservationChannel"
 import { hasConfirmedOverlapForAssignee } from "@/features/admin/lib/reservationOverlap"
 import type { Reservation } from "@/features/admin/types/reservation"
 
 export function AdminCancelledListPage() {
-  const { cancelledReservations, reservations, loading, updateReservationStatus } =
-    useAdminReservations()
-  const { staffList } = useStaff()
+  const { replaceReservations } = useAdminReservations()
+  const { staffList, loading: staffLoading } = useStaff()
+  const [reservations, setReservations] = useState<Reservation[]>([])
+  const [loading, setLoading] = useState(true)
   const [restoreCandidate, setRestoreCandidate] = useState<Reservation | null>(null)
   const [showOverlapError, setShowOverlapError] = useState(false)
+
+  const load = useCallback(async () => {
+    const list = await fetchAllReservationsForAdmin(staffList)
+    setReservations(list)
+    replaceReservations(list)
+  }, [replaceReservations, staffList])
+
+  useEffect(() => {
+    if (staffLoading) return
+    let active = true
+    void load()
+      .catch(() => {
+        if (active) setReservations([])
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [load, staffLoading])
+
+  const cancelledReservations = reservations.filter((reservation) => reservation.status === "CANCELLED")
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">読み込み中...</p>
@@ -38,7 +67,7 @@ export function AdminCancelledListPage() {
       setShowOverlapError(true)
       return
     }
-    updateReservationStatus(r.id, "CONFIRMED")
+    void patchAdminReservationStatus(r.id, "BOOKED").then(() => load())
   }
 
   return (
@@ -75,7 +104,14 @@ export function AdminCancelledListPage() {
                         <td className="py-2 pr-4">
                           {formatTime(r.startAt)} ～ {formatTime(r.endAt)}
                         </td>
-                        <td className="py-2 pr-4">{r.customerName}</td>
+                        <td className="py-2 pr-4">
+                          {r.customerName}
+                          {reservationChannelLabel(r.source) ? (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {reservationChannelLabel(r.source)}
+                            </span>
+                          ) : null}
+                        </td>
                         <td className="py-2 pr-4">
                           {getReservationAssigneeDisplayName(r, staffList)}
                         </td>

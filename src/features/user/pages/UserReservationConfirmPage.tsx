@@ -26,6 +26,7 @@ import {
 import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
 import { USER_PAYMENT_METHODS } from "@/features/user/constants/paymentMethods"
+import { isDemoMode } from "@/demo/demoMode"
 import { buildPathWithShopId, useShopId } from "@/features/user/hooks/useShopId"
 import {
   clearReservationUpdateIntent,
@@ -99,7 +100,8 @@ export function UserReservationConfirmPage() {
     isReservationUpdate ? effectiveReservationId : "",
     shopId,
   )
-  const isCreditPayment = input.paymentMethod === "credit" && !isReservationUpdate
+  const demoMode = isDemoMode()
+  const isCreditPayment = !demoMode && input.paymentMethod === "credit" && !isReservationUpdate
   const [isUpdateCompleteOpen, setIsUpdateCompleteOpen] = useState(false)
 
   const menuPrice = input.menuPrice ?? null
@@ -231,7 +233,17 @@ export function UserReservationConfirmPage() {
     setSubmitError("")
     setIsSubmitting(true)
 
-    if (input.paymentMethod === "credit") {
+    if (demoMode) {
+      const result = await createUserReservation({
+        ...commonPayload,
+        paymentMethod: "onsite",
+      })
+      if (!result.ok) {
+        setSubmitError(result.error)
+        setIsSubmitting(false)
+        return
+      }
+    } else if (input.paymentMethod === "credit") {
       if (skipCardPayment) {
         const result = await createUserReservation({
           ...commonPayload,
@@ -428,7 +440,7 @@ export function UserReservationConfirmPage() {
                     <UserRound className="size-5 text-slate-400" />
                   </div>
                   <div>
-                    <p className="text-[11px] text-muted-foreground">{"指名トレーナー"}</p>
+                    <p className="text-[11px] text-muted-foreground">{"指名スタイリスト"}</p>
                     <p className="text-sm font-semibold text-foreground">
                       {input.trainerName?.trim() || "未入力"}
                     </p>

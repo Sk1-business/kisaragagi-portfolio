@@ -262,7 +262,7 @@ export function UserNominationPage() {
                   >
                     {isCurrentTrainer ? (
                       <div className="absolute left-3 top-3 z-10 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white shadow">
-                        変更前トレーナー
+                        変更前のスタイリスト
                       </div>
                     ) : null}
                     <div className="flex flex-col items-center px-5 pb-4 pt-6">

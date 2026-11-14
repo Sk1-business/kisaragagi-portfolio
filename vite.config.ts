@@ -80,7 +80,9 @@ export default defineConfig(({ mode }) => {
     },
   } as const
 
+  const base = env.VITE_BASE_PATH?.trim() || "/"
   return {
+    base,
     plugins: [react(), tailwindcss(), reservationLogFileWriterPlugin()],
     resolve: {
       alias: {

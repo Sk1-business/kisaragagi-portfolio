@@ -51,8 +51,8 @@ export function UserReservationChangeModePage() {
                 </div>
                 {reservation.mode === "nomination" ? (
                   <div className="flex items-start gap-3">
-                    <p className="w-20 shrink-0 font-semibold">トレーナー</p>
-                    <p>{reservation.trainerName ?? "トレーナー未設定"}</p>
+                    <p className="w-20 shrink-0 font-semibold">スタイリスト</p>
+                    <p>{reservation.trainerName ?? "スタイリスト未設定"}</p>
                   </div>
                 ) : null}
               </div>
@@ -62,7 +62,7 @@ export function UserReservationChangeModePage() {
           </div>
 
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            変更できるのは日時のみです。指名トレーナーとメニューは変更できません。
+            変更できるのは日時のみです。指名スタイリストとメニューは変更できません。
           </div>
           <Button asChild size="lg" className="w-full rounded-xl">
             <Link

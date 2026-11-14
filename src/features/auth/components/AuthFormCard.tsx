@@ -6,13 +6,15 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react"
-import { ArrowRight, CheckCircle2, ChevronDown, Dumbbell, Eye, EyeOff, X } from "lucide-react"
+import { ArrowRight, CheckCircle2, ChevronDown, Eye, EyeOff, Scissors, X } from "lucide-react"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
+import { DEMO_CUSTOMER, DEMO_OWNER } from "@/demo/demoAccounts"
+import { isDemoMode } from "@/demo/demoMode"
 import { postAdminLogout } from "@/features/auth/api/adminLoginApi"
 import {
   clearAdminTotpPending,
@@ -317,7 +319,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
         <div className="relative z-10 px-12 pt-12">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-lg border border-white/20">
-              <Dumbbell className="size-5 text-white" />
+              <Scissors className="size-5 text-white" />
             </div>
             <span className="text-sm font-medium tracking-widest text-white/60">予約ポータル</span>
           </div>
@@ -330,7 +332,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
           <h1
             className="mt-4 text-5xl font-bold leading-[1.1] tracking-tight text-white"
           >
-            快適な予約体験を
+            美容室の予約を
             <br />
             <span className="text-white/50">あなたに</span>
           </h1>
@@ -349,7 +351,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
         {/* Mobile header */}
         <div className="flex items-center gap-3 border-b border-neutral-100 px-6 py-4 lg:hidden">
           <div className="flex size-8 items-center justify-center rounded-lg bg-black">
-            <Dumbbell className="size-4 text-white" />
+            <Scissors className="size-4 text-white" />
           </div>
           <span className="text-xs font-medium tracking-widest text-neutral-400">予約ポータル</span>
         </div>
@@ -715,7 +717,16 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               </Link>
             </div>
 
-            {isDev ? (
+            {isDemoMode() ? (
+              <div className="mt-6 rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-3">
+                <p className="text-sm font-semibold text-neutral-800">デモアカウント</p>
+                <div className="mt-2 space-y-2 text-xs text-neutral-600">
+                  <p>オーナー {DEMO_OWNER.email} / {DEMO_OWNER.password}</p>
+                  <p>お客様 {DEMO_CUSTOMER.email} / {DEMO_CUSTOMER.password}</p>
+                  <p>予約照会の確認コードは 000000 です。</p>
+                </div>
+              </div>
+            ) : isDev ? (
               <div className="mt-6 rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-3">
                 <p className="text-sm font-semibold text-neutral-800">開発用テストアカウント</p>
                 <div className="mt-2 space-y-2">

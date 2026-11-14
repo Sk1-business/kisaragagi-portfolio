@@ -515,7 +515,7 @@ export function AdminStaffPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           カレンダー・予約の担当表示に使うスタッフを管理します。メニュー一覧は GET
-          /api/admin/menus、登録・更新はトレーナー API と連携します。
+          メニューとスタイリストの対応をここで登録します。
         </p>
         <Button type="button" size="sm" className="rounded-md" onClick={openAdd}>
           <Plus className="mr-1 size-4" />

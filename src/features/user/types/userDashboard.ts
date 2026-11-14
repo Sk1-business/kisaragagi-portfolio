@@ -6,4 +6,6 @@ export interface UserDashboardSummary {
   shopAddress: string
   businessHours: string
   shopImageUrl: string
+  hotpepperUrl?: string
+  coupons?: { title: string; description: string; priceYen: number }[]
 }

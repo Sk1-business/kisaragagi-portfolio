@@ -1,5 +1,8 @@
-import { BadgeAlert, Dumbbell, ShieldCheck, UserRound } from "lucide-react"
+import { Scissors, ShieldCheck, UserRound } from "lucide-react"
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom"
+
+import { DEMO_CUSTOMER, DEMO_OWNER, DEMO_SALON_SLUG } from "@/demo/demoAccounts"
+import { routerBasename } from "@/demo/demoMode"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +20,7 @@ import {
   CustomerSignupPage,
 } from "@/features/auth/pages"
 import { AdminCalendarPage } from "@/features/admin/pages/AdminCalendarPage"
+import { AdminCancelledListPage } from "@/features/admin/pages/AdminCancelledListPage"
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage"
 import { AdminNewReservationConfirmPage } from "@/features/admin/pages/AdminNewReservationConfirmPage"
 import { AdminNewReservationPage } from "@/features/admin/pages/AdminNewReservationPage"
@@ -48,17 +52,22 @@ function LandingPage() {
     <main className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col justify-center px-4 py-12 sm:px-6">
       <div className="mb-8 flex items-center gap-3">
         <div className="rounded-lg border border-border bg-card p-2">
-          <Dumbbell className="size-5 text-foreground" />
+          <Scissors className="size-5 text-foreground" />
         </div>
         <div>
-          <p className="text-sm text-muted-foreground">予約管理SaaS</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Effortless is Stylish</h1>
+          <p className="text-sm text-muted-foreground">美容室の予約</p>
+          <h1 className="text-2xl font-semibold tracking-tight">キサラギ美容室</h1>
         </div>
       </div>
 
-      <div className="mb-6 flex items-center gap-2 rounded-lg bg-muted px-4 py-3">
-        <BadgeAlert className="size-5 shrink-0" />
-        <p className="text-xl font-bold tracking-tight">開発用のページです。</p>
+      <div className="mb-6 rounded-lg border border-border bg-muted px-4 py-3 text-sm leading-relaxed">
+        <p>ブラウザだけで予約と管理を試せます。決済は当日払いです。</p>
+        <p className="mt-2">
+          オーナー {DEMO_OWNER.email} / {DEMO_OWNER.password}
+        </p>
+        <p>
+          お客様 {DEMO_CUSTOMER.email} / {DEMO_CUSTOMER.password}
+        </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -66,17 +75,16 @@ function LandingPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <UserRound className="size-4" />
-              予約者用
+              予約する
             </CardTitle>
-            <CardDescription>開発用: 予約者向け認証ページに遷移します</CardDescription>
+            <CardDescription>カット・カラー・パーマを指名して予約します</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-
             <Button asChild className="w-full rounded-md">
-              <Link to="/s/sample-salon-2026">予約ページへ</Link>
+              <Link to={`/s/${DEMO_SALON_SLUG}`}>予約ページへ</Link>
             </Button>
             <Button asChild variant="outline" className="w-full rounded-md">
-              <Link to="/s/sample-salon-2026">予約者新規登録へ</Link>
+              <Link to={`/user/reservation/lookup?shopId=${DEMO_SALON_SLUG}`}>予約の確認へ</Link>
             </Button>
           </CardContent>
         </Card>
@@ -85,16 +93,16 @@ function LandingPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <ShieldCheck className="size-4" />
-              管理者・スタッフ用
+              サロン管理
             </CardTitle>
-            <CardDescription>開発用: 管理者・スタッフ向け認証ページに遷移します</CardDescription>
+            <CardDescription>予約台帳、スタイリスト、ホットペッパー経由の取り込み</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <Button asChild className="w-full rounded-md">
-              <Link to={ROUTES.backofficeLogin}>管理者・スタッフログインへ</Link>
+              <Link to={ROUTES.backofficeLogin}>管理画面ログインへ</Link>
             </Button>
             <Button asChild variant="outline" className="w-full rounded-md">
-              <Link to={ROUTES.backofficeSignup}>管理者・スタッフ新規登録へ</Link>
+              <Link to={ROUTES.backofficeSignup}>サロンを新規登録</Link>
             </Button>
           </CardContent>
         </Card>
@@ -105,7 +113,7 @@ function LandingPage() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={routerBasename()}>
       <Routes>
         <Route path={ROUTES.landing} element={<LandingPage />} />
 
@@ -155,10 +163,7 @@ function App() {
             path={ROUTES.backofficeSetupBookingRules}
             element={<BackofficeSetupBookingRulesPage />}
           />
-          <Route
-            path={ROUTES.adminCancelled}
-            element={<Navigate to={ROUTES.adminHome} replace />}
-          />
+          <Route path={ROUTES.adminCancelled} element={<AdminCancelledListPage />} />
           <Route
             path={ROUTES.adminStaff}
             element={

@@ -1,4 +1,4 @@
-import { ArrowLeft, Dumbbell } from "lucide-react"
+import { ArrowLeft, Scissors } from "lucide-react"
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ function getPageTitle(pathname: string): string {
   if (pathname === ROUTES.userReservationLookup) return "予約照会"
   if (pathname === ROUTES.userReservationList) return "予約照会"
   if (pathname.startsWith("/user/reservations/")) return "予約詳細"
-  if (pathname === ROUTES.userReservationNomination) return "トレーナー・メニュー選択"
+  if (pathname === ROUTES.userReservationNomination) return "スタイリスト・メニュー選択"
   if (pathname === ROUTES.userReservationChangeMode) return "予約変更"
   if (pathname === ROUTES.userReservationSchedule) return "予約内容入力"
   if (pathname === ROUTES.userReservationInput) return "予約者情報入力"
@@ -55,7 +55,7 @@ export function UserLayout() {
               </Button>
             ) : null}
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-slate-900">
-              <Dumbbell className="size-4 text-white" />
+              <Scissors className="size-4 text-white" />
             </div>
           </div>
           <Link

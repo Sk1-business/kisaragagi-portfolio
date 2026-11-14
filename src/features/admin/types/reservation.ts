@@ -17,6 +17,8 @@ export interface Reservation {
   trainerId?: string
   /** API の trainer_name（スタッフ一覧に無い場合の色分け・絞り込み用） */
   trainerName?: string
+  /** web / phone / hotpepper */
+  source?: string
   memo?: string
   paymentId?: string
   paymentProvider?: string

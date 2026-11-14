@@ -1,9 +1,9 @@
-import { fetchSalonPage } from "@/features/user/api/userSalonApi"
+import { fetchSalonPage, type SalonPageResponse } from "@/features/user/api/userSalonApi"
 import type { UserDashboardSummary } from "@/features/user/types/userDashboard"
 
 const DEFAULT_MESSAGE = "概要情報は未設定です"
 const DEFAULT_IMAGE_URL =
-  "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1400&q=80"
+  "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=1400&q=80"
 const WEEKDAY_ORDER = ["月", "火", "水", "木", "金", "土", "日"] as const
 
 function simplifyBusinessHours(summary?: string | null): string {
@@ -50,6 +50,10 @@ export async function fetchUserDashboardSummary(shopId?: string): Promise<UserDa
   const page = await fetchSalonPage(shopId)
   const firstMenu = page.menus[0]
   const shopOverview = page.description?.trim() || DEFAULT_MESSAGE
+  const extra = page as SalonPageResponse & {
+    hotpepper_url?: string | null
+    coupons?: { title?: string; description?: string; price_yen?: number }[]
+  }
   return {
     title: "予約ダッシュボード",
     message: shopOverview,
@@ -58,5 +62,13 @@ export async function fetchUserDashboardSummary(shopId?: string): Promise<UserDa
     shopAddress: page.address?.trim() || "住所情報は未設定です",
     businessHours: simplifyBusinessHours(page.business_hours_summary),
     shopImageUrl: firstMenu?.image_url ?? DEFAULT_IMAGE_URL,
+    hotpepperUrl: extra.hotpepper_url?.trim() || undefined,
+    coupons: (extra.coupons ?? [])
+      .filter((coupon) => coupon.title?.trim())
+      .map((coupon) => ({
+        title: coupon.title?.trim() ?? "",
+        description: coupon.description?.trim() ?? "",
+        priceYen: Number(coupon.price_yen ?? 0),
+      })),
   }
 }

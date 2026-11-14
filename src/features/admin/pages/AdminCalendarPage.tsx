@@ -351,7 +351,7 @@ export function AdminCalendarPage() {
     <div className="space-y-4">
       <Card className="rounded-lg border-border shadow-xs">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">トレーナーで絞り込み</CardTitle>
+          <CardTitle className="text-base">スタイリストで絞り込み</CardTitle>
           <p className="text-sm text-muted-foreground">
             店舗に登録されているスタッフ（trainers）の名前から選びます。管理者（admin）アカウントは含みません。複数選べます。未選択のときは店舗の予約をすべて表示します。
           </p>
@@ -391,7 +391,7 @@ export function AdminCalendarPage() {
                 </Button>
               )}
               {trainerNameList.length === 0 ? (
-                <p className="text-sm text-muted-foreground">登録されているトレーナーがありません。</p>
+                <p className="text-sm text-muted-foreground">登録されているスタイリストがありません。</p>
               ) : null}
             </div>
           )}

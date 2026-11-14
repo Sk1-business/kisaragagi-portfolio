@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react"
-import { useLocation, useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Clock, MailCheck } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
+import { DEMO_SIGNUP_TOKEN_KEY } from "@/demo/demoAccounts"
+import { isDemoMode } from "@/demo/demoMode"
 
 type LocationState = {
   email?: string
@@ -94,6 +96,20 @@ export function BackofficeSignupVerifySentPage() {
                 </span>
               </p>
             )}
+          </div>
+        ) : null}
+
+        {isDemoMode() ? (
+          <div className="mt-5">
+            <Button asChild type="button">
+              <Link
+                to={`${ROUTES.backofficeSignupVerify}?token=${encodeURIComponent(
+                  sessionStorage.getItem(DEMO_SIGNUP_TOKEN_KEY) ?? "",
+                )}`}
+              >
+                デモではこちらで認証を完了
+              </Link>
+            </Button>
           </div>
         ) : null}
 

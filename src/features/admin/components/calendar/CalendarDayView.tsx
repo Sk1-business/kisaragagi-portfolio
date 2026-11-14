@@ -11,6 +11,7 @@ import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
 import { layoutOverlappingIntervals } from "@/features/admin/lib/calendarOverlapLayout"
 import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
+import { reservationChannelLabel } from "@/features/admin/lib/reservationChannel"
 
 // 8:00〜22:00 を表示対象（14時間）
 const START_HOUR = 8
@@ -151,7 +152,8 @@ export function CalendarDayView({
                 const compact = isCompactReservationTimelineBlock(durationMinutes, heightPercent)
                 const range = formatTimeRange(r.startAt, r.endAt)
                 const menu = r.menuName?.trim()
-                const title = [r.customerName, range, menu, r.memo?.trim()]
+                const channel = reservationChannelLabel(r.source)
+                const title = [channel, r.customerName, range, menu, r.memo?.trim()]
                   .filter(Boolean)
                   .join(" · ")
                 return (
@@ -177,13 +179,13 @@ export function CalendarDayView({
                     >
                       {compact ? (
                         <span className="block break-words leading-tight [overflow-wrap:anywhere]">
-                          <span className="font-semibold text-foreground">{r.customerName}</span>
+                          <span className="font-semibold text-foreground">{channel ? `${channel} ` : ""}{r.customerName}</span>
                           <span className="tabular-nums text-muted-foreground"> {range}</span>
                           {menu ? <span className="text-muted-foreground"> {menu}</span> : null}
                         </span>
                       ) : (
                         <div className="flex flex-col gap-0.5 break-words [overflow-wrap:anywhere]">
-                          <span className="text-xs font-semibold text-foreground">{r.customerName}</span>
+                          <span className="text-xs font-semibold text-foreground">{channel ? `${channel} ` : ""}{r.customerName}</span>
                           <span className="tabular-nums text-[10px] text-muted-foreground">{range}</span>
                           {menu ? (
                             <span className="text-[10px] leading-tight text-muted-foreground">{menu}</span>

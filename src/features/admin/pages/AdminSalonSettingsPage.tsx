@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom"
 import { CalendarClock, ScrollText, ShieldCheck, Store } from "lucide-react"
 
+import { AdminHotpepperCard } from "@/features/admin/components/AdminHotpepperCard"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ADMIN_SALON_SETTINGS_NAV_STATE } from "@/features/auth/lib/salonSettingsNavState"
@@ -105,6 +107,7 @@ export function AdminSalonSettingsPage() {
           )
         })}
       </ul>
+      <AdminHotpepperCard />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarSearch, Clock3, MapPin, UserRound } from "lucide-react"
+import { ArrowRight, CalendarSearch, Clock3, MapPin, Scissors, UserRound } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
@@ -102,6 +102,32 @@ export function UserWelcomeCard({ summary, shopId, reservationId }: UserWelcomeC
           </Link>
         </div>
       </div>
+
+      {summary.coupons && summary.coupons.length > 0 ? (
+        <div className="rounded-2xl bg-white p-6 shadow-lg">
+          <h3 className="text-lg font-bold text-foreground">ホットペッパー掲載クーポン</h3>
+          <ul className="mt-4 space-y-3">
+            {summary.coupons.map((coupon) => (
+              <li key={coupon.title} className="rounded-xl border border-slate-200 p-4">
+                <p className="font-semibold text-foreground">{coupon.title}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{coupon.description}</p>
+                <p className="mt-2 text-sm font-medium">¥{coupon.priceYen.toLocaleString()}</p>
+              </li>
+            ))}
+          </ul>
+          {summary.hotpepperUrl ? (
+            <a
+              href={summary.hotpepperUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-violet-700 underline"
+            >
+              <Scissors className="size-4" />
+              ホットペッパービューティーでこのサロンを見る
+            </a>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   )
 }

@@ -18,11 +18,11 @@ function formatDateKey(d: Date): string {
 }
 
 const MOCK_MENU_SAMPLES = [
-  "パーソナル 60分",
-  "パーソナル 90分",
-  "初回体験",
-  "ペアトレーニング",
-  "コンディショニング",
+  "カット",
+  "カラー",
+  "パーマ",
+  "トリートメント",
+  "炭酸泉スパ",
 ] as const
 
 /** 今日を基準にした3日分のモック予約を生成（常にカレンダーに表示されるようにする） */
@@ -484,6 +484,7 @@ export function mapApiReservationRowToReservation(
     assigneeId,
     trainerId: tid ? tid : undefined,
     trainerName: trainerName || undefined,
+    source: row.source ? String(row.source) : undefined,
     memo: memo ? memo : undefined,
     paymentId: row.payment_id ? String(row.payment_id) : undefined,
     paymentProvider: row.payment_provider ?? undefined,

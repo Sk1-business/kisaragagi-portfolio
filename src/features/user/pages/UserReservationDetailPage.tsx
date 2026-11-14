@@ -17,6 +17,7 @@ import {
   type ReservationChangePolicy,
   type UserReservation,
 } from "@/features/user/api/userReservationApi"
+import { reservationChannelLabel } from "@/features/admin/lib/reservationChannel"
 import { UserConfirmDialog } from "@/features/user/components/UserConfirmDialog"
 import { CancellationPolicyNotice } from "@/features/user/components/CancellationPolicyNotice"
 import { UserSectionCard } from "@/features/user/components/UserSectionCard"
@@ -134,7 +135,7 @@ export function UserReservationDetailPage() {
       <UserSectionCard title="予約詳細">
         <div className="space-y-4 p-6">
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            変更できるのは日時のみです。指名トレーナーとメニューは変更できません。
+            変更できるのは日時のみです。指名スタイリストとメニューは変更できません。
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -149,6 +150,11 @@ export function UserReservationDetailPage() {
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs text-muted-foreground">予約ステータス</p>
               <p className="mt-1 text-sm font-semibold text-foreground">{statusLabel}</p>
+              {reservationChannelLabel(displayReservation.source) ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  経路: {reservationChannelLabel(displayReservation.source)}
+                </p>
+              ) : null}
             </div>
           </div>
 

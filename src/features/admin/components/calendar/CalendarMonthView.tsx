@@ -12,6 +12,7 @@ import {
   startOfDay,
   getDateKeyInTimeZone,
 } from "@/features/admin/lib/calendarUtils"
+import { reservationChannelLabel } from "@/features/admin/lib/reservationChannel"
 import type { Reservation } from "@/features/admin/types/reservation"
 import type { Staff } from "@/features/admin/types/staff"
 import { getReservationTrainerColor } from "@/features/admin/hooks/useStaff"
@@ -134,6 +135,7 @@ export function CalendarMonthView({
                 <div className="mt-0.5 space-y-0.5">
                   {dayReservations.map((r) => {
                     const bgColor = getReservationTrainerColor(r, staffList)
+                    const channel = reservationChannelLabel(r.source)
                     return (
                     <button
                       key={r.id}
@@ -149,6 +151,7 @@ export function CalendarMonthView({
                       <span className="text-muted-foreground">
                         {formatTimeRange(r.startAt, r.endAt)}
                       </span>{" "}
+                      {channel ? <span className="font-semibold">{channel} </span> : null}
                       <span className="font-medium">{r.customerName}</span>
                     </button>
                   )})}
