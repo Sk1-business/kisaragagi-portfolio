@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>呼吸とデジタル (Breath & Digital)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Cormorant Garamond & Noto Serif JP -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=Noto+Serif+JP:wght@200;300;400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #07080a;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior: none;
+      touch-action: manipulation;
+      background-color: var(--bg-dark);
+      font-family: 'Cormorant Garamond', 'Noto Serif JP', serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    header.topbar { padding-top: calc(12px + env(safe-area-inset-top)); }
+    footer.dock { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    #settingsPanel { max-height: min(42dvh, 340px); overflow: auto; -webkit-overflow-scrolling: touch; }
+    #textInput { font-size: 16px !important; }
+    #btnHoldBlow, #btnCrystallize, #btnToggleMic, #btnApplyText, #btnToggleSettings { min-height: 48px; }
+    #btnToggleSettings { min-width: 48px; }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 5;
+    }
+    /* Subtle vignette and organic background gradient */
+    .ambient-overlay {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 45%, rgba(20, 26, 36, 0.4) 0%, rgba(7, 8, 10, 0.95) 85%);
+      pointer-events: none;
+      z-index: 2;
+    }
+    /* Glassmorphism containers */
+    .glass {
+      background: rgba(15, 19, 26, 0.68);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
+    }
+    /* Custom refined range inputs */
+    input[type=range] {
+      accent-color: #38bdf8;
+    }
+  </style>
+</head>
+<body class="relative flex flex-col justify-between text-slate-200">
+
+  <!-- Ambient Light Backdrop -->
+  <div class="ambient-overlay"></div>
+
+  <!-- Simulation & Art Canvas -->
+  <canvas id="artCanvas"></canvas>
+
+  <!-- Top Header / Live Energy Telemetry -->
+  <header class="topbar relative z-20 w-full px-5 py-4 md:px-10 md:py-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pointer-events-none transition-opacity duration-500">
+    <div>
+      <div class="flex items-baseline gap-2.5">
+        <h1 class="text-lg md:text-xl font-light tracking-[0.25em] text-slate-100">呼吸とデジタル</h1>
+        <span class="text-[10px] md:text-xs font-mono tracking-widest text-slate-400 uppercase">Breath & Digital</span>
+      </div>
+      <p class="text-[11px] md:text-xs text-slate-400 tracking-wider mt-0.5 font-light opacity-80">
+        息を吹きかけると粒子が霧散し、静けさの中で再結晶化します
+      </p>
+    </div>
+
+    <!-- Live Energy Meter -->
+    <div class="flex items-center gap-3 pointer-events-auto bg-slate-900/60 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-slate-700/40">
+      <div class="flex items-center gap-2">
+        <span id="micLiveIcon" class="w-2 h-2 rounded-full bg-slate-500 transition-colors duration-300"></span>
+        <span class="text-[10px] uppercase font-mono tracking-widest text-slate-400">Energy</span>
+      </div>
+      <div class="w-20 md:w-28 h-2 rounded-full bg-slate-800/80 overflow-hidden border border-slate-700/60 p-[1px]">
+        <div id="energyGauge" class="h-full w-0 bg-gradient-to-r from-teal-400 via-sky-400 to-rose-400 rounded-full transition-all duration-75"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Center Beginner Prompt (Disappears on first interaction) -->
+  <div id="welcomeHint" class="absolute inset-0 z-15 flex items-center justify-center pointer-events-none transition-opacity duration-700">
+    <div class="glass px-6 py-4 rounded-2xl max-w-sm mx-4 text-center pointer-events-auto cursor-pointer border border-sky-500/20 shadow-2xl" onclick="hideHint()">
+      <p class="text-sm tracking-[0.18em] text-slate-200 font-light">
+        画面下のボタンを長押しするか、<br>マイクを有効にして息を吹きかけてください
+      </p>
+      <p class="text-[11px] tracking-wider text-slate-400 mt-2 font-mono">
+        Hold the blow button or enable microphone to begin
+      </p>
+    </div>
+  </div>
+
+  <!-- Bottom Floating Interactive Dock -->
+  <footer class="dock relative z-20 w-full pb-6 px-4 md:px-8 flex flex-col items-center gap-3 pointer-events-none">
+    
+    <!-- Primary Quick Touch Controls -->
+    <div class="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 pointer-events-auto w-full max-w-lg">
+      
+      <!-- Hold to Blow (Mobile / No-Mic Friendly) -->
+      <button id="btnHoldBlow" 
+              class="relative px-6 py-3 rounded-full glass border border-sky-500/30 hover:border-sky-400 text-slate-100 text-xs sm:text-sm font-light tracking-[0.2em] active:scale-95 transition-all shadow-lg flex items-center gap-2.5 overflow-hidden select-none cursor-pointer">
+        <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+        <span>息を吹きかける (長押し)</span>
+        <!-- Inner progress fill bar for button -->
+        <span id="btnHoldMeter" class="absolute left-0 bottom-0 top-0 bg-sky-500/25 w-0 pointer-events-none transition-all"></span>
+      </button>
+
+      <!-- Instant Fast Crystallize / Reconstitution Button -->
+      <button id="btnCrystallize" 
+              class="px-4 py-3 rounded-full glass border border-slate-700 hover:border-slate-500 text-slate-200 text-xs tracking-wider transition-all active:scale-95 cursor-pointer shadow-md"
+              title="素早く文字へと再結晶化させる">
+        再結晶化 ⟲
+      </button>
+
+      <!-- Settings Panel Toggle -->
+      <button id="btnToggleSettings" 
+              class="p-3 rounded-full glass border border-slate-700 hover:border-slate-400 text-slate-300 hover:text-white transition-all active:scale-95 cursor-pointer shadow-md"
+              title="詳細設定を開く">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Advanced Settings Drawer (Collapsible) -->
+    <div id="settingsPanel" class="hidden pointer-events-auto glass p-4 md:p-5 rounded-2xl max-w-xl w-full border border-slate-700/60 flex flex-col gap-3.5 text-xs tracking-wider text-slate-300 transition-all">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+        <!-- Mic Toggle Button -->
+        <div class="flex items-center gap-3">
+          <button id="btnToggleMic" class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900/70 hover:border-sky-400 text-slate-200 flex items-center gap-2 cursor-pointer transition-colors">
+            <span id="micDot" class="w-2 h-2 rounded-full bg-rose-500"></span>
+            <span id="micBtnText">マイク開始</span>
+          </button>
+          <span class="text-[11px] text-slate-400">息の吹音(低周波)を検知</span>
+        </div>
+
+        <!-- Sensitivity Slider with Adjusted Deadband -->
+        <div class="flex items-center gap-2">
+          <label for="sensSlider" class="text-slate-400 text-[11px]">息の感度:</label>
+          <input id="sensSlider" type="range" min="0.5" max="4.0" step="0.25" value="1.8" class="w-20 cursor-pointer">
+          <span id="sensValue" class="text-[11px] font-mono text-sky-400 w-6">1.8</span>
+        </div>
+      </div>
+
+      <!-- Custom Inscription Input -->
+      <div class="flex items-center gap-2 pt-0.5">
+        <label for="textInput" class="text-slate-400 whitespace-nowrap text-[11px]">碑銘 (言葉):</label>
+        <input id="textInput" type="text" value="breath  digital" 
+               class="flex-1 bg-slate-950/80 border border-slate-800 focus:border-sky-500 rounded-lg px-3 py-2 text-slate-100 outline-none text-base font-serif tracking-widest"
+               placeholder="溶かしたい言葉を入力...">
+        <button id="btnApplyText" class="px-3.5 py-1.5 rounded-lg bg-sky-950/60 border border-sky-700/50 hover:bg-sky-900/60 text-sky-200 cursor-pointer transition-colors">更新</button>
+      </div>
+
+      <!-- Auto Reconstitute Checkbox & Particle Stat -->
+      <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" id="chkAutoRegen" class="rounded bg-slate-900 border-slate-700 text-sky-500 focus:ring-0" checked>
+          <span>息が止んだら自動で素早く再結晶化</span>
+        </label>
+        <span class="font-mono text-slate-400">粒子数: <strong id="particleCount" class="text-slate-200 font-mono">0</strong></span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Modal / Informational Popup for Iframe Mic Notice -->
+  <div id="infoModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+    <div class="glass p-6 rounded-2xl max-w-sm w-full border border-slate-700 text-center">
+      <h3 class="text-sm font-medium text-slate-100 tracking-wider mb-2" id="modalTitle">マイクについて</h3>
+      <p class="text-xs text-slate-400 leading-relaxed mb-5" id="modalBody">Googleサイト埋め込み時のマイク権限案内</p>
+      <button onclick="closeModal()" class="px-5 py-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs tracking-wider cursor-pointer">閉じる</button>
+    </div>
+  </div>
+
+  <script>
+    // --- Canvas & Dimensional Setup ---
+    const canvas = document.getElementById('artCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    let width = 0;
+    let height = 0;
+
+    function resizeCanvas() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+      rasterizeWords(currentText);
+    }
+
+    // --- State Variables ---
+    let particles = [];
+    let currentText = 'breath  digital';
+    let isHoldingBlow = false;
+    let simulatedEnergy = 0;
+    let micEnergy = 0;
+    let smoothedBreath = 0;
+    let isReconstituting = false;
+    let autoRegenEnabled = true;
+    let quietFrameCount = 0;
+    let micGain = 1.8;
+    let audioCtx = null;
+    let analyser = null;
+    let audioDataArray = null;
+    let micStream = null;
+    let isMicActive = false;
+
+    // --- Fast Perlin-like 2D Noise for Fluid Dissolution Currents ---
+    const Permutation = [
+      151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,
+      190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,
+      125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,
+      105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,
+      135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,
+      82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,
+      153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,
+      251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,
+      106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128
+    ];
+    const p = new Uint8Array(512);
+    for (let i = 0; i < 256; i++) {
+      p[256 + i] = p[i] = Permutation[i];
+    }
+    function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+    function lerp(t, a, b) { return a + t * (b - a); }
+    function grad(hash, x, y) {
+      const h = hash & 7;
+      const u = h < 4 ? x : y;
+      const v = h < 4 ? y : x;
+      return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+    }
+    function perlinNoise(x, y) {
+      const X = Math.floor(x) & 255;
+      const Y = Math.floor(y) & 255;
+      x -= Math.floor(x);
+      y -= Math.floor(y);
+      const u = fade(x);
+      const v = fade(y);
+      const A = p[X] + Y, B = p[X + 1] + Y;
+      return lerp(v,
+        lerp(u, grad(p[A], x, y), grad(p[B], x - 1, y)),
+        lerp(u, grad(p[A + 1], x, y - 1), grad(p[B + 1], x - 1, y - 1))
+      );
+    }
+
+    // --- Inscription Particle Class ---
+    class Particle {
+      constructor(ox, oy, color) {
+        this.ox = ox; // Origin X
+        this.oy = oy; // Origin Y
+        this.x = ox;
+        this.y = oy;
+        this.color = color;
+        this.vx = 0;
+        this.vy = 0;
+        this.size = Math.random() * 1.5 + 1.2;
+        this.baseAlpha = Math.random() * 0.35 + 0.65;
+        this.alpha = this.baseAlpha;
+        this.isFreed = false;
+        this.seed = Math.random() * 500;
+        this.mass = Math.random() * 0.4 + 0.8;
+      }
+
+      update(energy, time) {
+        // Fast snap Reconstitution Mode
+        if (isReconstituting) {
+          const dx = this.ox - this.x;
+          const dy = this.oy - this.y;
+          const distSq = dx * dx + dy * dy;
+
+          // Strong restoring spring with rapid damping for snappy ~1.0s crystallization
+          this.vx = (this.vx + dx * 0.24) * 0.7;
+          this.vy = (this.vy + dy * 0.24) * 0.7;
+          this.x += this.vx;
+          this.y += this.vy;
+
+          // 結晶化時は確実に元の透明度へ素早く復帰させる
+          this.alpha = Math.min(this.baseAlpha, this.alpha + 0.12);
+
+          if (distSq < 1.5) {
+            this.x = this.ox;
+            this.y = this.oy;
+            this.vx = 0;
+            this.vy = 0;
+            this.isFreed = false;
+            this.alpha = this.baseAlpha;
+          }
+          return;
+        }
+
+        // Dissolution Trigger based on breath force
+        if (energy > 0.08) {
+          const distFromCenter = Math.abs(this.ox - width / 2) / (width * 0.5);
+          const sensitivityMask = Math.max(0.1, 1.2 - distFromCenter);
+          if (Math.random() < energy * 0.75 * sensitivityMask || this.isFreed) {
+            this.isFreed = true;
+          }
+        }
+
+        if (this.isFreed) {
+          // Smoke dispersal using curl noise
+          const scale = 0.0032;
+          const angle = perlinNoise(this.x * scale + this.seed, this.y * scale + time * 0.00035) * Math.PI * 4;
+
+          // Breath propulsion forces (lateral spread + soft upward convection)
+          const lateralSpread = (this.x - width / 2) * 0.0025 * energy * 2.2;
+          const upwardDraft = -0.55 * energy - 0.2;
+
+          const fx = Math.cos(angle) * (1.2 + energy * 2.2) + lateralSpread;
+          const fy = Math.sin(angle) * (0.8 + energy * 1.6) + upwardDraft;
+
+          this.vx += (fx * 0.12) / this.mass;
+          this.vy += (fy * 0.12) / this.mass;
+
+          // Atmospheric drag
+          this.vx *= 0.93;
+          this.vy *= 0.94;
+
+          this.x += this.vx;
+          this.y += this.vy;
+
+          // 息が弱まったら完全に消滅させず、徐々にフェードアウトしても最低限の光を保つ
+          this.alpha = Math.max(0.15, this.alpha - (0.003 + Math.random() * 0.002));
+        } else {
+          // Settled state: 確実に可視化
+          this.alpha = this.baseAlpha;
+          // Delicate organic micro-drift when settled (living digital lattice)
+          const jitter = Math.sin(time * 0.002 + this.ox * 0.05) * 0.25;
+          this.x = this.ox + jitter;
+          this.y = this.oy + jitter * 0.5;
+        }
+      }
+
+      draw(c) {
+        if (this.alpha <= 0.01) return;
+        c.fillStyle = `rgba(${this.color.r}, ${this.color.g}, ${this.color.b}, ${this.alpha})`;
+        c.beginPath();
+        c.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+
+    // --- Text Inscription to Particle Rasterization ---
+    function rasterizeWords(text) {
+      particles = [];
+      const offscreen = document.createElement('canvas');
+      offscreen.width = width;
+      offscreen.height = height;
+      const offCtx = offscreen.getContext('2d');
+
+      const fontSize = Math.min(width * 0.11, 88);
+      // フォント遅延に備えて serif / sans-serif をフォールバック指定
+      offCtx.font = `500 ${fontSize}px "Cormorant Garamond", "Noto Serif JP", serif, sans-serif`;
+      offCtx.textAlign = 'center';
+      offCtx.textBaseline = 'middle';
+      offCtx.fillStyle = '#ffffff';
+
+      const posY = height * 0.44;
+      offCtx.fillText(text, width / 2, posY);
+
+      const imgData = offCtx.getImageData(0, 0, width, height).data;
+      const step = width < 640 ? 4 : 3;
+
+      for (let y = 0; y < height; y += step) {
+        for (let x = 0; x < width; x += step) {
+          const idx = (y * width + x) * 4;
+          if (imgData[idx + 3] > 40) {
+            // Ethereal glowing color gradation (soft icy-blue, teal, silver mist)
+            const ratio = x / width;
+            const r = Math.floor(190 + ratio * 45);
+            const g = Math.floor(220 + (1 - ratio) * 20);
+            const b = Math.floor(240 + Math.random() * 15);
+            particles.push(new Particle(x, y, { r, g, b }));
+          }
+        }
+      }
+
+      document.getElementById('particleCount').innerText = particles.length.toLocaleString();
+    }
+
+    // --- Fast Reconstitution Trigger ---
+    function triggerFastCrystallization() {
+      isReconstituting = true;
+      // Re-crystallizes rapidly in ~1.0s
+      setTimeout(() => {
+        isReconstituting = false;
+        // 念のため settled 状態にリセット
+        particles.forEach(p => {
+          if (!p.isFreed) p.alpha = p.baseAlpha;
+        });
+      }, 1050);
+    }
+
+    // --- Web Audio Breath Detection (Tuned Threshold & Noise Gate) ---
+    async function toggleMicrophone() {
+      if (isMicActive) {
+        stopMicrophone();
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        });
+
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
+        }
+
+        const source = audioCtx.createMediaStreamSource(stream);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.35;
+        source.connect(analyser);
+
+        audioDataArray = new Uint8Array(analyser.frequencyBinCount);
+        micStream = stream;
+        isMicActive = true;
+
+        updateMicStateUI(true);
+        hideHint();
+      } catch (err) {
+        console.warn('Microphone permission blocked or unavailable:', err);
+        showModal('マイクのアクセスについて', 'マイクへのアクセスが制限されているか、許可されていません。Googleサイトに埋め込んでいる場合は画面下の「息を吹きかける (長押し)」ボタンでも同様に体験できます。');
+        updateMicStateUI(false);
+      }
+    }
+
+    function stopMicrophone() {
+      if (micStream) {
+        micStream.getTracks().forEach(t => t.stop());
+        micStream = null;
+      }
+      if (audioCtx && audioCtx.state !== 'closed') {
+        audioCtx.close();
+      }
+      isMicActive = false;
+      micEnergy = 0;
+      updateMicStateUI(false);
+    }
+
+    function updateMicStateUI(active) {
+      const liveDot = document.getElementById('micLiveIcon');
+      const micDot = document.getElementById('micDot');
+      const micBtnText = document.getElementById('micBtnText');
+      if (active) {
+        liveDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+        micDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+        micBtnText.innerText = 'マイク停止';
+      } else {
+        liveDot.className = 'w-2 h-2 rounded-full bg-slate-500';
+        micDot.className = 'w-2 h-2 rounded-full bg-rose-500';
+        micBtnText.innerText = 'マイク開始';
+      }
+    }
+
+    function analyzeBreathAudio() {
+      if (!isMicActive || !analyser) return 0;
+      analyser.getByteFrequencyData(audioDataArray);
+
+      // Focus on direct breath wind pops in the low rumble range (20Hz - 220Hz, bins 0-7)
+      let lowSum = 0;
+      const targetBins = 8;
+      for (let i = 0; i < targetBins; i++) {
+        lowSum += audioDataArray[i];
+      }
+      const avgLow = lowSum / targetBins;
+
+      // Noise floor deadband: ignores everyday slight ambient sounds below threshold
+      const noiseFloor = 38; 
+      if (avgLow < noiseFloor) return 0;
+
+      // Soft response curve calibrated with user gain slider
+      const diff = avgLow - noiseFloor;
+      const normalized = Math.min(1.0, (diff / (160 / micGain)));
+      return normalized;
+    }
+
+    // --- Interactive Hold-To-Blow Logic (Touch & Mouse) ---
+    const btnHold = document.getElementById('btnHoldBlow');
+    const holdMeter = document.getElementById('btnHoldMeter');
+
+    function onHoldStart(e) {
+      if (e) e.preventDefault();
+      isHoldingBlow = true;
+      hideHint();
+    }
+    function onHoldEnd() {
+      isHoldingBlow = false;
+    }
+
+    btnHold.addEventListener('mousedown', onHoldStart);
+    window.addEventListener('mouseup', onHoldEnd);
+    btnHold.addEventListener('touchstart', onHoldStart, { passive: false });
+    window.addEventListener('touchend', onHoldEnd);
+    window.addEventListener('touchcancel', onHoldEnd);
+
+    // --- Button Actions & Settings ---
+    document.getElementById('btnCrystallize').addEventListener('click', triggerFastCrystallization);
+    document.getElementById('btnToggleMic').addEventListener('click', toggleMicrophone);
+
+    const sensSlider = document.getElementById('sensSlider');
+    const sensValue = document.getElementById('sensValue');
+    sensSlider.addEventListener('input', (e) => {
+      micGain = parseFloat(e.target.value);
+      sensValue.innerText = micGain.toFixed(1);
+    });
+
+    document.getElementById('chkAutoRegen').addEventListener('change', (e) => {
+      autoRegenEnabled = e.target.checked;
+    });
+
+    document.getElementById('btnApplyText').addEventListener('click', () => {
+      const input = document.getElementById('textInput');
+      const val = input.value.trim();
+      if (val.length > 0) {
+        currentText = val;
+        rasterizeWords(currentText);
+      }
+    });
+
+    document.getElementById('btnToggleSettings').addEventListener('click', () => {
+      const panel = document.getElementById('settingsPanel');
+      panel.classList.toggle('hidden');
+    });
+
+    function hideHint() {
+      const hint = document.getElementById('welcomeHint');
+      if (hint) {
+        hint.style.opacity = '0';
+        setTimeout(() => hint.remove(), 700);
+      }
+    }
+
+    // Modal helpers
+    function showModal(title, text) {
+      document.getElementById('modalTitle').innerText = title;
+      document.getElementById('modalBody').innerText = text;
+      document.getElementById('infoModal').classList.remove('hidden');
+    }
+    function closeModal() {
+      document.getElementById('infoModal').classList.add('hidden');
+    }
+
+    // --- Animation Simulation Loop ---
+    const energyGauge = document.getElementById('energyGauge');
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+
+      // Compute Hold Simulated Breath
+      if (isHoldingBlow) {
+        simulatedEnergy = Math.min(1.0, simulatedEnergy + 0.08);
+      } else {
+        simulatedEnergy = Math.max(0.0, simulatedEnergy - 0.05);
+      }
+
+      // Compute Mic Breath
+      micEnergy = analyzeBreathAudio();
+
+      // Effective peak breath
+      const peakBreath = Math.max(micEnergy, simulatedEnergy);
+      // Smooth interpolation for natural air dynamics
+      smoothedBreath = smoothedBreath * 0.78 + peakBreath * 0.22;
+
+      // Update UI Meters
+      energyGauge.style.width = `${Math.min(100, Math.round(smoothedBreath * 100))}%`;
+      holdMeter.style.width = `${Math.min(100, Math.round(simulatedEnergy * 100))}%`;
+
+      // Auto Crystallization when calm returns (short stillness check: ~0.9s / 55 frames)
+      if (autoRegenEnabled && !isReconstituting) {
+        if (smoothedBreath < 0.05) {
+          quietFrameCount++;
+          if (quietFrameCount > 55) {
+            triggerFastCrystallization();
+            quietFrameCount = 0;
+          }
+        } else {
+          quietFrameCount = 0;
+        }
+      }
+
+      // Render Soft Trail Motion Blur
+      ctx.fillStyle = 'rgba(7, 8, 10, 0.24)';
+      ctx.fillRect(0, 0, width, height);
+
+      // Update and Draw Particles
+      for (let i = 0; i < particles.length; i++) {
+        particles[i].update(smoothedBreath, now);
+        particles[i].draw(ctx);
+      }
+    }
+
+    // --- Lifecycle Init & Responsive Listeners ---
+    window.addEventListener('resize', () => {
+      resizeCanvas();
+    });
+
+    window.addEventListener('load', async () => {
+      if (document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch (e) {
+          console.warn('Font load timeout or error, falling back:', e);
+        }
+      }
+      resizeCanvas();
+      animate(performance.now());
+    });
+  </script>
+</body>
+</html>
