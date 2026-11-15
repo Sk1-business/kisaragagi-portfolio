@@ -43,6 +43,8 @@ export const ROUTES = {
   adminSecurity: "/admin/salon/security",
   /** 顧客マスタ・カルテ */
   adminCustomers: "/admin/customers",
+  /** 売上・原価・利益率 */
+  adminSales: "/admin/sales",
   /** 管理者による代理予約（入力） */
   adminNewReservation: "/admin/reservations/new",
   /** 代理予約の確認・確定 */

@@ -10,15 +10,19 @@ import {
   ageFromBirthday,
   buildCustomerDirectory,
   customerKey,
+  ensureShowcaseCharts,
   genderLabel,
   importCustomerProfiles,
   kindLabel,
+  normalizeChart,
   parseGender,
+  parseKarteText,
   saveCustomerProfile,
   type CustomerGender,
   type CustomerKind,
   type CustomerRecord,
 } from "@/features/admin/lib/customerDirectory"
+import { recommendStyle } from "@/features/admin/lib/styleRecommendation"
 import { useStaff } from "@/features/admin/hooks/useStaff"
 
 function formatReservationWhen(iso: string): string {
@@ -26,6 +30,14 @@ function formatReservationWhen(iso: string): string {
   const time = iso.slice(11, 16)
   return time ? `${date} ${time}` : date
 }
+
+const SAMPLE_KARTE = `氏名: 森 あかり
+電話: 09077778888
+髪質: 猫っ毛、細毛
+希望: 顔まわりにレイヤー。重くしない
+アレルギー: なし
+好み: ナチュラル。真っ黒は避ける
+メモ: 前回は耳上1cm。次はもう少し残す`
 
 function statusLabel(status: CustomerRecord["reservations"][number]["status"]): string {
   if (status === "CONFIRMED") return "予約確定"
@@ -48,11 +60,13 @@ export function AdminCustomersPage() {
   const [draft, setDraft] = useState<CustomerRecord | null>(null)
   const [saveMessage, setSaveMessage] = useState("")
   const [importMessage, setImportMessage] = useState("")
+  const [karteText, setKarteText] = useState("")
 
   async function reload() {
     setLoading(true)
     setError("")
     try {
+      ensureShowcaseCharts()
       const reservations = await fetchAllReservationsForAdmin(staffList)
       const next = buildCustomerDirectory(reservations)
       setRecords(next)
@@ -120,6 +134,68 @@ export function AdminCustomersPage() {
     void reload()
   }
 
+  function applyParsedKarte(text: string, photo?: { name: string; data: string }) {
+    const parsed = parseKarteText(text)
+    if (!parsed?.key || !parsed.chart) {
+      setImportMessage("氏名か電話番号のあるカルテとして読み取れませんでした。")
+      return
+    }
+    const chart = normalizeChart({
+      ...parsed.chart,
+      photoName: photo?.name || parsed.chart.photoName,
+      photoData: photo?.data || parsed.chart.photoData,
+    })
+    saveCustomerProfile({
+      key: parsed.key,
+      name: parsed.name ?? "",
+      furigana: parsed.furigana ?? "",
+      email: parsed.email ?? "",
+      phone: parsed.phone ?? "",
+      birthday: parsed.birthday ?? "",
+      gender: parsed.gender ?? "",
+      kind: parsed.kind ?? "existing",
+      chart,
+    })
+    setSelectedKey(parsed.key)
+    setImportMessage(photo ? "写真付きカルテを項目に反映しました。" : "カルテの項目を反映しました。")
+    void reload()
+  }
+
+  function handlePhoto(file: File) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const data = file.size <= 120_000 ? String(reader.result ?? "") : ""
+      if (!draft) {
+        setImportMessage("先に顧客を選んでから写真を添付してください。")
+        return
+      }
+      const chart = normalizeChart({
+        ...draft.chart,
+        photoName: file.name,
+        photoData: data,
+        updatedAt: new Date().toISOString(),
+      })
+      saveCustomerProfile({
+        key: draft.key,
+        name: draft.name,
+        furigana: draft.furigana,
+        email: draft.email,
+        phone: draft.phone,
+        birthday: draft.birthday,
+        gender: draft.gender,
+        kind: draft.kind,
+        chart,
+      })
+      setImportMessage(
+        data
+          ? "カルテ写真を添付しました。書き写した内容は下のテキストから項目にできます。"
+          : "写真が大きいためファイル名だけ残しました。項目はテキストから反映できます。",
+      )
+      void reload()
+    }
+    reader.readAsDataURL(file)
+  }
+
   function handleImport(file: File) {
     const reader = new FileReader()
     reader.onload = () => {
@@ -138,7 +214,7 @@ export function AdminCustomersPage() {
             birthday: birthday ?? "",
             gender: parseGender(gender ?? ""),
             kind: "existing" as const,
-            chart: { hairRequest: "", allergy: "", notes: "", updatedAt: "" },
+            chart: normalizeChart({}),
           }
         })
         .filter((profile) => profile.key && profile.name)
@@ -156,7 +232,7 @@ export function AdminCustomersPage() {
       <div>
         <h1 className="text-lg font-semibold tracking-tight">顧客マスタ</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          名前・電話番号・メールで検索し、来店履歴とカルテを確認します。無断キャンセル3回で予約不可になります。
+          来店履歴とカルテから、好みとおすすめの切り方を確認します。デジタルのテキストも、写真付きの手書きカルテも取り込めます。
         </p>
       </div>
 
@@ -313,11 +389,96 @@ export function AdminCustomersPage() {
               </div>
             </div>
 
+            {draft ? (
+              <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
+                <h3 className="text-sm font-semibold">この人へのおすすめ</h3>
+                {(() => {
+                  const suggestion = recommendStyle(draft)
+                  return (
+                    <>
+                      <p className="text-sm font-medium">{suggestion.cut}</p>
+                      <p className="text-xs text-muted-foreground">提案メニュー: {suggestion.menu}</p>
+                      <p className="text-sm leading-relaxed">{suggestion.reason}</p>
+                    </>
+                  )
+                })()}
+              </div>
+            ) : null}
+
+            <div className="space-y-3 rounded-md border border-border p-3">
+              <h3 className="text-sm font-semibold">カルテの取り込み</h3>
+              <p className="text-xs text-muted-foreground">
+                デジタルは項目つきのテキストを自動で分けます。アナログは写真を添付し、書き写した内容を同じ形式で反映します。
+              </p>
+              <textarea
+                value={karteText}
+                placeholder={SAMPLE_KARTE}
+                className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                onChange={(event) => setKarteText(event.target.value)}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!karteText.trim()}
+                  onClick={() => {
+                    applyParsedKarte(karteText)
+                    setKarteText("")
+                  }}
+                >
+                  テキストを項目に反映
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => applyParsedKarte(SAMPLE_KARTE)}>
+                  手書きカルテのサンプルを反映
+                </Button>
+                <label className="inline-flex cursor-pointer items-center rounded-md border border-input px-3 py-1.5 text-sm">
+                  カルテ写真を添付
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0]
+                      if (file) handlePhoto(file)
+                      event.target.value = ""
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
             <div className="space-y-3 rounded-md border border-border p-3">
               <h3 className="text-sm font-semibold">カルテ</h3>
               <p className="text-xs text-muted-foreground">
                 来店前にデジタルで残す問診です。髪型の希望、アレルギー、施術メモを保存します。
               </p>
+              {draft.chart.photoData ? (
+                <img src={draft.chart.photoData} alt="カルテ写真" className="max-h-40 rounded-md border border-border" />
+              ) : draft.chart.photoName ? (
+                <p className="text-xs text-muted-foreground">添付: {draft.chart.photoName}</p>
+              ) : null}
+              <label className="block text-xs text-muted-foreground" htmlFor="chart-texture">
+                髪質
+                <textarea
+                  id="chart-texture"
+                  className="mt-1 min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={draft.chart.texture}
+                  onChange={(event) =>
+                    updateDraft({ chart: { ...draft.chart, texture: event.target.value } })
+                  }
+                />
+              </label>
+              <label className="block text-xs text-muted-foreground" htmlFor="chart-preference">
+                好み
+                <textarea
+                  id="chart-preference"
+                  className="mt-1 min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={draft.chart.preference}
+                  onChange={(event) =>
+                    updateDraft({ chart: { ...draft.chart, preference: event.target.value } })
+                  }
+                />
+              </label>
               <label className="block text-xs text-muted-foreground" htmlFor="chart-hair">
                 髪型・仕上がりの希望
                 <textarea

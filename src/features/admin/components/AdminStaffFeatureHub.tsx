@@ -25,7 +25,7 @@ const hubItems = [
   {
     key: "customers",
     title: "顧客マスタ",
-    description: "検索・フィルターで来店履歴とカルテを確認します",
+    description: "カルテと来店履歴から、好みとおすすめを確認します",
     to: ROUTES.adminCustomers,
     icon: ContactRound,
     action: "link" as const,

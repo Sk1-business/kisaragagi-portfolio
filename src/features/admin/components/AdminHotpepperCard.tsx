@@ -7,8 +7,10 @@ import { Label } from "@/components/ui/label"
 import {
   fetchHotpepperSettings,
   importHotpepperCsv,
+  importHotpepperEmail,
   saveHotpepperSettings,
   type HotpepperCoupon,
+  type HotpepperMail,
 } from "@/features/admin/api/hotpepperApi"
 
 const SAMPLE_CSV = `予約日,開始時刻,終了時刻,スタイリスト,メニュー,お客様名,電話番号,経路
@@ -17,6 +19,8 @@ const SAMPLE_CSV = `予約日,開始時刻,終了時刻,スタイリスト,メ�
 export function AdminHotpepperCard() {
   const [url, setUrl] = useState("")
   const [coupons, setCoupons] = useState<HotpepperCoupon[]>([])
+  const [emails, setEmails] = useState<HotpepperMail[]>([])
+  const [mailText, setMailText] = useState("")
   const [csv, setCsv] = useState(SAMPLE_CSV)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
@@ -29,6 +33,7 @@ export function AdminHotpepperCard() {
         if (!active) return
         setUrl(settings.hotpepper_url ?? "")
         setCoupons(settings.coupons ?? [])
+        setEmails(settings.emails ?? [])
       })
       .catch(() => {
         if (active) setError("ホットペッパー設定を読み込めませんでした。")
@@ -51,6 +56,27 @@ export function AdminHotpepperCard() {
       setMessage("掲載情報を保存しました。")
     } catch {
       setError("保存に失敗しました。")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleEmailImport(input: { email_id?: string; text?: string }) {
+    setSaving(true)
+    setError("")
+    setMessage("")
+    try {
+      const result = await importHotpepperEmail(input)
+      const detail = result.errors.length > 0 ? result.errors.join(" / ") : ""
+      setMessage(
+        result.imported > 0
+          ? `${result.imported}件の予約メールを台帳に反映しました。`
+          : detail || "取り込みませんでした。",
+      )
+      const settings = await fetchHotpepperSettings()
+      setEmails(settings.emails ?? [])
+    } catch {
+      setError("予約メールの取り込みに失敗しました。")
     } finally {
       setSaving(false)
     }
@@ -80,7 +106,7 @@ export function AdminHotpepperCard() {
       <CardHeader>
         <CardTitle className="text-base">ホットペッパー</CardTitle>
         <CardDescription>
-          掲載ページとクーポンを案内し、サロンボード形式のCSVを予約台帳へ取り込みます。
+          掲載ページとクーポンに加え、サロンに届く予約メールを読み取って台帳へ反映します。ホットペッパーの画面は取得しません。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -132,6 +158,51 @@ export function AdminHotpepperCard() {
         <Button type="button" onClick={() => void handleSave()} disabled={saving}>
           掲載情報を保存
         </Button>
+        <div className="space-y-3">
+          <p className="text-sm font-medium">届いた予約メール</p>
+          <p className="text-xs text-muted-foreground">
+            ホットペッパーからサロンのメールアドレスへ届く予約通知を読み取ります。
+          </p>
+          {emails.length === 0 ? (
+            <p className="text-sm text-muted-foreground">未取り込みのメールはありません。</p>
+          ) : (
+            <ul className="space-y-3">
+              {emails.map((mail) => (
+                <li key={mail.id} className="rounded-md border border-border p-3">
+                  <p className="text-sm font-medium">{mail.subject}</p>
+                  <p className="text-xs text-muted-foreground">{mail.from}</p>
+                  <pre className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">{mail.body}</pre>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-2"
+                    disabled={saving || mail.imported}
+                    onClick={() => void handleEmailImport({ email_id: mail.id })}
+                  >
+                    {mail.imported ? "取り込み済み" : "台帳に反映する"}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Label htmlFor="hotpepper-mail">メール本文を貼り付け</Label>
+          <textarea
+            id="hotpepper-mail"
+            value={mailText}
+            onChange={(event) => setMailText(event.target.value)}
+            rows={5}
+            placeholder={"予約日時：2026年11月20日 15:00\nメニュー：カット\n氏名：森 あかり\n電話番号：09077778888"}
+            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void handleEmailImport({ text: mailText })}
+            disabled={saving || !mailText.trim()}
+          >
+            貼り付けたメールを取り込む
+          </Button>
+        </div>
         <div className="space-y-2">
           <Label htmlFor="hotpepper-csv">予約CSV</Label>
           <p className="text-xs text-muted-foreground">

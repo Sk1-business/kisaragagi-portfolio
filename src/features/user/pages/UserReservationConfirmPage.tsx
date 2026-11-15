@@ -234,10 +234,7 @@ export function UserReservationConfirmPage() {
     setIsSubmitting(true)
 
     if (demoMode) {
-      const result = await createUserReservation({
-        ...commonPayload,
-        paymentMethod: "onsite",
-      })
+      const result = await createUserReservation(commonPayload)
       if (!result.ok) {
         setSubmitError(result.error)
         setIsSubmitting(false)

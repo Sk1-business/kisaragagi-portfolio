@@ -108,7 +108,7 @@ export function UserReservationInputPage() {
   const [stripeConnectReady, setStripeConnectReady] = useState<boolean | null>(null)
 
   const demoMode = isDemoMode()
-  const [paymentTiming, setPaymentTiming] = useState<"prepaid" | "onsite">(demoMode ? "onsite" : "prepaid")
+  const [paymentTiming, setPaymentTiming] = useState<"prepaid" | "onsite">("onsite")
   const [paymentMethod, setPaymentMethod] = useState<string>("credit")
   const [creditFlowError, setCreditFlowError] = useState("")
   const [lastName, setLastName] = useState("")
@@ -139,7 +139,7 @@ export function UserReservationInputPage() {
   const displayMenuName =
     mode === "nomination" ? preferredMenuName || resolvedMenu?.name || "未定" : resolvedMenu?.name ?? "未定"
   const isZeroPriceMenu = resolvedMenu !== null && resolvedMenu.price <= 0
-  const creditPaymentAvailable = stripeConnectReady !== false
+  const creditPaymentAvailable = demoMode || stripeConnectReady !== false
   const expectedTimeRange = useMemo(() => {
     if (!time) return "未選択"
     const minutes = resolvedMenu?.duration_minutes
@@ -148,6 +148,7 @@ export function UserReservationInputPage() {
   }, [time, resolvedMenu?.duration_minutes])
 
   const showInlineStripe =
+    !demoMode &&
     !isUpdateFlow &&
     paymentTiming === "prepaid" &&
     paymentMethod === "credit" &&
@@ -170,7 +171,7 @@ export function UserReservationInputPage() {
       .then((page) => {
         if (!mounted) return
         setStripeConnectReady(page.stripe_connect_connected)
-        if (!page.stripe_connect_connected) {
+        if (!demoMode && !page.stripe_connect_connected) {
           setPaymentMethod((current) => (current === "credit" ? "paypay" : current))
         }
       })
@@ -180,7 +181,7 @@ export function UserReservationInputPage() {
     return () => {
       mounted = false
     }
-  }, [shopId])
+  }, [demoMode, shopId])
 
   useEffect(() => {
     let active = true
@@ -379,7 +380,14 @@ export function UserReservationInputPage() {
     }
 
     try {
-      if (reviewData.paymentMethod === "credit") {
+      if (demoMode) {
+        const result = await createUserReservation(commonPayload)
+        if (!result.ok) {
+          setFinalSubmitError(result.error)
+          setIsSubmittingFinal(false)
+          return
+        }
+      } else if (reviewData.paymentMethod === "credit") {
         if (skipCardPaymentInline) {
           const result = await createUserReservation({
             ...commonPayload,
@@ -438,7 +446,12 @@ export function UserReservationInputPage() {
 
   async function handleConfirmDialogConfirm() {
     if (!reviewData) return
-    if (reviewData.paymentMethod === "credit" && !skipCardPaymentInline && confirmDialogStep === "summary") {
+    if (
+      !demoMode &&
+      reviewData.paymentMethod === "credit" &&
+      !skipCardPaymentInline &&
+      confirmDialogStep === "summary"
+    ) {
       setFinalSubmitError("")
       setConfirmDialogStep("card")
       return
@@ -473,8 +486,15 @@ export function UserReservationInputPage() {
 
   const reviewDisplayPriceText = useMemo(() => {
     if (!reviewData) return "未定"
-    if (reviewData.paymentMethod === "free" || reviewData.paymentMethod === "onsite" || skipCardPaymentInline) {
-      return reviewData.paymentMethod === "onsite" ? "当日払い" : "現地で決済"
+    if (reviewData.paymentMethod === "onsite") {
+      return reviewData.menuPrice != null ? `当日払い ¥${reviewData.menuPrice.toLocaleString()}` : "当日払い"
+    }
+    if (reviewData.paymentMethod === "credit" || reviewData.paymentMethod === "paypay") {
+      const label = reviewData.paymentMethod === "credit" ? "前払い（カード）" : "前払い（PayPay）"
+      return reviewData.menuPrice != null ? `${label} ¥${reviewData.menuPrice.toLocaleString()}` : label
+    }
+    if (reviewData.paymentMethod === "free" || skipCardPaymentInline) {
+      return "現地で決済"
     }
     if (stripeAmountYen > 0) return `¥${stripeAmountYen.toLocaleString()}`
     if (reviewData.menuPrice != null) return `¥${reviewData.menuPrice.toLocaleString()}`
@@ -711,10 +731,11 @@ export function UserReservationInputPage() {
                 </p>
               </div>
               {demoMode ? (
-                <p className="text-xs text-muted-foreground">デモでは当日払い（店頭会計）で予約が確定します。</p>
+                <p className="text-xs text-muted-foreground">
+                  前払いと当日払いのどちらも選べます。デモではカード会社へ請求せず、選んだ方法を予約に記録します。
+                </p>
               ) : null}
-              <div className={demoMode ? "grid gap-2" : "grid gap-2 sm:grid-cols-2"}>
-                {demoMode ? null : (
+              <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => setPaymentTiming("prepaid")}
@@ -729,7 +750,6 @@ export function UserReservationInputPage() {
                     クレジットカードまたはPayPay
                   </span>
                 </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setPaymentTiming("onsite")}

@@ -8,10 +8,12 @@ import { routerBasename } from "@/demo/demoMode"
 import {
   availabilitySlots,
   demoId,
+  importHotpepperEmail,
   importReservationCsv,
   loadDemoState,
   publicMenus,
   recomputeEnd,
+  salesSummary,
   updateDemoState,
   type DemoAdmin,
   type DemoReservation,
@@ -193,6 +195,8 @@ function createReservation(
   const trainer = state.trainers.find((item) => item.trainer_id === trainerId) ?? null
   const startAt = String(body.start_at ?? "")
   const id = demoId("res")
+  const paymentMethod = body.payment_method ? String(body.payment_method) : "onsite"
+  const prepaid = paymentMethod === "credit" || paymentMethod === "paypay"
   const reservation: DemoReservation = {
     reservation_id: id,
     menu_id: menu?.menu_id ?? menuId,
@@ -208,8 +212,8 @@ function createReservation(
     trainer_name: trainer?.name ?? null,
     booking_type: body.booking_type === "OMAKASE" ? "OMAKASE" : trainer ? "SHIMEI" : "OMAKASE",
     source,
-    payment_method: body.payment_method ? String(body.payment_method) : "onsite",
-    payment_status: "pending",
+    payment_method: paymentMethod,
+    payment_status: prepaid ? "paid" : "pending",
     payment_amount_yen: menu?.price ?? null,
     confirmation_token: demoId("token"),
     created_at: new Date().toISOString(),
@@ -249,7 +253,18 @@ function hotpepperPayload(state: DemoState) {
   return {
     hotpepper_url: state.salon.hotpepper_url,
     coupons: state.coupons,
+    emails: state.inbox ?? [],
   }
+}
+
+function currentMonthKey(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+  })
+    .format(new Date())
+    .slice(0, 7)
 }
 
 export async function handleDemoRequest(pathWithQuery: string, init?: RequestInit): Promise<Response> {
@@ -411,6 +426,25 @@ export async function handleDemoRequest(pathWithQuery: string, init?: RequestIni
     })
     return json(200, hotpepperPayload(next))
   }
+  if (pathname === "/api/admin/hotpepper/emails" && method === "POST") {
+    const emailId = typeof body.email_id === "string" ? body.email_id : ""
+    const mail = state.inbox?.find((item) => item.id === emailId)
+    const text = typeof body.text === "string" && body.text.trim() ? body.text : mail?.body ?? ""
+    if (!text.trim()) return json(400, { detail: "メール本文がありません。" })
+    let result = { imported: 0, errors: ["取り込みに失敗しました。"] }
+    updateDemoState((draft) => {
+      result = importHotpepperEmail(draft, text)
+      if (emailId && result.imported > 0) {
+        const item = draft.inbox.find((entry) => entry.id === emailId)
+        if (item) item.imported = true
+      }
+    })
+    return json(200, result)
+  }
+  if (pathname === "/api/admin/sales" && method === "GET") {
+    const month = search.get("month") || currentMonthKey()
+    return json(200, salesSummary(state, month))
+  }
   if (pathname === "/api/admin/hotpepper/import" && method === "POST") {
     let result = { imported: 0, errors: [] as string[] }
     updateDemoState((draft) => {
@@ -465,6 +499,7 @@ export async function handleDemoRequest(pathWithQuery: string, init?: RequestIni
       name: String(body.name ?? ""),
       duration_minutes: Number(body.duration_minutes ?? 60),
       price: Number(body.price ?? 0),
+      cost_yen: Math.round(Number(body.price ?? 0) * 0.35),
       description: null,
       image_url: null,
       is_public: body.is_public !== false,

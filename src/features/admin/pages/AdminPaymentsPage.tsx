@@ -13,7 +13,7 @@ export function AdminPaymentsPage() {
       </div>
       {isDemoMode() ? (
         <p className="rounded-lg border border-border bg-muted px-4 py-3 text-sm">
-          デモでは外部決済を使わず、予約は当日払い（店頭会計）で確定します。
+          デモではカード会社には接続しません。お客様は前払いと当日払いのどちらも選べ、選んだ方法が予約台帳に残ります。
         </p>
       ) : null}
 

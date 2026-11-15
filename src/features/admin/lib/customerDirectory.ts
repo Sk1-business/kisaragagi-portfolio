@@ -10,6 +10,10 @@ export type CustomerChart = {
   hairRequest: string
   allergy: string
   notes: string
+  texture: string
+  preference: string
+  photoName: string
+  photoData: string
   updatedAt: string
 }
 
@@ -38,7 +42,24 @@ const EMPTY_CHART: CustomerChart = {
   hairRequest: "",
   allergy: "",
   notes: "",
+  texture: "",
+  preference: "",
+  photoName: "",
+  photoData: "",
   updatedAt: "",
+}
+
+export function normalizeChart(chart: Partial<CustomerChart> | undefined): CustomerChart {
+  return {
+    hairRequest: chart?.hairRequest ?? "",
+    allergy: chart?.allergy ?? "",
+    notes: chart?.notes ?? "",
+    texture: chart?.texture ?? "",
+    preference: chart?.preference ?? "",
+    photoName: chart?.photoName ?? "",
+    photoData: chart?.photoData ?? "",
+    updatedAt: chart?.updatedAt ?? "",
+  }
 }
 
 function emptyProfile(key: string): CustomerProfile {
@@ -52,6 +73,104 @@ function emptyProfile(key: string): CustomerProfile {
     gender: "",
     kind: "",
     chart: { ...EMPTY_CHART },
+  }
+}
+
+const SHOWCASE_SEED_KEY = "kisaragi-chart-seed:v1"
+
+export function ensureShowcaseCharts(): void {
+  if (localStorage.getItem(SHOWCASE_SEED_KEY) === "1") return
+  const samples: CustomerProfile[] = [
+    {
+      key: customerKey("09011112222", "guest@kisaragi.example"),
+      name: "来店 花子",
+      furigana: "ライテン ハナコ",
+      email: "guest@kisaragi.example",
+      phone: "09011112222",
+      birthday: "1994-04-12",
+      gender: "female",
+      kind: "existing",
+      chart: {
+        ...EMPTY_CHART,
+        texture: "普通毛、やや細め",
+        hairRequest: "鎖骨の少し下。顔まわりは軽く",
+        preference: "ナチュラル。真っ黒にはしない",
+        allergy: "なし",
+        notes: "前回は耳の下で切っている。次は2cm残す。",
+        updatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      key: customerKey("09022223333", "sato@example.com"),
+      name: "佐藤 美月",
+      furigana: "サトウ ミヅキ",
+      email: "sato@example.com",
+      phone: "09022223333",
+      birthday: "1998-09-03",
+      gender: "female",
+      kind: "existing",
+      chart: {
+        ...EMPTY_CHART,
+        texture: "直毛、太め",
+        hairRequest: "透明感のあるベージュ",
+        preference: "明るさは今のトーンを維持",
+        allergy: "ジアミンでかぶれたことがある",
+        notes: "カラーはノンジアミンで。頭皮が敏感。",
+        updatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      key: customerKey("09033334444", "takahashi@example.com"),
+      name: "高橋 直人",
+      furigana: "タカハシ ナオト",
+      email: "takahashi@example.com",
+      phone: "09033334444",
+      birthday: "1989-01-20",
+      gender: "male",
+      kind: "existing",
+      chart: {
+        ...EMPTY_CHART,
+        texture: "くせ毛、広がりやすい",
+        hairRequest: "ビジネスでも使える短め",
+        preference: "ワックス少なめでもまとまる形",
+        allergy: "なし",
+        notes: "サイドは短く、トップは立ち上がりを残す。",
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  ]
+  importCustomerProfiles(samples)
+  localStorage.setItem(SHOWCASE_SEED_KEY, "1")
+}
+
+export function parseKarteText(text: string): Partial<CustomerProfile> | null {
+  const value = (labels: string[]) => {
+    const match = text.match(new RegExp(`(?:${labels.join("|")})\\s*[:：]\\s*(.+)`))
+    return match?.[1]?.trim() ?? ""
+  }
+  const name = value(["氏名", "名前", "お名前"])
+  const phone = value(["電話", "電話番号"]).replace(/[^\d]/g, "")
+  const email = value(["メール", "メールアドレス"])
+  if (!name && !phone && !email) return null
+  const key = customerKey(phone, email)
+  return {
+    key,
+    name,
+    furigana: value(["フリガナ", "ふりがな"]),
+    phone,
+    email,
+    birthday: "",
+    gender: "",
+    kind: "existing",
+    chart: {
+      ...EMPTY_CHART,
+      texture: value(["髪質"]),
+      hairRequest: value(["希望", "髪型", "仕上がり"]),
+      preference: value(["好み"]),
+      allergy: value(["アレルギー", "禁忌"]),
+      notes: value(["メモ", "施術メモ"]),
+      updatedAt: new Date().toISOString(),
+    },
   }
 }
 
@@ -107,7 +226,7 @@ export function importCustomerProfiles(rows: CustomerProfile[]): number {
     byKey.set(row.key, {
       ...current,
       ...row,
-      chart: current.chart.updatedAt ? current.chart : row.chart,
+      chart: current.chart?.updatedAt ? normalizeChart(current.chart) : normalizeChart(row.chart),
     })
     imported += 1
   }
@@ -170,6 +289,7 @@ export function buildCustomerDirectory(reservations: Reservation[]): CustomerRec
       const visits = history.filter((reservation) => reservation.status !== "CANCELLED")
       return {
         ...bucket.profile,
+        chart: normalizeChart(bucket.profile.chart),
         noShowCount,
         blocked: noShowCount >= NO_SHOW_BLOCK_THRESHOLD,
         visitCount: visits.length,

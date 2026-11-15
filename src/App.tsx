@@ -32,6 +32,7 @@ import { AdminSalonSettingsPage } from "@/features/admin/pages/AdminSalonSetting
 import { AdminSalonProfilePage } from "@/features/admin/pages/AdminSalonProfilePage"
 import { AdminSecurityPage } from "@/features/admin/pages/AdminSecurityPage"
 import { AdminCustomersPage } from "@/features/admin/pages/AdminCustomersPage"
+import { AdminSalesPage } from "@/features/admin/pages/AdminSalesPage"
 import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
@@ -49,35 +50,25 @@ import { UserLayout } from "./layouts/UserLayout"
 
 function LandingPage() {
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col justify-center px-4 py-12 sm:px-6">
+    <main className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col justify-center px-4 py-12 sm:px-6">
       <div className="mb-8 flex items-center gap-3">
         <div className="rounded-lg border border-border bg-card p-2">
           <Scissors className="size-5 text-foreground" />
         </div>
         <div>
-          <p className="text-sm text-muted-foreground">美容室の予約</p>
-          <h1 className="text-2xl font-semibold tracking-tight">キサラギ美容室</h1>
+          <p className="text-sm text-muted-foreground">キサラギ美容室</p>
+          <h1 className="text-2xl font-semibold tracking-tight">どちらで入りますか</h1>
         </div>
       </div>
-
-      <div className="mb-6 rounded-lg border border-border bg-muted px-4 py-3 text-sm leading-relaxed">
-        <p>ブラウザだけで予約と管理を試せます。決済は当日払いです。</p>
-        <p className="mt-2">
-          オーナー {DEMO_OWNER.email} / {DEMO_OWNER.password}
-        </p>
-        <p>
-          お客様 {DEMO_CUSTOMER.email} / {DEMO_CUSTOMER.password}
-        </p>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="rounded-lg shadow-xs">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <UserRound className="size-4" />
+            <p className="text-xs font-medium tracking-wide text-muted-foreground">お客様</p>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <UserRound className="size-5" />
               予約する
             </CardTitle>
-            <CardDescription>カット・カラー・パーマを指名して予約します</CardDescription>
+            <CardDescription>カット・カラー・パーマを選んで、前払いまたは当日払いで予約します。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <Button asChild className="w-full rounded-md">
@@ -86,16 +77,21 @@ function LandingPage() {
             <Button asChild variant="outline" className="w-full rounded-md">
               <Link to={`/user/reservation/lookup?shopId=${DEMO_SALON_SLUG}`}>予約の確認へ</Link>
             </Button>
+            <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
+              お客様 {DEMO_CUSTOMER.email} / {DEMO_CUSTOMER.password}
+            </p>
           </CardContent>
         </Card>
-
         <Card className="rounded-lg shadow-xs">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <ShieldCheck className="size-4" />
-              サロン管理
+            <p className="text-xs font-medium tracking-wide text-muted-foreground">スタッフ・経営者</p>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <ShieldCheck className="size-5" />
+              お店を見る
             </CardTitle>
-            <CardDescription>予約台帳、スタイリスト、ホットペッパー経由の取り込み</CardDescription>
+            <CardDescription>
+              予約台帳、顧客カルテ、おすすめ、売上と利益、ホットペッパーの予約メールを扱います。
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <Button asChild className="w-full rounded-md">
@@ -104,6 +100,9 @@ function LandingPage() {
             <Button asChild variant="outline" className="w-full rounded-md">
               <Link to={ROUTES.backofficeSignup}>サロンを新規登録</Link>
             </Button>
+            <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
+              オーナー {DEMO_OWNER.email} / {DEMO_OWNER.password}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -206,6 +205,14 @@ function App() {
           />
           <Route path={ROUTES.adminSecurity} element={<AdminSecurityPage />} />
           <Route path={ROUTES.adminCustomers} element={<AdminCustomersPage />} />
+          <Route
+            path={ROUTES.adminSales}
+            element={
+              <OwnerOnlyRoute>
+                <AdminSalesPage />
+              </OwnerOnlyRoute>
+            }
+          />
           <Route
             path={ROUTES.adminNewReservationConfirm}
             element={<AdminNewReservationConfirmPage />}

@@ -1,7 +1,8 @@
 import { DEMO_CUSTOMER, DEMO_OWNER, DEMO_SALON_NAME, DEMO_SALON_SLUG } from "@/demo/demoAccounts"
+import { parseHotpepperMail } from "@/demo/parseHotpepperMail"
 import { parseReservationChannel, type ReservationChannel } from "@/features/admin/lib/reservationChannel"
 
-const STORAGE_KEY = "kisaragi-salon-demo:v1"
+const STORAGE_KEY = "kisaragi-salon-demo:v2"
 const SALON_IMAGE =
   "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=1400&q=80"
 
@@ -10,6 +11,7 @@ export type DemoMenu = {
   name: string
   duration_minutes: number
   price: number
+  cost_yen: number
   description: string | null
   image_url: string | null
   is_public: boolean
@@ -105,6 +107,15 @@ export type DemoBookingRules = {
   max_advance_days: number
 }
 
+export type DemoMail = {
+  id: string
+  from: string
+  subject: string
+  received_at: string
+  body: string
+  imported: boolean
+}
+
 export type DemoState = {
   salon: {
     salon_id: string
@@ -133,6 +144,7 @@ export type DemoState = {
   trainers: DemoTrainer[]
   shifts: DemoShift[]
   reservations: DemoReservation[]
+  inbox: DemoMail[]
   customers: DemoCustomer[]
   admins: DemoAdmin[]
   lookupTokens: Record<string, { email?: string; phone?: string }>
@@ -187,6 +199,7 @@ function createSeed(): DemoState {
       name: "カット",
       duration_minutes: 60,
       price: 5500,
+      cost_yen: 1700,
       description: "似合わせカット。シャンプー・ブロー込み。",
       image_url: SALON_IMAGE,
       is_public: true,
@@ -197,6 +210,7 @@ function createSeed(): DemoState {
       name: "カラー",
       duration_minutes: 90,
       price: 8800,
+      cost_yen: 3100,
       description: "フルカラー。トーンとダメージに合わせて調合します。",
       image_url: SALON_IMAGE,
       is_public: true,
@@ -207,6 +221,7 @@ function createSeed(): DemoState {
       name: "パーマ",
       duration_minutes: 120,
       price: 9900,
+      cost_yen: 3500,
       description: "デジタルパーマまたはコスメパーマ。",
       image_url: null,
       is_public: true,
@@ -217,6 +232,7 @@ function createSeed(): DemoState {
       name: "トリートメント",
       duration_minutes: 45,
       price: 4400,
+      cost_yen: 1400,
       description: "炭酸泉と集中補修。",
       image_url: null,
       is_public: true,
@@ -277,6 +293,7 @@ function createSeed(): DemoState {
   }
 
   const today = shiftDate(0)
+  const mailDate = shiftDate(3)
   const mondayOffset = (() => {
     const weekday = new Date(`${today}T12:00:00`).getDay()
     if (weekday === 0) return 1
@@ -298,7 +315,10 @@ function createSeed(): DemoState {
     source: ReservationChannel
     status: DemoReservation["status"]
     customerId?: string
+    paymentMethod?: string
   }): DemoReservation {
+    const paymentMethod = input.paymentMethod ?? "onsite"
+    const prepaid = paymentMethod === "credit" || paymentMethod === "paypay"
     return {
       reservation_id: input.id,
       menu_id: input.menu.menu_id,
@@ -314,8 +334,8 @@ function createSeed(): DemoState {
       trainer_name: input.trainer.name,
       booking_type: "SHIMEI",
       source: input.source,
-      payment_method: "onsite",
-      payment_status: "pending",
+      payment_method: paymentMethod,
+      payment_status: input.status === "DONE" || prepaid ? "paid" : "pending",
       payment_amount_yen: input.menu.price,
       confirmation_token: `token_${input.id}`,
       created_at: stamp(yesterday, "09:00"),
@@ -334,7 +354,7 @@ function createSeed(): DemoState {
       salon_id: "salon_kisaragi",
       salon_name: DEMO_SALON_NAME,
       slug: DEMO_SALON_SLUG,
-      description: "カット、カラー、パーマ、トリートメントまで。指名もおまかせも、当日払いで予約できます。",
+      description: "カット、カラー、パーマ、トリートメントまで。前払いと当日払いのどちらでも予約できます。",
       phone: "03-1234-5678",
       address: "東京都渋谷区神宮前1-2-3",
       booking_page_message: "ご来店の15分前を目安にお越しください。",
@@ -406,6 +426,7 @@ function createSeed(): DemoState {
         phone: "09022223333",
         source: "web",
         status: "BOOKED",
+        paymentMethod: "credit",
       }),
       reservation({
         id: "res_today_phone",
@@ -443,6 +464,81 @@ function createSeed(): DemoState {
         source: "hotpepper",
         status: "CANCELED",
       }),
+      reservation({
+        id: "res_done_cut",
+        menu: cut,
+        trainer: trainers[0],
+        date: shiftDate(-6),
+        time: "11:00",
+        customerName: DEMO_CUSTOMER.name,
+        email: DEMO_CUSTOMER.email,
+        phone: DEMO_CUSTOMER.phone,
+        source: "web",
+        status: "DONE",
+        customerId: "user_guest",
+        paymentMethod: "onsite",
+      }),
+      reservation({
+        id: "res_done_color",
+        menu: color,
+        trainer: trainers[1],
+        date: shiftDate(-4),
+        time: "13:00",
+        customerName: "佐藤 美月",
+        email: "sato@example.com",
+        phone: "09022223333",
+        source: "hotpepper",
+        status: "DONE",
+        paymentMethod: "credit",
+      }),
+      reservation({
+        id: "res_done_perm",
+        menu: perm,
+        trainer: trainers[2],
+        date: shiftDate(-3),
+        time: "10:00",
+        customerName: "鈴木 彩",
+        email: "suzuki@example.com",
+        phone: "09044445555",
+        source: "web",
+        status: "DONE",
+        paymentMethod: "paypay",
+      }),
+      reservation({
+        id: "res_done_treat",
+        menu: treatment,
+        trainer: trainers[1],
+        date: shiftDate(-2),
+        time: "16:00",
+        customerName: "高橋 直人",
+        email: "takahashi@example.com",
+        phone: "09033334444",
+        source: "phone",
+        status: "DONE",
+        paymentMethod: "onsite",
+      }),
+    ],
+    inbox: [
+      {
+        id: "mail_unread",
+        from: "reservation@hotpepper.example",
+        subject: "【ホットペッパービューティー】予約が入りました",
+        received_at: stamp(today, "09:10"),
+        imported: false,
+        body: [
+          "ホットペッパービューティー 予約受付のお知らせ",
+          "",
+          "■ご予約内容",
+          `予約日時：${Number(mailDate.slice(0, 4))}年${Number(mailDate.slice(5, 7))}月${Number(mailDate.slice(8, 10))}日 15:00`,
+          "所要時間：60分",
+          "メニュー：カット",
+          "担当スタイリスト：青井 凛",
+          "",
+          "■お客様情報",
+          "氏名：森 あかり",
+          "電話番号：090-7777-8888",
+        ].join("\n"),
+      },
     ],
     customers: [
       {
@@ -481,7 +577,10 @@ export function loadDemoState(): DemoState {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as DemoState
-      if (parsed?.salon?.slug && Array.isArray(parsed.reservations)) return parsed
+      if (parsed?.salon?.slug && Array.isArray(parsed.reservations)) {
+        if (!Array.isArray(parsed.inbox)) parsed.inbox = []
+        return parsed
+      }
     }
   } catch {
     /* reseed */
@@ -578,6 +677,141 @@ export function importReservationCsv(state: DemoState, csv: string): CsvImportRe
     imported += 1
   })
   return { imported, errors }
+}
+
+export function importHotpepperEmail(state: DemoState, text: string): CsvImportResult {
+  const parsed = parseHotpepperMail(text)
+  if (!parsed) {
+    return { imported: 0, errors: ["予約日時、メニュー、お客様名を読み取れませんでした。"] }
+  }
+  const phone = parsed.phone
+  const duplicate = state.reservations.some((item) => {
+    if (item.status === "CANCELED") return false
+    if (!item.start_at.startsWith(`${parsed.date}T${parsed.start}`)) return false
+    return (item.customer_phone ?? "").replace(/\D/g, "") === phone
+  })
+  if (duplicate) return { imported: 0, errors: ["同じ日時・電話番号の予約がすでにあります。"] }
+  const trainer =
+    state.trainers.find((item) => item.name === parsed.stylistName) ??
+    state.trainers.find((item) => parsed.stylistName && (parsed.stylistName.includes(item.name) || item.name.includes(parsed.stylistName))) ??
+    state.trainers[0]
+  const menu =
+    state.menus.find((item) => item.name === parsed.menuName) ??
+    state.menus.find((item) => parsed.menuName.includes(item.name) || item.name.includes(parsed.menuName)) ??
+    state.menus[0]
+  if (!trainer || !menu) return { imported: 0, errors: ["担当またはメニューを決められませんでした。"] }
+  const end = parsed.end
+    ? stamp(parsed.date, parsed.end)
+    : endStamp(parsed.date, parsed.start, parsed.durationMinutes ?? menu.duration_minutes)
+  state.reservations.push({
+    reservation_id: demoId("res"),
+    menu_id: menu.menu_id,
+    menu_name: menu.name,
+    start_at: stamp(parsed.date, parsed.start),
+    service_end_at: end,
+    customer_name: parsed.customerName,
+    customer_email: "",
+    customer_phone: phone || null,
+    notes: "ホットペッパーの予約メールから取り込み",
+    status: "BOOKED",
+    trainer_id: trainer.trainer_id,
+    trainer_name: trainer.name,
+    booking_type: "SHIMEI",
+    source: "hotpepper",
+    payment_method: "onsite",
+    payment_status: "pending",
+    payment_amount_yen: menu.price,
+    confirmation_token: demoId("token"),
+    created_at: new Date().toISOString(),
+    customer_id: null,
+    can_cancel: true,
+  })
+  return { imported: 1, errors: [] }
+}
+
+export type SalesLine = {
+  name: string
+  count: number
+  revenue_yen: number
+  cost_yen: number
+  profit_yen: number
+  margin_rate: number
+}
+
+export type SalesSummary = {
+  month: string
+  revenue_yen: number
+  cost_yen: number
+  profit_yen: number
+  margin_rate: number
+  prepaid_yen: number
+  by_menu: SalesLine[]
+  by_payment: { method: string; label: string; revenue_yen: number }[]
+}
+
+function menuCost(menu: DemoMenu | undefined, price: number): number {
+  if (menu && Number.isFinite(menu.cost_yen)) return menu.cost_yen
+  return Math.round(price * 0.35)
+}
+
+function paymentLabel(method: string | null): string {
+  if (method === "credit") return "前払い（カード）"
+  if (method === "paypay") return "前払い（PayPay）"
+  return "当日払い"
+}
+
+export function salesSummary(state: DemoState, month: string): SalesSummary {
+  const done = state.reservations.filter(
+    (item) => item.status === "DONE" && item.start_at.startsWith(month),
+  )
+  const byMenu = new Map<string, SalesLine>()
+  const byPayment = new Map<string, { method: string; label: string; revenue_yen: number }>()
+  let revenue = 0
+  let cost = 0
+  for (const item of done) {
+    const price = item.payment_amount_yen ?? 0
+    const menu = state.menus.find((entry) => entry.menu_id === item.menu_id)
+    const itemCost = menuCost(menu, price)
+    revenue += price
+    cost += itemCost
+    const line = byMenu.get(item.menu_name) ?? {
+      name: item.menu_name,
+      count: 0,
+      revenue_yen: 0,
+      cost_yen: 0,
+      profit_yen: 0,
+      margin_rate: 0,
+    }
+    line.count += 1
+    line.revenue_yen += price
+    line.cost_yen += itemCost
+    line.profit_yen = line.revenue_yen - line.cost_yen
+    line.margin_rate = line.revenue_yen > 0 ? line.profit_yen / line.revenue_yen : 0
+    byMenu.set(item.menu_name, line)
+    const method = item.payment_method ?? "onsite"
+    const pay = byPayment.get(method) ?? { method, label: paymentLabel(method), revenue_yen: 0 }
+    pay.revenue_yen += price
+    byPayment.set(method, pay)
+  }
+  const prepaid = state.reservations
+    .filter(
+      (item) =>
+        item.status === "BOOKED" &&
+        item.payment_status === "paid" &&
+        item.start_at.startsWith(month),
+    )
+    .reduce((sum, item) => sum + (item.payment_amount_yen ?? 0), 0)
+  const profit = revenue - cost
+  return {
+    month,
+    revenue_yen: revenue,
+    cost_yen: cost,
+    profit_yen: profit,
+    margin_rate: revenue > 0 ? profit / revenue : 0,
+    prepaid_yen: prepaid,
+    by_menu: [...byMenu.values()],
+    by_payment: [...byPayment.values()],
+  }
 }
 
 export function publicMenus(state: DemoState) {
