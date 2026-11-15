@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Blind Tact (ブラインド・タクト)</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior: none;
+      background-color: #050505;
+      color: #949494;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      touch-action: none;
+    }
+
+    #artCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+      cursor: crosshair;
+    }
+
+    /* Minimal UI Overlay */
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding:
+        calc(16px + env(safe-area-inset-top))
+        calc(16px + env(safe-area-inset-right))
+        calc(16px + env(safe-area-inset-bottom))
+        calc(16px + env(safe-area-inset-left));
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      opacity: 0.6;
+      transition: opacity 0.5s ease;
+      pointer-events: auto;
+    }
+
+    .title-mark {
+      font-size: 11px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      font-weight: 300;
+      color: #666;
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #888;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.3s ease;
+      outline: none;
+    }
+
+    .btn-icon:hover, .btn-icon:active {
+      border-color: rgba(255, 144, 64, 0.5);
+      color: #e0e0e0;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    /* Whisper Instruction */
+    .instruction-wrap {
+      text-align: center;
+      padding-bottom: 24px;
+      transition: opacity 1.2s ease, transform 1.2s ease;
+      pointer-events: none;
+    }
+
+    .instruction-text {
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      color: rgba(255, 255, 255, 0.45);
+      font-weight: 300;
+      line-height: 1.8;
+      text-shadow: 0 0 12px rgba(0, 0, 0, 0.8);
+    }
+
+    .fade-out {
+      opacity: 0 !important;
+      transform: translateY(8px);
+    }
+
+    /* Actions Bottom Bar */
+    .footer-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      pointer-events: auto;
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+    }
+
+    .footer-actions.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .action-btn {
+      background: rgba(20, 20, 20, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 144, 64, 0.25);
+      color: #dfdfdf;
+      min-height: 48px;
+      padding: 12px 18px;
+      border-radius: 30px;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+    }
+
+    .action-btn:hover {
+      background: rgba(255, 144, 64, 0.15);
+      border-color: rgba(255, 144, 64, 0.6);
+      color: #fff;
+    }
+
+    /* Modal dialog */
+    .modal-backdrop {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(4, 4, 4, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: #0d0d0d;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      max-width: 440px;
+      width: 100%;
+      padding: 28px 24px;
+      color: #b5b5b5;
+      font-size: 13px;
+      line-height: 1.8;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+    }
+
+    .modal-card h3 {
+      color: #eaeaea;
+      font-size: 15px;
+      letter-spacing: 0.15em;
+      font-weight: 400;
+      margin-bottom: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding-bottom: 10px;
+    }
+
+    .modal-card p {
+      margin-bottom: 14px;
+    }
+
+    .modal-close-btn {
+      width: 100%;
+      background: #181818;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #eee;
+      min-height: 48px;
+      padding: 12px;
+      border-radius: 8px;
+      margin-top: 14px;
+      cursor: pointer;
+      font-size: 16px;
+      letter-spacing: 0.1em;
+      transition: background 0.2s;
+    }
+
+    .modal-close-btn:hover {
+      background: #252525;
+    }
+
+    /* Proximity indicator dot */
+    .presence-gauge {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #222;
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+
+    .presence-gauge.active {
+      background: #ff9040;
+      box-shadow: 0 0 10px #ff9040;
+      transform: scale(1.4);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Fullscreen art canvas -->
+  <canvas id="artCanvas"></canvas>
+
+  <!-- UI Overlay -->
+  <div class="ui-layer">
+    <header class="header-bar">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="presence-gauge" id="presenceGauge"></span>
+        <span class="title-mark">Blind Tact</span>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn-icon" id="soundToggleBtn" title="音声切り替え" aria-label="Toggle Sound">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+        </button>
+        <button class="btn-icon" id="infoBtn" title="作品について" aria-label="About">?</button>
+      </div>
+    </header>
+
+    <!-- Initial subtle poetic hint -->
+    <div class="instruction-wrap" id="instructionWrap">
+      <p class="instruction-text">
+        文字を読まず、指先の触覚で探す。<br>
+        画面を指でゆっくりとなぞり、遠くの気配を探してください。
+      </p>
+    </div>
+
+    <!-- Actions revealed upon synchronization -->
+    <footer class="footer-actions" id="footerActions">
+      <button class="action-btn" id="saveLogBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        接触の残照を記録 (Save Trace)
+      </button>
+    </footer>
+  </div>
+
+  <!-- Concept info modal -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal-card">
+      <h3>Blind Tact (ブラインド・タクト)</h3>
+      <p>
+        私たちは日々、アルゴリズムと過密な文字情報に神経を占有され、皮膚感覚や偶発的な出会いの手触りを失いつつあります。
+      </p>
+      <p>
+        この作品には文字のタイムラインもチャットログも存在しません。タッチパネルを情報伝達ではなく「皮膚の延長」として扱い、画面の闇の中を彷徨う他者の波長を、<strong>周波数（音響）</strong>と<strong>振動（触覚）</strong>だけで手探りします。
+      </p>
+      <p style="font-size: 11px; color: #777;">
+        ※ スマートフォンのバイブレーション機能に対応している場合、指が気配に接近すると微振動が発生します。イヤホンの着用を推奨します。
+      </p>
+      <button class="modal-close-btn" id="modalCloseBtn">画面に戻る</button>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * Blind Tact
+     * Single-file interactive tactile-acoustic installation.
+     */
+
+    // --- Audio Synthesis Engine ---
+    class TactileAudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.bassOsc = null;
+        this.bassGain = null;
+        this.warmthOsc = null;
+        this.warmthGain = null;
+        this.filter = null;
+        this.isMuted = false;
+        this.initialized = false;
+      }
+
+      init() {
+        if (this.initialized) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+
+        // Master Gain
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        this.masterGain.connect(this.ctx.destination);
+
+        // Lowpass filter responding to proximity
+        this.filter = this.ctx.createBiquadFilter();
+        this.filter.type = 'lowpass';
+        this.filter.frequency.setValueAtTime(80, this.ctx.currentTime);
+        this.filter.Q.setValueAtTime(4, this.ctx.currentTime);
+        this.filter.connect(this.masterGain);
+
+        // Sub Bass Sine (Root heartbeat)
+        this.bassOsc = this.ctx.createOscillator();
+        this.bassOsc.type = 'sine';
+        this.bassOsc.frequency.setValueAtTime(55, this.ctx.currentTime); // A1 note
+        this.bassGain = this.ctx.createGain();
+        this.bassGain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+        this.bassOsc.connect(this.bassGain);
+        this.bassGain.connect(this.filter);
+        this.bassOsc.start();
+
+        // Harmonic Drone (Warmth layer)
+        this.warmthOsc = this.ctx.createOscillator();
+        this.warmthOsc.type = 'triangle';
+        this.warmthOsc.frequency.setValueAtTime(110, this.ctx.currentTime); // A2 note
+        this.warmthGain = this.ctx.createGain();
+        this.warmthGain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+        this.warmthOsc.connect(this.warmthGain);
+        this.warmthGain.connect(this.filter);
+        this.warmthOsc.start();
+
+        this.initialized = true;
+      }
+
+      resume() {
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      // Proximity: 0 (far) to 1 (contact)
+      updateProximity(proximity, isTouching) {
+        if (!this.initialized || this.isMuted) return;
+        const t = this.ctx.currentTime;
+        const rampTime = 0.05;
+
+        if (!isTouching) {
+          // Fade down smoothly when finger is released
+          this.bassGain.gain.setTargetAtTime(0.0001, t, 0.15);
+          this.warmthGain.gain.setTargetAtTime(0.0001, t, 0.15);
+          return;
+        }
+
+        // Bass frequency climbs subtly from 55Hz (A1) to 110Hz (A2)
+        const targetBassFreq = 55 + (proximity * 55);
+        this.bassOsc.frequency.setTargetAtTime(targetBassFreq, t, rampTime);
+
+        // Filter opens up as fingers get closer, letting harmonics breathe
+        const cutoff = 80 + Math.pow(proximity, 2) * 1400;
+        this.filter.frequency.setTargetAtTime(cutoff, t, rampTime);
+
+        // Volume scales with proximity
+        const baseVolume = 0.05 + proximity * 0.45;
+        this.bassGain.gain.setTargetAtTime(baseVolume, t, rampTime);
+        this.warmthGain.gain.setTargetAtTime(Math.pow(proximity, 3) * 0.35, t, rampTime);
+      }
+
+      // Play harmonic ambient chord on successful touch convergence
+      triggerSyncChord() {
+        if (!this.initialized || this.isMuted) return;
+        const t = this.ctx.currentTime;
+        // Pentatonic / ethereal chord frequencies: D4, F#4, A4, C#5, E5
+        const freqs = [293.66, 369.99, 440.0, 554.37, 659.25];
+
+        freqs.forEach((f, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+          osc.frequency.setValueAtTime(f, t);
+
+          gain.gain.setValueAtTime(0.0001, t);
+          // Soft attack
+          gain.gain.exponentialRampToValueAtTime(0.08 / (idx + 1), t + 0.15 + (idx * 0.04));
+          // Long organic decay
+          gain.gain.exponentialRampToValueAtTime(0.00001, t + 4.5);
+
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+
+          osc.start(t);
+          osc.stop(t + 4.6);
+        });
+      }
+
+      toggleMute() {
+        this.isMuted = !this.isMuted;
+        if (this.masterGain && this.ctx) {
+          this.masterGain.gain.setTargetAtTime(this.isMuted ? 0 : 0.5, this.ctx.currentTime, 0.05);
+        }
+        return this.isMuted;
+      }
+    }
+
+    // --- Main Application Logic ---
+    const canvas = document.getElementById('artCanvas');
+    const ctx = canvas.getContext('2d');
+    const audioEngine = new TactileAudioEngine();
+
+    // DOM Elements
+    const instructionWrap = document.getElementById('instructionWrap');
+    const footerActions = document.getElementById('footerActions');
+    const saveLogBtn = document.getElementById('saveLogBtn');
+    const soundToggleBtn = document.getElementById('soundToggleBtn');
+    const infoBtn = document.getElementById('infoBtn');
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const modalCloseBtn = document.getElementById('modalCloseBtn');
+    const presenceGauge = document.getElementById('presenceGauge');
+
+    // Canvas Resolution Handling
+    let width = 0;
+    let height = 0;
+    let dpr = window.devicePixelRatio || 1;
+
+    // Off-screen canvas to accumulate persistent tactile traces (the "Residue")
+    let traceCanvas = document.createElement('canvas');
+    let traceCtx = traceCanvas.getContext('2d');
+
+    function resize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      dpr = window.devicePixelRatio || 1;
+
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      ctx.scale(dpr, dpr);
+
+      // Preserve existing traces on resize
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = traceCanvas.width;
+      tempCanvas.height = traceCanvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(traceCanvas, 0, 0);
+
+      traceCanvas.width = width * dpr;
+      traceCanvas.height = height * dpr;
+      traceCtx.scale(dpr, dpr);
+      traceCtx.drawImage(tempCanvas, 0, 0, width, height);
+    }
+
+    // Touch & Ghost State
+    const userTouch = {
+      x: -1000,
+      y: -1000,
+      active: false,
+      radius: 40,
+      speed: 0,
+      prevX: 0,
+      prevY: 0
+    };
+
+    // Autonomous wandering presence (Simulated distant companion / memory echo)
+    const presence = {
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      targetX: 0,
+      targetY: 0,
+      radius: 45,
+      noiseOffset: Math.random() * 100,
+      breathing: 0,
+      wanderTimer: 0
+    };
+
+    // State Variables
+    let proximity = 0; // 0 to 1
+    let syncCount = 0;
+    let isSynchronized = false;
+    let lastSyncTime = 0;
+    let hasInteracted = false;
+    let particles = [];
+    let bloomFlash = 0;
+
+    // Simple pseudo perlin / organic wander logic
+    function updatePresence(dt) {
+      presence.breathing += dt * 1.8;
+      presence.wanderTimer -= dt;
+
+      if (presence.wanderTimer <= 0) {
+        // Pick new organic wandering target within viewport margins
+        const padX = width * 0.15;
+        const padY = height * 0.15;
+        presence.targetX = padX + Math.random() * (width - padX * 2);
+        presence.targetY = padY + Math.random() * (height - padY * 2);
+        presence.wanderTimer = 3.5 + Math.random() * 4.0;
+      }
+
+      // Smooth elastic pursuit toward target
+      const dx = presence.targetX - presence.x;
+      const dy = presence.targetY - presence.y;
+      presence.vx += dx * 0.008;
+      presence.vy += dy * 0.008;
+      presence.vx *= 0.94;
+      presence.vy *= 0.94;
+
+      presence.x += presence.vx;
+      presence.y += presence.vy;
+    }
+
+    // Vibration trigger with throttle
+    let lastVibrateTime = 0;
+    function triggerHaptic(proximityVal, isContact) {
+      if (!('vibrate' in navigator)) return;
+      const now = performance.now();
+
+      if (isContact && now - lastVibrateTime > 250) {
+        // Harmonic resonance vibration pulse
+        navigator.vibrate([40, 60, 100]);
+        lastVibrateTime = now;
+      } else if (proximityVal > 0.4 && now - lastVibrateTime > Math.max(70, (1 - proximityVal) * 450)) {
+        // Frequency of vibrations increases as fingers near
+        const duration = Math.min(35, Math.floor(proximityVal * 30) + 10);
+        navigator.vibrate(duration);
+        lastVibrateTime = now;
+      }
+    }
+
+    // Particle Burst for Synchronized convergence
+    function createSyncBloom(x, y) {
+      bloomFlash = 1.0;
+      for (let i = 0; i < 48; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 0.4 + Math.random() * 3.2;
+        particles.push({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: 1.5 + Math.random() * 3.5,
+          life: 1.0,
+          decay: 0.006 + Math.random() * 0.012,
+          color: Math.random() > 0.3 ? '#ff9d47' : '#ffd59e'
+        });
+      }
+
+      // Stamp abstract tactile imprint onto trace canvas
+      stampTrace(x, y);
+    }
+
+    // Record an indelible generative mark on the trace canvas
+    function stampTrace(x, y) {
+      const radius = 50 + Math.random() * 30;
+      const grad = traceCtx.createRadialGradient(x, y, 0, x, y, radius);
+      grad.addColorStop(0, 'rgba(255, 140, 60, 0.22)');
+      grad.addColorStop(0.5, 'rgba(180, 70, 20, 0.09)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      traceCtx.save();
+      traceCtx.fillStyle = grad;
+      traceCtx.beginPath();
+      traceCtx.arc(x, y, radius, 0, Math.PI * 2);
+      traceCtx.fill();
+
+      // Subtle fine-art tactile ring mark
+      traceCtx.strokeStyle = 'rgba(255, 180, 100, 0.2)';
+      traceCtx.lineWidth = 0.75;
+      traceCtx.beginPath();
+      traceCtx.arc(x, y, radius * 0.7, 0, Math.PI * 2);
+      traceCtx.stroke();
+      traceCtx.restore();
+
+      // Show Export trace action button
+      footerActions.classList.add('visible');
+    }
+
+    // Calculate proximity and manage synchronization
+    function computeProximity() {
+      if (!userTouch.active) {
+        proximity = 0;
+        presenceGauge.classList.remove('active');
+        return;
+      }
+
+      const dx = userTouch.x - presence.x;
+      const dy = userTouch.y - presence.y;
+      const dist = Math.hypot(dx, dy);
+
+      // Max tactile detection radius
+      const maxDetectDistance = Math.min(width, height) * 0.55;
+      proximity = Math.max(0, 1 - (dist / maxDetectDistance));
+
+      // Threshold for contact synchronization
+      const syncDistance = 42;
+      const now = performance.now();
+
+      if (dist < syncDistance) {
+        if (!isSynchronized && (now - lastSyncTime > 1200)) {
+          isSynchronized = true;
+          lastSyncTime = now;
+          syncCount++;
+          audioEngine.triggerSyncChord();
+          triggerHaptic(1.0, true);
+          createSyncBloom((userTouch.x + presence.x) / 2, (userTouch.y + presence.y) / 2);
+        }
+      } else {
+        isSynchronized = false;
+        triggerHaptic(proximity, false);
+      }
+
+      // Gauge indicator reflecting atmospheric proximity
+      if (proximity > 0.45) {
+        presenceGauge.classList.add('active');
+      } else {
+        presenceGauge.classList.remove('active');
+      }
+    }
+
+    // Animation & Render Loop
+    let lastTime = performance.now();
+    function render(currentTime) {
+      const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
+      lastTime = currentTime;
+
+      updatePresence(dt);
+      computeProximity();
+      audioEngine.updateProximity(proximity, userTouch.active);
+
+      // 1. Dark Screen Background with subtle clearing
+      ctx.fillStyle = '#060606';
+      ctx.fillRect(0, 0, width, height);
+
+      // 2. Render accumulated tactile trace residue
+      ctx.drawImage(traceCanvas, 0, 0, width, height);
+
+      // 3. Render Flash Bloom from synchronization
+      if (bloomFlash > 0.001) {
+        ctx.fillStyle = `rgba(255, 144, 64, ${bloomFlash * 0.18})`;
+        ctx.fillRect(0, 0, width, height);
+        bloomFlash *= 0.94;
+      }
+
+      // 4. Render wandering presence (Almost completely obscured when far away)
+      const breathScale = 1.0 + Math.sin(presence.breathing) * 0.08;
+      const pRadius = presence.radius * breathScale;
+      // Presence only becomes visible as finger draws close
+      const pAlpha = 0.03 + Math.pow(proximity, 2.5) * 0.55;
+
+      const pGrad = ctx.createRadialGradient(
+        presence.x, presence.y, 0,
+        presence.x, presence.y, pRadius * (1 + proximity * 1.5)
+      );
+      pGrad.addColorStop(0, `rgba(255, 160, 80, ${pAlpha})`);
+      pGrad.addColorStop(0.4, `rgba(160, 70, 30, ${pAlpha * 0.4})`);
+      pGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      ctx.fillStyle = pGrad;
+      ctx.beginPath();
+      ctx.arc(presence.x, presence.y, pRadius * (1 + proximity * 1.5), 0, Math.PI * 2);
+      ctx.fill();
+
+      // 5. Render user's tactile finger warmth
+      if (userTouch.active) {
+        const uRadius = userTouch.radius * (1 + proximity * 0.8);
+        const uAlpha = 0.15 + proximity * 0.65;
+
+        // Core warmth gradient
+        const uGrad = ctx.createRadialGradient(
+          userTouch.x, userTouch.y, 0,
+          userTouch.x, userTouch.y, uRadius * 1.8
+        );
+        uGrad.addColorStop(0, `rgba(255, 180, 110, ${uAlpha})`);
+        uGrad.addColorStop(0.4, `rgba(220, 100, 35, ${uAlpha * 0.45})`);
+        uGrad.addColorStop(0.8, `rgba(60, 20, 10, ${uAlpha * 0.12})`);
+        uGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        ctx.fillStyle = uGrad;
+        ctx.beginPath();
+        ctx.arc(userTouch.x, userTouch.y, uRadius * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Proximity resonance bridge (Fluid elastic light thread)
+        if (proximity > 0.25) {
+          const bridgeAlpha = Math.pow(proximity, 2) * 0.4;
+          ctx.strokeStyle = `rgba(255, 165, 85, ${bridgeAlpha})`;
+          ctx.lineWidth = 1 + proximity * 3;
+          ctx.beginPath();
+          ctx.moveTo(userTouch.x, userTouch.y);
+          // Curved organic bridge
+          const midX = (userTouch.x + presence.x) / 2 + Math.sin(currentTime * 0.005) * 15;
+          const midY = (userTouch.y + presence.y) / 2 + Math.cos(currentTime * 0.005) * 15;
+          ctx.quadraticCurveTo(midX, midY, presence.x, presence.y);
+          ctx.stroke();
+        }
+      }
+
+      // 6. Update and render bloom particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.96;
+        p.vy *= 0.96;
+        p.life -= p.decay;
+
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life * 0.8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+      }
+
+      requestAnimationFrame(render);
+    }
+
+    // --- Input Event Handlers ---
+    function handleStart(x, y) {
+      audioEngine.init();
+      audioEngine.resume();
+
+      userTouch.active = true;
+      userTouch.x = x;
+      userTouch.y = y;
+      userTouch.prevX = x;
+      userTouch.prevY = y;
+
+      if (!hasInteracted) {
+        hasInteracted = true;
+        // Fade out text instructions forever to keep the screen uncluttered
+        instructionWrap.classList.add('fade-out');
+      }
+    }
+
+    function handleMove(x, y) {
+      if (!userTouch.active) return;
+      const dx = x - userTouch.prevX;
+      const dy = y - userTouch.prevY;
+      userTouch.speed = Math.hypot(dx, dy);
+      userTouch.prevX = userTouch.x;
+      userTouch.prevY = userTouch.y;
+      userTouch.x = x;
+      userTouch.y = y;
+    }
+
+    function handleEnd() {
+      userTouch.active = false;
+      presenceGauge.classList.remove('active');
+    }
+
+    // Touch Event Listeners (Mobile first)
+    window.addEventListener('touchstart', (e) => {
+      if (e.target.closest('.header-bar') || e.target.closest('.footer-actions') || e.target.closest('.modal-card')) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      handleStart(touch.clientX, touch.clientY);
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+      if (e.target.closest('.header-bar') || e.target.closest('.footer-actions') || e.target.closest('.modal-card')) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      handleMove(touch.clientX, touch.clientY);
+    }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+      handleEnd();
+    });
+
+    window.addEventListener('touchcancel', () => {
+      handleEnd();
+    });
+
+    // Mouse Fallback for Desktop testing
+    let isMouseDown = false;
+    window.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.header-bar') || e.target.closest('.footer-actions') || e.target.closest('.modal-card')) return;
+      isMouseDown = true;
+      handleStart(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isMouseDown) return;
+      handleMove(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('mouseup', () => {
+      isMouseDown = false;
+      handleEnd();
+    });
+
+    // Resize handling
+    window.addEventListener('resize', resize);
+
+    // Audio Mute Toggle
+    soundToggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audioEngine.init();
+      audioEngine.resume();
+      const isMuted = audioEngine.toggleMute();
+      soundToggleBtn.style.color = isMuted ? '#444' : '#ff9040';
+      soundToggleBtn.style.borderColor = isMuted ? 'rgba(255,255,255,0.08)' : 'rgba(255,144,64,0.4)';
+    });
+
+    // Info Modal
+    infoBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      modalBackdrop.classList.add('open');
+    });
+
+    modalCloseBtn.addEventListener('click', () => {
+      modalBackdrop.classList.remove('open');
+    });
+
+    modalBackdrop.addEventListener('click', (e) => {
+      if (e.target === modalBackdrop) {
+        modalBackdrop.classList.remove('open');
+      }
+    });
+
+    // Export generative artwork (Tactile trace print)
+    saveLogBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Render clean high-res snapshot of traces with dark aesthetic
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = width * 2;
+      exportCanvas.height = height * 2;
+      const expCtx = exportCanvas.getContext('2d');
+
+      // Deep canvas background
+      expCtx.fillStyle = '#0a0a0a';
+      expCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+      // Draw collected traces scaled up
+      expCtx.drawImage(traceCanvas, 0, 0, exportCanvas.width, exportCanvas.height);
+
+      // Minimalist artistic signature in the corner
+      expCtx.fillStyle = '#444';
+      expCtx.font = '20px -apple-system, sans-serif';
+      expCtx.fillText('BLIND TACT — TACTILE RESIDUE', 48, exportCanvas.height - 48);
+
+      const link = document.createElement('a');
+      link.download = `blind-tact-trace-${Date.now()}.png`;
+      link.href = exportCanvas.toDataURL('image/png');
+      link.click();
+    });
+
+    // Initialization on load
+    window.onload = function() {
+      resize();
+      // Initialize presence at center
+      presence.x = width / 2;
+      presence.y = height / 2;
+      presence.targetX = width / 2;
+      presence.targetY = height / 2;
+      requestAnimationFrame(render);
+    };
+  </script>
+</body>
+</html>
