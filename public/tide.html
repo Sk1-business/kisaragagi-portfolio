@@ -104,19 +104,12 @@
     }
     .handle {
       width: 100%;
-      min-height: 28px;
+      min-height: 44px;
       border: 0;
       background: transparent;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    .handle i {
-      width: 42px;
-      height: 4px;
-      border-radius: 99px;
-      background: rgba(255, 255, 255, 0.35);
-      display: block;
+      color: #dfb15b;
+      letter-spacing: 0.16em;
+      font-size: 13px;
     }
     .readout { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
     .score {
@@ -165,8 +158,8 @@
       scrollbar-width: none;
     }
     .hour {
-      flex: 1 0 36px;
-      min-width: 36px;
+      flex: 1 0 44px;
+      min-width: 44px;
       height: 100%;
       border: 0;
       background: transparent;
@@ -214,7 +207,7 @@
   </header>
   <div class="spots" id="spots"></div>
   <section class="sheet collapsed" id="sheet">
-    <button class="handle" id="handle" type="button" aria-label="詳細を開く"><i></i></button>
+    <button class="handle" id="handle" type="button">詳細を見る</button>
     <div class="readout">
       <div>
         <div class="score"><span id="score">–</span><em>/10</em></div>
@@ -626,6 +619,7 @@
 
     document.getElementById("handle").addEventListener("click", () => {
       sheet.classList.toggle("collapsed");
+      document.getElementById("handle").textContent = sheet.classList.contains("collapsed") ? "詳細を見る" : "閉じる";
     });
     document.getElementById("setBtn").addEventListener("click", () => { swellBoost = 2.2; });
     document.getElementById("refreshBtn").addEventListener("click", () => loadSpot(spot));
