@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#04070d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="言霊">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <title>KOTODAMA LANTERN | 言霊ランタン</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;600&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%; height: 100dvh; overflow: hidden;
+      background: #04070d; color: #f5f5f4;
+      font-family: "Shippori Mincho", "Hiragino Mincho ProN", serif;
+      touch-action: manipulation; -webkit-font-smoothing: antialiased;
+    }
+    #art-canvas { display: block; width: 100%; height: 100dvh; position: fixed; inset: 0; z-index: 1; }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    input { user-select: text; -webkit-user-select: text; }
+    .fade-transition { transition: opacity 1.2s cubic-bezier(0.22, 1, 0.36, 1), transform 1.2s cubic-bezier(0.22, 1, 0.36, 1); }
+    .glass-btn {
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow: 0 0 30px rgba(255, 180, 100, 0.08), inset 0 0 15px rgba(255, 255, 255, 0.05);
+    }
+    .glass-btn:active { transform: scale(0.97); background: rgba(255, 255, 255, 0.14); }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 25px rgba(255, 165, 80, 0.15); }
+      50% { box-shadow: 0 0 45px rgba(255, 165, 80, 0.35); }
+    }
+    .glow-pulse { animation: pulseGlow 4s infinite ease-in-out; }
+    #start-screen {
+      position: fixed; inset: 0; z-index: 20;
+      display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+      padding: calc(32px + env(safe-area-inset-top)) 32px calc(32px + env(safe-area-inset-bottom));
+      background: linear-gradient(to bottom, rgba(5, 9, 20, 0.9), rgba(7, 13, 28, 0.85), rgba(5, 9, 20, 0.95));
+      text-align: center;
+    }
+    .eyebrow { margin: 24px 0 8px; font-family: Inter, "Hiragino Sans", sans-serif; font-size: 11px; letter-spacing: 0.28em; color: rgba(165, 243, 252, 0.6); }
+    h1 { margin: 0; font-weight: 400; font-size: clamp(24px, 7vw, 30px); letter-spacing: 0.2em; }
+    .en { margin: 4px 0 0; font-family: Inter, "Hiragino Sans", sans-serif; font-size: 12px; letter-spacing: 0.25em; color: #a8a29e; }
+    .mid { max-width: 20rem; margin: auto; }
+    .lantern-mark { width: 56px; height: 80px; margin: 0 auto 20px; opacity: 0.8; }
+    .poem { margin: 0; font-size: 14px; line-height: 1.8; letter-spacing: 0.08em; color: rgba(214, 211, 209, 0.9); }
+    .poem span { display: block; margin-top: 8px; font-size: 12px; color: #a8a29e; }
+    #start-btn { margin-top: 18px; min-height: 52px; padding: 0 32px; border-radius: 999px; letter-spacing: 0.25em; font-size: 14px; color: #fde68a; }
+    .sensor-note { margin: 16px 0 0; font-size: 11px; letter-spacing: 0.06em; color: #78716c; line-height: 1.7; }
+    .hand-note { font-size: 11px; letter-spacing: 0.18em; color: rgba(120, 113, 108, 0.8); }
+    #guide-overlay {
+      position: fixed; z-index: 10; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+      display: flex; justify-content: center; padding: 0 24px; text-align: center;
+      pointer-events: none; opacity: 0;
+    }
+    .guide-card {
+      max-width: 20rem; padding: 16px 24px; border-radius: 16px;
+      background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    }
+    .guide-card p { margin: 0; font-size: 14px; letter-spacing: 0.18em; line-height: 1.8; }
+    .guide-card .sub { margin-top: 6px; font-size: 11px; letter-spacing: 0.08em; color: rgba(165, 243, 252, 0.7); }
+    #hud-controls {
+      position: fixed; z-index: 10; left: 16px; right: 16px;
+      bottom: calc(16px + env(safe-area-inset-bottom));
+      display: flex; align-items: center; justify-content: space-between;
+      opacity: 0; pointer-events: none; transition: opacity 0.7s ease;
+    }
+    #status-badge { font-family: Inter, "Hiragino Sans", sans-serif; font-size: 10px; letter-spacing: 0.18em; color: rgba(255, 255, 255, 0.3); padding: 4px 8px; }
+    .hud-actions { display: flex; align-items: center; gap: 8px; }
+    .round-btn {
+      min-width: 44px; min-height: 44px; border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.4);
+    }
+    .round-btn svg { width: 16px; height: 16px; display: block; margin: 0 auto; }
+    #reset-btn { padding: 0 14px; font-size: 10px; letter-spacing: 0.18em; }
+    .hidden { display: none !important; }
+    #word-dock {
+      position: fixed; z-index: 12; left: 16px; right: 16px;
+      bottom: calc(72px + env(safe-area-inset-bottom));
+      opacity: 0; pointer-events: none; transition: opacity 0.7s ease;
+    }
+    #word-dock.visible {
+      opacity: 1; pointer-events: auto;
+      padding: 8px; border-radius: 18px;
+      background: rgba(4, 7, 13, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    }
+    .chips { display: flex; gap: 8px; overflow-x: auto; padding: 0 0 8px; scrollbar-width: none; touch-action: pan-x; }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip {
+      flex: 0 0 auto; min-height: 40px; padding: 0 14px; border-radius: 999px;
+      background: rgba(255, 186, 120, 0.08); border: 1px solid rgba(255, 214, 170, 0.28);
+      color: #ffe7c2; font-size: 14px; letter-spacing: 0.06em;
+    }
+    .composer { display: flex; gap: 8px; }
+    .composer input {
+      flex: 1; min-width: 0; height: 48px; border-radius: 16px; padding: 0 14px; font-size: 16px; letter-spacing: 0.06em; outline: none;
+      background: rgba(8, 12, 20, 0.82); border: 1px solid rgba(255, 255, 255, 0.22); color: #fff7ed;
+    }
+    .composer input::placeholder { color: rgba(255, 231, 194, 0.45); }
+    .composer button {
+      min-width: 72px; height: 48px; border-radius: 16px; letter-spacing: 0.12em; font-size: 14px; color: #fde68a;
+      background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 214, 170, 0.35);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="art-canvas"></canvas>
+
+  <div id="start-screen" class="fade-transition">
+    <div>
+      <p class="eyebrow">言葉を灯に変える</p>
+      <h1>言霊ランタン</h1>
+      <p class="en">KOTODAMA LANTERN</p>
+    </div>
+    <div class="mid">
+      <svg class="lantern-mark" viewBox="0 0 64 88" fill="none" stroke="rgba(253, 230, 138, 0.8)" stroke-width="1.2">
+        <path d="M22 14 H42 L46 22 H18 L22 14 Z" />
+        <path d="M26 14 C26 8, 38 8, 38 14" />
+        <rect x="16" y="22" width="32" height="52" rx="8" />
+        <path d="M14 74 H50 L46 80 H18 L14 74 Z" />
+        <circle cx="32" cy="50" r="7" fill="rgba(251, 191, 36, 0.2)" stroke="rgba(252, 211, 77, 0.9)" />
+        <path d="M32 39 C35 45, 36 49, 32 54 C28 49, 29 45, 32 39 Z" fill="rgba(253, 230, 138, 0.7)" stroke="none" />
+      </svg>
+      <p class="poem">
+        溢れかえる言葉と通知を、<br>
+        この画面で灯して。<br>
+        <span>息を吹きかけるか、優しく揺らすと<br>文字は燃え尽き、静かな灯りに変わります。</span>
+      </p>
+      <button id="start-btn" class="glass-btn glow-pulse" type="button">灯りをともす</button>
+      <p class="sensor-note">※ マイク・モーションセンサーを使用します<br>（未許可でも画面タッチで体験できます）</p>
+    </div>
+    <div class="hand-note">息でも、指先でも、揺れでも</div>
+  </div>
+
+  <div id="guide-overlay" class="fade-transition">
+    <div class="guide-card">
+      <p>息を吹きかけるか<br>優しく揺らしてください</p>
+      <p class="sub">（画面のタップ・長押しでも灯ります）</p>
+    </div>
+  </div>
+
+  <form id="word-dock">
+    <div class="chips" id="chips"></div>
+    <div class="composer">
+      <input id="word" maxlength="24" enterkeyhint="send" autocomplete="off" placeholder="うれしい言葉を置く">
+      <button class="glass-btn" type="submit">灯す</button>
+    </div>
+  </form>
+
+  <div id="hud-controls">
+    <div id="status-badge">NOISE: 100%</div>
+    <div class="hud-actions">
+      <button id="sound-toggle-btn" class="round-btn" type="button" aria-label="環境音の切り替え">
+        <svg id="icon-sound-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M11 5L6 9H2v6h4l5 4V5z" />
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+        </svg>
+        <svg id="icon-sound-off" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M11 5L6 9H2v6h4l5 4V5z" />
+          <line x1="23" y1="9" x2="17" y2="15" />
+          <line x1="17" y1="9" x2="23" y2="15" />
+        </svg>
+      </button>
+      <button id="reset-btn" class="round-btn" type="button" aria-label="文字ノイズへ戻す">RESET</button>
+    </div>
+  </div>
+
+  <script>
+    const WORDS = [
+      "いいね！", "未読 99+", "返信待ち", "トレンド", "アルゴリズム",
+      "最適化", "通知", "タイムライン", "比較", "焦燥",
+      "既読", "拡散希望", "バズ", "承認欲求", "炎上",
+      "インプレッション", "フォロワー", "おすすめ", "速報", "無限スクロール",
+      "タイパ", "コスパ", "検索履歴", "広告", "同期中...",
+      "LOADING", "UPDATE", "99+ MESSAGES", "FEED", "NOISE",
+      "SYSTEM", "DATA", "ALERT", "VIRAL", "STREAM"
+    ];
+    const JOY = ["嬉しい", "ありがとう", "大好き", "きらきら", "笑顔", "あったかい", "光", "幸せ", "輝く", "♡"];
+    const STORE = "kotodama-words-v1";
+
+    const state = {
+      started: false,
+      warmth: 0,
+      breathIntensity: 0,
+      lastInteractionTime: 0,
+      micActive: false,
+      motionActive: false,
+      isTouching: false,
+      soundEnabled: true,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      dpr: Math.min(window.devicePixelRatio || 1, 2),
+      words: []
+    };
+
+    const canvas = document.getElementById("art-canvas");
+    const ctx = canvas.getContext("2d");
+    const startScreen = document.getElementById("start-screen");
+    const startBtn = document.getElementById("start-btn");
+    const guideOverlay = document.getElementById("guide-overlay");
+    const hudControls = document.getElementById("hud-controls");
+    const wordDock = document.getElementById("word-dock");
+    const statusBadge = document.getElementById("status-badge");
+    const soundToggleBtn = document.getElementById("sound-toggle-btn");
+    const iconSoundOn = document.getElementById("icon-sound-on");
+    const iconSoundOff = document.getElementById("icon-sound-off");
+    const resetBtn = document.getElementById("reset-btn");
+    const wordInput = document.getElementById("word");
+
+    const textParticles = [];
+    const emberParticles = [];
+    const joyBursts = [];
+    const keptWords = [];
+    const MAX_TEXT = 68;
+    const MAX_EMBERS = 95;
+    let composing = false;
+
+    function resizeCanvas() {
+      state.width = window.innerWidth;
+      state.height = window.innerHeight;
+      state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = state.width * state.dpr;
+      canvas.height = state.height * state.dpr;
+      ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    let wakeLock = null;
+    async function requestWakeLock() {
+      try {
+        if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen");
+      } catch (err) {}
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (wakeLock !== null && document.visibilityState === "visible") requestWakeLock();
+    });
+
+    let audioCtx = null;
+    let analyser = null;
+    let micDataArray = null;
+    let fireGainNode = null;
+
+    function initAudioSystem() {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass || audioCtx) return;
+        audioCtx = new AudioContextClass();
+        const bufferSize = audioCtx.sampleRate * 2;
+        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        let lastOut = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          output[i] = (lastOut + (0.02 * white)) / 1.02;
+          lastOut = output[i];
+          output[i] *= 2.5;
+        }
+        const brownNoise = audioCtx.createBufferSource();
+        brownNoise.buffer = noiseBuffer;
+        brownNoise.loop = true;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = 180;
+        fireGainNode = audioCtx.createGain();
+        fireGainNode.gain.value = 0;
+        brownNoise.connect(filter);
+        filter.connect(fireGainNode);
+        fireGainNode.connect(audioCtx.destination);
+        brownNoise.start();
+        setInterval(() => {
+          if (!state.started || !state.soundEnabled || state.warmth < 0.4 || !audioCtx) return;
+          if (Math.random() < 0.45 * state.warmth) playCrackleSound();
+        }, 450);
+      } catch (e) {}
+    }
+
+    function playCrackleSound() {
+      if (!audioCtx || audioCtx.state !== "running") return;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(800 + Math.random() * 1400, now);
+      osc.frequency.exponentialRampToValueAtTime(120, now + 0.035);
+      const vol = (0.015 + Math.random() * 0.025) * state.warmth;
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.045);
+    }
+
+    function playJoy() {
+      if (!audioCtx || !state.soundEnabled) return;
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+        const t = audioCtx.currentTime + i * 0.05;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.4);
+      });
+    }
+
+    async function setupMicrophone() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        });
+        if (!audioCtx) initAudioSystem();
+        if (audioCtx.state === "suspended") await audioCtx.resume();
+        const source = audioCtx.createMediaStreamSource(stream);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        micDataArray = new Uint8Array(analyser.frequencyBinCount);
+        state.micActive = true;
+      } catch (err) {
+        state.micActive = false;
+      }
+    }
+
+    function sampleMicrophone() {
+      if (!state.micActive || !analyser || !micDataArray) return 0;
+      analyser.getByteTimeDomainData(micDataArray);
+      let sumSquares = 0;
+      for (let i = 0; i < micDataArray.length; i++) {
+        const normalized = (micDataArray[i] - 128) / 128;
+        sumSquares += normalized * normalized;
+      }
+      const rms = Math.sqrt(sumSquares / micDataArray.length);
+      const threshold = 0.035;
+      if (rms > threshold) return Math.min((rms - threshold) * 8.5, 1.5);
+      return 0;
+    }
+
+    let lastAcc = { x: null, y: null, z: null };
+    let motionImpulse = 0;
+    async function setupMotionSensor() {
+      try {
+        if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
+          const permission = await DeviceMotionEvent.requestPermission();
+          if (permission !== "granted") return;
+        }
+        window.addEventListener("devicemotion", handleDeviceMotion, { passive: true });
+        state.motionActive = true;
+      } catch (err) {
+        state.motionActive = false;
+      }
+    }
+    function handleDeviceMotion(event) {
+      const acc = event.accelerationIncludingGravity || event.acceleration;
+      if (!acc || acc.x === null) return;
+      if (lastAcc.x !== null) {
+        const delta = Math.abs(acc.x - lastAcc.x) + Math.abs(acc.y - lastAcc.y) + Math.abs(acc.z - lastAcc.z);
+        if (delta > 2.2) motionImpulse = Math.min(motionImpulse + (delta - 2.2) * 0.08, 1.5);
+      }
+      lastAcc = { x: acc.x, y: acc.y, z: acc.z };
+    }
+
+    function triggerTouchStart(e) {
+      if (!state.started) return;
+      if (e.target.closest("button, input, #word-dock")) return;
+      state.isTouching = true;
+      state.breathIntensity = Math.max(state.breathIntensity, 0.85);
+      state.lastInteractionTime = performance.now();
+    }
+    function triggerTouchEnd() { state.isTouching = false; }
+    window.addEventListener("pointerdown", triggerTouchStart);
+    window.addEventListener("pointerup", triggerTouchEnd);
+    window.addEventListener("pointercancel", triggerTouchEnd);
+
+    class DigitalText {
+      constructor(initialY = null) { this.reset(initialY); }
+      reset(initialY = null) {
+        this.text = WORDS[Math.floor(Math.random() * WORDS.length)];
+        this.x = Math.random() * state.width;
+        this.y = initialY !== null ? initialY : -20 - Math.random() * 200;
+        this.speed = 1.4 + Math.random() * 3.6;
+        this.fontSize = 11 + Math.floor(Math.random() * 11);
+        this.alpha = 0.25 + Math.random() * 0.65;
+        const hues = [190, 205, 220, 265];
+        const hue = hues[Math.floor(Math.random() * hues.length)];
+        this.color = `hsla(${hue}, ${hue === 265 ? "75%" : "85%"}, ${65 + Math.random() * 25}%, `;
+        this.glitchOffset = 0;
+      }
+      update(warmth, breath) {
+        this.y += this.speed * (1 + (1 - warmth) * 0.6);
+        if (Math.random() < 0.08 * (1 - warmth)) this.glitchOffset = (Math.random() - 0.5) * 14;
+        else this.glitchOffset *= 0.7;
+        const burnChance = (breath * 0.18) + (warmth * 0.08);
+        if (warmth > 0.08 && Math.random() < burnChance) {
+          spawnEmbersFromText(this.x, this.y, 3);
+          this.reset(-30 - Math.random() * 150);
+          return;
+        }
+        if (this.y > state.height + 40) this.reset();
+      }
+      draw(warmth) {
+        const visibility = Math.max(0, 1 - warmth * 1.25);
+        if (visibility <= 0.01) return;
+        ctx.save();
+        ctx.font = `${this.fontSize}px Inter, "Hiragino Sans", sans-serif`;
+        ctx.fillStyle = `${this.color}${(this.alpha * visibility).toFixed(3)})`;
+        ctx.fillText(this.text, this.x + this.glitchOffset, this.y);
+        ctx.restore();
+      }
+    }
+
+    class EmberParticle {
+      constructor() { this.reset(true); }
+      reset(randomY = false, customX = null, customY = null) {
+        this.x = customX !== null ? customX : (state.width * 0.5 + (Math.random() - 0.5) * state.width * 0.85);
+        this.y = customY !== null ? customY : (randomY ? Math.random() * state.height : state.height + 10 + Math.random() * 40);
+        this.vx = (Math.random() - 0.5) * 0.8;
+        this.vy = -(0.6 + Math.random() * 2.2);
+        this.size = 1.5 + Math.random() * 4.5;
+        this.life = 0;
+        this.maxLife = 70 + Math.random() * 110;
+        this.wobbleSpeed = 0.03 + Math.random() * 0.05;
+        this.wobblePhase = Math.random() * Math.PI * 2;
+        this.hue = 18 + Math.random() * 28;
+      }
+      update(warmth, breath) {
+        this.life++;
+        this.wobblePhase += this.wobbleSpeed + breath * 0.08;
+        this.x += this.vx + Math.sin(this.wobblePhase) * (0.7 + breath * 3.5);
+        this.y += this.vy * (1 + breath * 1.8);
+        if (this.life >= this.maxLife || this.y < -20) this.reset(false);
+      }
+      draw(warmth, breath) {
+        if (warmth <= 0.02) return;
+        const progress = this.life / this.maxLife;
+        const fade = Math.sin(progress * Math.PI);
+        const alpha = fade * Math.min(1, warmth * 1.3) * (0.55 + breath * 0.35);
+        if (alpha <= 0.01) return;
+        const radius = this.size * (1 + breath * 0.4);
+        const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, radius * 2.5);
+        grad.addColorStop(0, `hsla(${this.hue + 10}, 100%, 75%, ${alpha})`);
+        grad.addColorStop(0.5, `hsla(${this.hue}, 95%, 55%, ${alpha * 0.6})`);
+        grad.addColorStop(1, `hsla(${this.hue - 10}, 90%, 40%, 0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, radius * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function spawnEmbersFromText(x, y, count) {
+      for (let i = 0; i < count; i++) {
+        const target = emberParticles[Math.floor(Math.random() * emberParticles.length)];
+        if (!target) continue;
+        target.reset(false, x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 15);
+        target.vy = -(1.5 + Math.random() * 2.5);
+      }
+    }
+
+    for (let i = 0; i < MAX_TEXT; i++) textParticles.push(new DigitalText(Math.random() * state.height));
+    for (let i = 0; i < MAX_EMBERS; i++) emberParticles.push(new EmberParticle());
+
+    function loadWords() {
+      try {
+        state.words = JSON.parse(localStorage.getItem(STORE) || "[]").filter((word) => typeof word === "string").slice(0, 16);
+      } catch (err) {
+        state.words = [];
+      }
+      state.words.forEach(rememberWord);
+      renderChips();
+    }
+    function saveWords() {
+      try { localStorage.setItem(STORE, JSON.stringify(state.words)); } catch (err) {}
+    }
+    function renderChips() {
+      const box = document.getElementById("chips");
+      box.replaceChildren();
+      state.words.forEach((text) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "chip";
+        button.textContent = text;
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          burstJoy(text);
+        });
+        box.appendChild(button);
+      });
+    }
+    function rememberWord(text) {
+      if (keptWords.some((word) => word.text === text)) return;
+      keptWords.push({
+        text,
+        x: state.width * (0.18 + Math.random() * 0.64),
+        y: state.height * (0.28 + Math.random() * 0.28),
+        phase: Math.random() * Math.PI * 2
+      });
+      if (keptWords.length > 12) keptWords.shift();
+    }
+    function burstJoy(text) {
+      state.warmth = Math.min(1, state.warmth + 0.45);
+      state.breathIntensity = Math.max(state.breathIntensity, 1.2);
+      state.lastInteractionTime = performance.now();
+      const count = state.width < 760 ? 24 : 36;
+      for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.2;
+        const speed = 3.2 + Math.random() * 6.5;
+        const spread = 36 + Math.random() * 70;
+        joyBursts.push({
+          text: i % 3 === 0 ? text : JOY[i % JOY.length],
+          x: state.width * 0.5 + Math.cos(angle) * spread,
+          y: state.height * 0.52 + Math.sin(angle) * spread * 0.72,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 2.4,
+          life: 1,
+          size: i % 3 === 0 ? 22 : 15
+        });
+      }
+      spawnEmbersFromText(state.width * 0.5, state.height * 0.58, 18);
+      while (joyBursts.length > 180) joyBursts.shift();
+      playJoy();
+    }
+    function offerWord(raw) {
+      const text = String(raw || "").trim().slice(0, 24);
+      if (!text) return;
+      state.words = [text, ...state.words.filter((word) => word !== text)].slice(0, 16);
+      saveWords();
+      renderChips();
+      rememberWord(text);
+      wordInput.value = "";
+      wordInput.blur();
+      burstJoy(text);
+    }
+
+    let timeTick = 0;
+    function drawLanternBackground(warmth, breath) {
+      timeTick += 0.025;
+      const r = Math.round(4 + (42 - 4) * warmth);
+      const g = Math.round(8 + (14 - 8) * warmth);
+      const b = Math.round(18 + (3 - 18) * warmth);
+      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+      ctx.fillRect(0, 0, state.width, state.height);
+      if (warmth > 0.01) {
+        const breatheWave = Math.sin(timeTick * 1.1) * 0.06 + Math.sin(timeTick * 2.7) * 0.03;
+        const flicker = (Math.random() - 0.5) * 0.04 * (1 + breath * 3);
+        const intensity = Math.min(1.2, warmth * (0.88 + breatheWave + flicker + breath * 0.25));
+        const centerX = state.width * 0.5 + Math.sin(timeTick * 1.7) * (12 + breath * 35);
+        const centerY = state.height * 0.56 + Math.cos(timeTick * 1.3) * 10;
+        const maxRadius = Math.max(state.width, state.height) * (0.85 + breath * 0.2);
+        const lanternGrad = ctx.createRadialGradient(centerX, centerY, maxRadius * 0.05, centerX, centerY, maxRadius);
+        lanternGrad.addColorStop(0, `rgba(255, 225, 150, ${(0.95 * intensity).toFixed(3)})`);
+        lanternGrad.addColorStop(0.28, `rgba(255, 155, 45, ${(0.85 * intensity).toFixed(3)})`);
+        lanternGrad.addColorStop(0.65, `rgba(215, 75, 15, ${(0.55 * intensity).toFixed(3)})`);
+        lanternGrad.addColorStop(1, `rgba(90, 22, 4, ${(0.25 * intensity).toFixed(3)})`);
+        ctx.fillStyle = lanternGrad;
+        ctx.fillRect(0, 0, state.width, state.height);
+        const edgeGrad = ctx.createLinearGradient(0, state.height, 0, 0);
+        edgeGrad.addColorStop(0, `rgba(255, 130, 30, ${(0.45 * intensity).toFixed(3)})`);
+        edgeGrad.addColorStop(0.5, `rgba(255, 180, 80, ${(0.15 * intensity).toFixed(3)})`);
+        edgeGrad.addColorStop(1, `rgba(255, 110, 20, ${(0.3 * intensity).toFixed(3)})`);
+        ctx.fillStyle = edgeGrad;
+        ctx.fillRect(0, 0, state.width, state.height);
+      }
+      if (warmth < 0.95) {
+        const coldAlpha = (1 - warmth) * 0.16;
+        const coldGrad = ctx.createRadialGradient(state.width * 0.5, state.height * 0.45, 10, state.width * 0.5, state.height * 0.45, Math.max(state.width, state.height) * 0.75);
+        coldGrad.addColorStop(0, `rgba(30, 160, 230, ${coldAlpha})`);
+        coldGrad.addColorStop(1, "rgba(4, 8, 18, 0)");
+        ctx.fillStyle = coldGrad;
+        ctx.fillRect(0, 0, state.width, state.height);
+      }
+    }
+
+    function drawKeptWords(warmth) {
+      keptWords.forEach((word) => {
+        word.phase += 0.008;
+        word.y -= 0.12;
+        if (word.y < state.height * 0.16) word.y = state.height * 0.7;
+        word.x += Math.sin(word.phase) * 0.28;
+        ctx.save();
+        ctx.globalAlpha = 0.42 + warmth * 0.45;
+        ctx.fillStyle = "#ffe1b0";
+        ctx.font = "18px 'Shippori Mincho', 'Hiragino Mincho ProN', serif";
+        ctx.textAlign = "center";
+        ctx.fillText(word.text, word.x, word.y);
+        ctx.restore();
+      });
+    }
+
+    function drawJoyBursts() {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.textAlign = "center";
+      for (let i = joyBursts.length - 1; i >= 0; i--) {
+        const shard = joyBursts[i];
+        shard.x += shard.vx;
+        shard.y += shard.vy;
+        shard.vx *= 0.985;
+        shard.vy = shard.vy * 0.985 - 0.03;
+        shard.life -= 0.012;
+        if (shard.life <= 0) {
+          joyBursts.splice(i, 1);
+          continue;
+        }
+        ctx.globalAlpha = Math.max(0, shard.life);
+        ctx.fillStyle = shard.text.length > 4 ? "#ffe1a8" : "#ffd0a2";
+        ctx.font = `${shard.size}px 'Shippori Mincho', serif`;
+        ctx.fillText(shard.text, shard.x, shard.y);
+      }
+      ctx.restore();
+    }
+
+    let lastFrameTime = performance.now();
+    function animate(now) {
+      const dt = Math.min((now - lastFrameTime) / 1000, 0.1);
+      lastFrameTime = now;
+      if (state.started) {
+        const micLevel = sampleMicrophone();
+        motionImpulse *= 0.92;
+        const touchLevel = state.isTouching ? 0.9 : 0;
+        const currentInput = Math.max(micLevel, motionImpulse, touchLevel);
+        if (currentInput > 0.08) {
+          state.breathIntensity = Math.min(1.5, state.breathIntensity + currentInput * 0.25);
+          state.lastInteractionTime = now;
+          state.warmth = Math.min(1, state.warmth + currentInput * dt * 1.15);
+        } else {
+          state.breathIntensity *= 0.92;
+        }
+        const idleSeconds = (now - state.lastInteractionTime) / 1000;
+        if (idleSeconds > 14 && state.warmth > 0) state.warmth = Math.max(0, state.warmth - dt * 0.045);
+        if (fireGainNode && audioCtx && audioCtx.state === "running") {
+          const targetVol = state.soundEnabled ? (state.warmth * 0.18 + state.breathIntensity * 0.06) : 0;
+          fireGainNode.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.2);
+        }
+        const noisePercent = Math.round((1 - state.warmth) * 100);
+        statusBadge.textContent = noisePercent > 5 ? `INFO NOISE: ${noisePercent}%` : "LANTERN GLOW";
+      }
+      drawLanternBackground(state.warmth, state.breathIntensity);
+      for (let i = 0; i < textParticles.length; i++) {
+        textParticles[i].update(state.warmth, state.breathIntensity);
+        textParticles[i].draw(state.warmth);
+      }
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      for (let i = 0; i < emberParticles.length; i++) {
+        emberParticles[i].update(state.warmth, state.breathIntensity);
+        emberParticles[i].draw(state.warmth, state.breathIntensity);
+      }
+      ctx.restore();
+      drawKeptWords(state.warmth);
+      drawJoyBursts();
+      requestAnimationFrame(animate);
+    }
+
+    function liftKeyboard() {
+      const viewport = window.visualViewport;
+      if (!viewport) return;
+      const covered = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      wordDock.style.transform = covered ? `translateY(-${covered}px)` : "";
+    }
+
+    startBtn.addEventListener("click", () => {
+      state.started = true;
+      state.lastInteractionTime = performance.now();
+      startScreen.style.opacity = "0";
+      startScreen.style.pointerEvents = "none";
+      setTimeout(() => { startScreen.style.display = "none"; }, 1200);
+      guideOverlay.style.opacity = "1";
+      setTimeout(() => { guideOverlay.style.opacity = "0"; }, 4800);
+      hudControls.style.opacity = "1";
+      hudControls.style.pointerEvents = "auto";
+      wordDock.classList.add("visible");
+      initAudioSystem();
+      setupMicrophone();
+      setupMotionSensor();
+      requestWakeLock();
+      if (!window.Capacitor && "serviceWorker" in navigator) {
+        navigator.serviceWorker.register("sw.js").catch(() => {});
+      }
+    });
+
+    soundToggleBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.soundEnabled = !state.soundEnabled;
+      iconSoundOn.classList.toggle("hidden", !state.soundEnabled);
+      iconSoundOff.classList.toggle("hidden", state.soundEnabled);
+      if (state.soundEnabled && audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    });
+
+    resetBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.warmth = 0;
+      state.breathIntensity = 0;
+      state.lastInteractionTime = performance.now();
+      textParticles.forEach((particle) => particle.reset(Math.random() * state.height));
+    });
+
+    wordDock.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!composing) offerWord(wordInput.value);
+    });
+    wordInput.addEventListener("compositionstart", () => { composing = true; });
+    wordInput.addEventListener("compositionend", () => { composing = false; });
+    window.visualViewport?.addEventListener("resize", liftKeyboard);
+    window.visualViewport?.addEventListener("scroll", liftKeyboard);
+
+    loadWords();
+    if (document.readyState === "complete") requestAnimationFrame(animate);
+    else window.addEventListener("load", () => requestAnimationFrame(animate));
+  </script>
+</body>
+</html>
