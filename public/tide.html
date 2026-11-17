@@ -5,666 +5,184 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#061018">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>潮乗り | Surf Glass</title>
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>潮汐の翻訳者</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Shippori+Mincho:wght@500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
-      margin: 0;
-      height: 100%;
-      height: 100dvh;
-      overflow: hidden;
-      background: #061018;
-      color: #e7eef6;
+      margin: 0; height: 100%; height: 100dvh; overflow: hidden; background: #061018; color: #e7eef6;
       font-family: "IBM Plex Mono", ui-monospace, monospace;
-      touch-action: manipulation;
-      overscroll-behavior: none;
+      touch-action: manipulation; overscroll-behavior: none;
     }
-    canvas {
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1;
-      touch-action: none;
-    }
-    button { font: inherit; color: inherit; cursor: pointer; }
-    .top, .spots, .sheet { position: fixed; z-index: 5; }
-    .top {
-      top: 0; left: 0; right: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding:
-        calc(8px + env(safe-area-inset-top))
-        calc(12px + env(safe-area-inset-right))
-        8px
-        calc(12px + env(safe-area-inset-left));
-      background: linear-gradient(180deg, rgba(6, 12, 20, 0.78), rgba(6, 12, 20, 0));
-      pointer-events: none;
-    }
-    .brand { pointer-events: none; }
-    .brand strong {
-      font-family: "Shippori Mincho", serif;
-      font-size: 18px;
-      font-weight: 500;
-      letter-spacing: 0.18em;
-    }
-    .brand span { display: block; font-size: 10px; letter-spacing: 0.16em; color: #8eb4c9; }
-    .top-actions { display: flex; gap: 8px; pointer-events: auto; }
-    .icon, .locate {
-      min-height: 44px;
-      border-radius: 999px;
-      border: 1px solid rgba(223, 177, 91, 0.35);
-      background: rgba(8, 16, 28, 0.72);
-    }
-    .icon { width: 44px; }
-    .locate { padding: 0 14px; font-size: 13px; }
+    canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; touch-action: none; }
     .spots {
-      top: calc(58px + env(safe-area-inset-top));
-      left: 0; right: 0;
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      padding: 4px 12px 10px;
-      scrollbar-width: none;
-      touch-action: pan-x;
+      position: fixed; z-index: 5; left: 0; right: 0;
+      top: calc(8px + env(safe-area-inset-top));
+      display: flex; gap: 8px; overflow-x: auto; padding: 4px 12px 8px;
+      scrollbar-width: none; touch-action: pan-x;
     }
     .spots::-webkit-scrollbar { display: none; }
     .spot {
-      flex: 0 0 auto;
-      min-height: 44px;
-      padding: 0 14px;
-      border-radius: 999px;
-      border: 1px solid rgba(180, 210, 230, 0.22);
-      background: rgba(8, 18, 30, 0.72);
-      color: #d5e4ef;
-      font-size: 13px;
+      flex: 0 0 auto; min-height: 44px; padding: 0 14px; border-radius: 999px; font-size: 13px; color: #d5e4ef;
+      border: 1px solid rgba(180, 210, 230, 0.25); background: rgba(8, 16, 28, 0.72);
     }
-    .spot small { display: block; font-size: 9px; letter-spacing: 0.08em; color: #8eb4c9; }
-    .spot.active {
-      border-color: #dfb15b;
-      color: #ffe7b8;
-      background: rgba(80, 52, 12, 0.55);
+    .spot.active { border-color: #dfb15b; color: #ffe7b8; }
+    .note {
+      position: fixed; z-index: 4; left: 16px; right: 16px;
+      bottom: calc(14px + env(safe-area-inset-bottom));
+      font-family: "Shippori Mincho", serif; letter-spacing: 0.12em; font-size: 13px;
+      color: rgba(223, 177, 91, 0.8); pointer-events: none; text-shadow: 0 2px 12px #000;
     }
-    .sheet {
-      left: 0; right: 0; bottom: 0;
-      max-height: 58dvh;
-      overflow: auto;
-      -webkit-overflow-scrolling: touch;
-      touch-action: pan-y;
-      padding: 6px 14px calc(14px + env(safe-area-inset-bottom));
-      background: rgba(6, 12, 20, 0.82);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border-top: 1px solid rgba(223, 177, 91, 0.28);
-    }
-    .handle {
-      width: 100%;
-      min-height: 44px;
-      border: 0;
-      background: transparent;
-      color: #dfb15b;
-      letter-spacing: 0.16em;
-      font-size: 13px;
-    }
-    .readout { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-    .score {
-      font-family: "Shippori Mincho", serif;
-      font-size: 52px;
-      line-height: 0.9;
-      color: #f2d48a;
-    }
-    .score em { font-style: normal; font-size: 14px; letter-spacing: 0.14em; color: #8eb4c9; margin-left: 4px; }
-    .verdict { font-size: 15px; letter-spacing: 0.08em; }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      min-height: 32px;
-      margin-top: 6px;
-      padding: 0 10px;
-      border-radius: 999px;
-      background: rgba(56, 189, 248, 0.15);
-      color: #9be7ff;
-      font-size: 12px;
-    }
-    .badge.onshore { background: rgba(248, 113, 113, 0.16); color: #ffc1c1; }
-    .badge.cross { background: rgba(251, 191, 36, 0.14); color: #ffe2a3; }
-    .metrics {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 12px;
-    }
-    .metric {
-      padding: 10px 10px 8px;
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-    .metric b { display: block; font-size: 16px; font-weight: 500; color: #d8fff4; }
-    .metric span { font-size: 10px; letter-spacing: 0.08em; color: #8ea6b8; }
-    .hours {
-      display: flex;
-      align-items: flex-end;
-      gap: 4px;
-      height: 92px;
-      margin-top: 14px;
-      overflow-x: auto;
-      touch-action: pan-x;
-      scrollbar-width: none;
-    }
-    .hour {
-      flex: 1 0 44px;
-      min-width: 44px;
-      height: 100%;
-      border: 0;
-      background: transparent;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 4px;
-      padding: 0;
-    }
-    .hour u {
-      display: block;
-      width: 100%;
-      border-radius: 6px 6px 2px 2px;
-      background: rgba(125, 211, 252, 0.45);
-      text-decoration: none;
-    }
-    .hour.best u { background: #dfb15b; }
-    .hour em { font-style: normal; font-size: 9px; color: #9fb4c4; }
-    .advice { font-size: 12px; line-height: 1.6; color: #c5d5e2; margin: 10px 0; }
-    .row { display: flex; gap: 8px; }
-    .row button, .set {
-      min-height: 48px;
-      border-radius: 14px;
-      border: 1px solid rgba(125, 211, 252, 0.35);
-      background: rgba(14, 50, 72, 0.55);
-      font-size: 14px;
-    }
-    .set { flex: 1; }
-    .sources { margin: 8px 0 0; font-size: 10px; color: #7f97a8; line-height: 1.5; }
-    .collapsed .extra { display: none; }
+    button { font: inherit; color: inherit; background: transparent; cursor: pointer; }
   </style>
 </head>
 <body>
   <canvas id="tide"></canvas>
-  <header class="top">
-    <div class="brand">
-      <strong>潮乗り</strong>
-      <span id="spotLabel">SURF GLASS</span>
-    </div>
-    <div class="top-actions">
-      <button class="locate" id="locate" type="button">現在地</button>
-      <button class="icon" id="audio" type="button" aria-label="潮騒">波</button>
-    </div>
-  </header>
   <div class="spots" id="spots"></div>
-  <section class="sheet collapsed" id="sheet">
-    <button class="handle" id="handle" type="button">詳細を見る</button>
-    <div class="readout">
-      <div>
-        <div class="score"><span id="score">–</span><em>/10</em></div>
-        <div class="verdict" id="verdict">読み込み中</div>
-      </div>
-      <div class="badge" id="windBadge">風 —</div>
-    </div>
-    <div class="extra">
-      <div class="metrics" id="metrics"></div>
-      <div class="hours" id="hours"></div>
-      <p class="advice" id="advice"></p>
-      <div class="row">
-        <button class="set" id="setBtn" type="button">セット波を見る</button>
-        <button class="set" id="refreshBtn" type="button">更新</button>
-      </div>
-      <p class="sources" id="sources">Open-Meteo Marine / Forecast。米国地点は NOAA 潮位。</p>
-    </div>
-  </section>
-
+  <p class="note" id="note">波は予報を信じない</p>
   <script>
     const SPOTS = [
-      { id: "ichinomiya", name: "一宮", region: "千葉", lat: 35.38, lon: 140.39, facing: 90 },
-      { id: "kugenuma", name: "鵠沼", region: "湘南", lat: 35.316, lon: 139.472, facing: 175 },
-      { id: "kizaki", name: "木崎浜", region: "宮崎", lat: 31.802, lon: 131.47, facing: 105 },
-      { id: "uradome", name: "浦富", region: "鳥取", lat: 35.545, lon: 134.318, facing: 15 },
-      { id: "shirahama", name: "白浜", region: "和歌山", lat: 33.678, lon: 135.337, facing: 230 },
-      { id: "pipeline", name: "Pipeline", region: "Oahu", lat: 21.665, lon: -158.053, facing: 320, tide: "1612340", tideName: "ホノルル" },
-      { id: "malibu", name: "Malibu", region: "California", lat: 34.025, lon: -118.78, facing: 230, tide: "9410840", tideName: "Santa Monica" },
-      { id: "steamer", name: "Steamer Lane", region: "Santa Cruz", lat: 36.951, lon: -122.026, facing: 210, tide: "9413745", tideName: "Santa Cruz" },
-      { id: "hossegor", name: "Hossegor", region: "France", lat: 43.666, lon: -1.441, facing: 285 },
-      { id: "snapper", name: "Snapper", region: "Gold Coast", lat: -28.164, lon: 153.551, facing: 85 },
-      { id: "uluwatu", name: "Uluwatu", region: "Bali", lat: -8.829, lon: 115.087, facing: 205 },
-      { id: "jbay", name: "J-Bay", region: "South Africa", lat: -34.021, lon: 24.931, facing: 230 }
+      { id: "ichinomiya", name: "一宮", region: "千葉", lat: 35.38, lon: 140.39 },
+      { id: "kugenuma", name: "鵠沼", region: "湘南", lat: 35.316, lon: 139.472 },
+      { id: "kizaki", name: "木崎浜", region: "宮崎", lat: 31.802, lon: 131.47 },
+      { id: "uradome", name: "浦富", region: "鳥取", lat: 35.545, lon: 134.318 },
+      { id: "shirahama", name: "白浜", region: "和歌山", lat: 33.678, lon: 135.337 },
+      { id: "pipeline", name: "Pipeline", region: "Oahu", lat: 21.665, lon: -158.053 },
+      { id: "malibu", name: "Malibu", region: "California", lat: 34.025, lon: -118.78 },
+      { id: "steamer", name: "Steamer Lane", region: "Santa Cruz", lat: 36.951, lon: -122.026 },
+      { id: "hossegor", name: "Hossegor", region: "France", lat: 43.666, lon: -1.441 },
+      { id: "snapper", name: "Snapper", region: "Gold Coast", lat: -28.164, lon: 153.551 },
+      { id: "uluwatu", name: "Uluwatu", region: "Bali", lat: -8.829, lon: 115.087 },
+      { id: "jbay", name: "J-Bay", region: "South Africa", lat: -34.021, lon: 24.931 }
     ];
-
-    const WX = { 0: "快晴", 1: "晴れ", 2: "薄曇", 3: "曇", 45: "霧", 48: "霧", 51: "霧雨", 61: "雨", 63: "雨", 65: "強い雨", 80: "にわか雨", 81: "にわか雨", 82: "強いにわか雨", 95: "雷" };
-
+    const LINES_POEM = ["この数字は確かだ", "周期は約束する", "風は味方だ", "明日も同じ海だ"];
     const canvas = document.getElementById("tide");
     const ctx = canvas.getContext("2d");
-    const spotsEl = document.getElementById("spots");
-    const sheet = document.getElementById("sheet");
-
-    let width = 1, height = 1, anim = 0;
-    let spot = SPOTS[0];
-    let report = null;
-    let waveH = 1.2, waveP = 8, swellBoost = 0;
-    let finger = { x: -9999, y: -9999, down: false };
-    let glyphs = [];
-    let audio = null, audioOn = false, gainNode = null;
-    let refreshTimer = 0;
+    let width = 1, height = 1, anim = 0, spot = SPOTS[0];
+    let waveH = 1.2, waveP = 8, caprice = 0, glyphs = [], finger = { x: -9999, y: -9999, down: false };
+    let report = "読み込み中", reformAt = 0;
 
     function resize() {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
-      layoutGlyphs();
+      width = canvas.width = innerWidth;
+      height = canvas.height = innerHeight;
+      layout();
     }
-
-    function angleDiff(a, b) {
-      const d = Math.abs(((a - b) % 360 + 360) % 360);
-      return d > 180 ? 360 - d : d;
+    function card(deg) {
+      if (deg == null || Number.isNaN(Number(deg))) return "—";
+      return ["N","NE","E","SE","S","SW","W","NW"][Math.round(deg / 45) % 8];
     }
-    function cardinal(deg) {
-      if (deg == null || Number.isNaN(deg)) return "—";
-      const names = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
-      return names[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
-    }
-    function windKind(windFrom, facing) {
-      const d = angleDiff(windFrom, (facing + 180) % 360);
-      if (d <= 55) return "offshore";
-      if (d <= 125) return "cross";
-      return "onshore";
-    }
-    function kindLabel(kind) {
-      if (kind === "offshore") return "オフショア";
-      if (kind === "cross") return "サイドショア";
-      return "オンショア";
-    }
-    function suit(sst) {
-      if (sst == null) return "—";
-      if (sst >= 24) return "ラッシュ";
-      if (sst >= 22) return "スプリング";
-      if (sst >= 19) return "シーガル 2mm";
-      if (sst >= 16) return "フル 3mm";
-      if (sst >= 13) return "フル 4mm";
-      return "フル 5mm";
-    }
-    function scoreOf({ height: h, period: p, windKmh, windFrom, swellFrom, facing }) {
-      let s = 4;
-      if (h >= 0.8 && h <= 2.0) s += 1.8;
-      else if (h >= 0.5 && h < 0.8) s += 0.7;
-      else if (h > 2 && h <= 3) s += 1;
-      else if (h < 0.4) s -= 2.1;
-      else s -= 0.5;
-      if (p >= 14) s += 2.1;
-      else if (p >= 11) s += 1.5;
-      else if (p >= 8) s += 0.6;
-      else if (p < 6) s -= 1.2;
-      const kind = windKind(windFrom, facing);
-      const kt = (windKmh || 0) / 1.852;
-      if (kind === "offshore") s += kt < 18 ? 1.8 : kt < 28 ? 0.3 : -1;
-      else if (kind === "cross") s += kt < 14 ? 0.2 : -0.9;
-      else s -= kt < 8 ? 0.5 : 1.8;
-      const align = angleDiff(swellFrom ?? facing, facing);
-      if (align < 40) s += 0.7;
-      else if (align > 100) s -= 1.3;
-      return Math.max(0, Math.min(10, Math.round(s * 10) / 10));
-    }
-    function verdict(score) {
-      if (score >= 8) return "入る";
-      if (score >= 6.5) return "良い";
-      if (score >= 5) return "まずまず";
-      if (score >= 3.5) return "厳しい";
-      return "休み気味";
-    }
-    function hm(iso) { return iso ? iso.slice(11, 16) : "—"; }
-
-    function buildLines(data) {
-      const m = data.marine.current;
-      const w = data.weather.current;
-      const kind = windKind(w.wind_direction_10m, spot.facing);
-      const kt = (w.wind_speed_10m / 1.852).toFixed(0);
-      return [
+    function layout() {
+      const lines = [
         `${spot.name}  ${spot.region}`,
-        `うねり ${Number(m.swell_wave_height).toFixed(2)}m ${cardinal(m.swell_wave_direction)}`,
-        `波高 ${Number(m.wave_height).toFixed(2)}m / 周期 ${Number(m.wave_period).toFixed(1)}s`,
-        `風 ${kindLabel(kind)} ${kt}kt`,
-        `水温 ${m.sea_surface_temperature ?? "—"}°C  気温 ${Math.round(w.temperature_2m)}°C`,
-        `スーツ ${suit(m.sea_surface_temperature)}`,
-        data.tideText || "潮位は波浪と風で読む"
+        report,
+        LINES_POEM[Math.floor(anim) % LINES_POEM.length] || LINES_POEM[0],
+        "波はきまぐれに、すべてを壊す"
       ];
-    }
-
-    function layoutGlyphs() {
-      if (!report) { glyphs = []; return; }
-      const lines = buildLines(report);
       glyphs = [];
-      const left = width < 720 ? 16 : width * 0.46;
-      const top = Math.max(208, height * 0.3);
+      const left = width < 720 ? 18 : width * 0.42;
+      const top = Math.max(120, height * 0.22);
       lines.forEach((line, li) => {
         for (let i = 0; i < line.length; i++) {
-          const ch = line[i];
-          if (ch === " ") continue;
-          glyphs.push({
-            ch,
-            x: left + i * (width < 720 ? 11 : 12),
-            y: top + li * 26,
-            vx: 0, vy: 0, rot: 0, vr: 0,
-            eroded: false,
-            alpha: 1,
-            gold: li === 0
-          });
+          if (line[i] === " ") continue;
+          glyphs.push({ ch: line[i], x: left + i * (width < 720 ? 13 : 14), y: top + li * 34, vx: 0, vy: 0, rot: 0, vr: 0, dead: false, a: 1, gold: li === 0 || li === 3 });
         }
       });
     }
-
-    function metric(label, value) {
-      const el = document.createElement("div");
-      el.className = "metric";
-      const b = document.createElement("b");
-      const s = document.createElement("span");
-      b.textContent = value;
-      s.textContent = label;
-      el.append(b, s);
-      return el;
+    function waveY(x) {
+      const base = height * 0.58 - caprice * height * 0.22;
+      const amp = waveH * 16 + caprice * height * 0.12;
+      const speed = 2.2 / Math.max(waveP, 4);
+      const w1 = Math.sin(x * 0.0042 + anim * speed);
+      const steep = Math.pow(Math.max(0, (w1 + 1) / 2), 1.8);
+      return base - steep * amp - Math.cos(x * 0.009 - anim * speed) * amp * 0.25;
     }
-
-    function paint(data) {
-      const m = data.marine.current;
-      const w = data.weather.current;
-      const kind = windKind(w.wind_direction_10m, spot.facing);
-      const score = scoreOf({
-        height: m.wave_height,
-        period: m.swell_wave_period || m.wave_period,
-        windKmh: w.wind_speed_10m,
-        windFrom: w.wind_direction_10m,
-        swellFrom: m.swell_wave_direction,
-        facing: spot.facing
-      });
-      waveH = m.wave_height || 1;
-      waveP = m.wave_period || 8;
-      document.getElementById("score").textContent = score.toFixed(1);
-      document.getElementById("verdict").textContent = verdict(score);
-      document.getElementById("spotLabel").textContent = `${spot.region} · ${data.marine.current.time?.slice(11, 16) || ""}`;
-      const badge = document.getElementById("windBadge");
-      badge.className = "badge" + (kind === "offshore" ? "" : " " + kind);
-      const kt = w.wind_speed_10m / 1.852;
-      badge.textContent = `${kindLabel(kind)} ${kt.toFixed(0)}kt`;
-
-      const metrics = document.getElementById("metrics");
-      metrics.replaceChildren(
-        metric("うねり", `${Number(m.swell_wave_height).toFixed(2)} m ${cardinal(m.swell_wave_direction)}`),
-        metric("周期", `${Number(m.swell_wave_period || m.wave_period).toFixed(1)} s`),
-        metric("セットの波高", `${Number(m.wave_height).toFixed(2)} m`),
-        metric("風", `${kt.toFixed(0)} kt / 突風 ${(w.wind_gusts_10m / 1.852).toFixed(0)} kt`),
-        metric("水温 / 気温", `${m.sea_surface_temperature ?? "—"}° / ${Math.round(w.temperature_2m)}°`),
-        metric("スーツ", suit(m.sea_surface_temperature)),
-        metric("潮流", m.ocean_current_velocity == null ? "—" : `${m.ocean_current_velocity} km/h ${cardinal(m.ocean_current_direction)}`),
-        metric("天気", WX[w.weather_code] || "—"),
-        metric("日の出 / 入り", `${hm(data.weather.daily?.sunrise?.[0])} / ${hm(data.weather.daily?.sunset?.[0])}`),
-        metric("潮", data.tideText || "この地点は潮位APIなし")
-      );
-
-      const hoursEl = document.getElementById("hours");
-      hoursEl.replaceChildren();
-      const times = data.marine.hourly.time;
-      const nowKey = (m.time || "").slice(0, 13);
-      let start = times.findIndex((t) => t.slice(0, 13) === nowKey);
-      if (start < 0) start = 0;
-      const slice = [];
-      for (let i = start; i < Math.min(times.length, start + 12); i++) {
-        const wind = data.weather.hourly.wind_speed_10m[i];
-        const windFrom = data.weather.hourly.wind_direction_10m[i];
-        const sc = scoreOf({
-          height: data.marine.hourly.wave_height[i],
-          period: data.marine.hourly.swell_wave_period?.[i] || data.marine.hourly.wave_period[i],
-          windKmh: wind,
-          windFrom,
-          swellFrom: data.marine.hourly.wave_direction[i],
-          facing: spot.facing
-        });
-        slice.push({ i, sc, h: data.marine.hourly.wave_height[i], label: times[i].slice(11, 13) });
-      }
-      const best = slice.reduce((a, b) => (b.sc > a.sc ? b : a), slice[0]);
-      const maxH = Math.max(...slice.map((s) => s.h), 0.4);
-      slice.forEach((item) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "hour" + (item === best ? " best" : "");
-        const bar = document.createElement("u");
-        bar.style.height = `${Math.max(12, (item.h / maxH) * 64)}px`;
-        const em = document.createElement("em");
-        em.textContent = item.label;
-        btn.append(bar, em);
-        btn.addEventListener("click", () => {
-          document.getElementById("advice").textContent =
-            `${item.label}時台の目安 ${item.sc.toFixed(1)} / 波高 ${Number(item.h).toFixed(2)}m。金色がこれから12時間で一番条件の良い時間です。`;
-        });
-        hoursEl.appendChild(btn);
-      });
-
-      const period = m.swell_wave_period || m.wave_period;
-      const bits = [];
-      bits.push(kind === "offshore" ? "風は海へ抜けていて、面は整いやすいです。" : kind === "onshore" ? "風が浜へ向かっていて、面は崩れやすいです。" : "風は横から。サイズ次第で入れます。");
-      bits.push(period >= 11 ? "周期は長めで、グラウンドスウェル寄りです。" : "周期は短く、風波が混じっています。");
-      if (best) bits.push(`黄金の時間は ${best.label}時台（目安 ${best.sc.toFixed(1)}）。`);
-      bits.push("点数は波高・周期・風向・入り方からの目安です。");
-      document.getElementById("advice").textContent = bits.join("");
-      const src = ["Open-Meteo Marine（波・うねり・水温・潮流）", "Open-Meteo Forecast（風・天気・日の出）"];
-      if (spot.tide) src.push(`NOAA Tides（${spot.tideName}）`);
-      document.getElementById("sources").textContent = src.join(" / ");
-      layoutGlyphs();
-    }
-
-    function tideLine(json, offsetSec) {
-      const preds = json?.predictions;
-      if (!Array.isArray(preds)) return "";
-      const now = Date.now() + offsetSec * 1000;
-      const upcoming = preds
-        .map((p) => ({ ...p, at: Date.parse(p.t.replace(" ", "T") + "Z") }))
-        .filter((p) => p.at > now - 30 * 60000)
-        .slice(0, 2);
-      if (!upcoming.length) return "";
-      return upcoming.map((p) => `${p.type === "H" ? "満" : "干"} ${p.t.slice(11, 16)} ${p.v}m`).join(" / ");
-    }
-
-    async function loadSpot(next) {
+    async function load(next) {
       spot = next;
-      document.querySelectorAll(".spot").forEach((el) => {
-        el.classList.toggle("active", el.dataset.id === spot.id);
-      });
-      document.getElementById("spotLabel").textContent = `${spot.region} · 取得中`;
-      const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${spot.lat}&longitude=${spot.lon}&current=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,wind_wave_direction,sea_surface_temperature,ocean_current_velocity,ocean_current_direction&hourly=wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period&timezone=auto&forecast_days=2`;
-      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${spot.lat}&longitude=${spot.lon}&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m&daily=sunrise,sunset&timezone=auto&forecast_days=2`;
+      document.querySelectorAll(".spot").forEach(el => el.classList.toggle("active", el.dataset.id === spot.id));
+      document.getElementById("note").textContent = `${spot.name}の数字を、波が読む前に`;
+      const marine = `https://marine-api.open-meteo.com/v1/marine?latitude=${spot.lat}&longitude=${spot.lon}&current=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period&timezone=auto`;
+      const weather = `https://api.open-meteo.com/v1/forecast?latitude=${spot.lat}&longitude=${spot.lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&timezone=auto`;
       try {
-        const jobs = [fetch(marineUrl), fetch(weatherUrl)];
-        if (spot.tide) {
-          jobs.push(fetch(`https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?date=today&station=${spot.tide}&product=predictions&datum=MLLW&time_zone=lst_ldt&interval=hilo&units=metric&format=json&application=kisaragi-surf`));
-        }
-        const responses = await Promise.all(jobs);
-        const marine = await responses[0].json();
-        const weather = await responses[1].json();
-        if (!marine.current || !weather.current) throw new Error("empty");
-        let tideText = "";
-        if (responses[2]) {
-          const tide = await responses[2].json();
-          tideText = tideLine(tide, marine.utc_offset_seconds || 0);
-        }
-        report = { marine, weather, tideText };
-        paint(report);
+        const [mRes, wRes] = await Promise.all([fetch(marine), fetch(weather)]);
+        const m = (await mRes.json()).current;
+        const w = (await wRes.json()).current;
+        if (!m || !w) throw new Error("empty");
+        waveH = m.wave_height || 1.2;
+        waveP = m.wave_period || 8;
+        const kt = (w.wind_speed_10m / 1.852).toFixed(0);
+        report = `波高 ${Number(m.wave_height).toFixed(2)}m ${card(m.wave_direction)}  周期 ${Number(m.wave_period).toFixed(1)}s  風 ${kt}kt`;
+        layout();
       } catch {
-        document.getElementById("spotLabel").textContent = "取得できません";
-        document.getElementById("verdict").textContent = "オフライン";
+        report = "数字は届かない。波だけが来る";
+        layout();
       }
     }
-
-    function waveY(x, layer) {
-      const base = height * 0.64;
-      const amp = (waveH * 18 + swellBoost * 36) * (layer === 0 ? 0.7 : 1);
-      const speed = 2.1 / Math.max(waveP, 4);
-      const w1 = Math.sin(x * 0.0045 + anim * speed);
-      const w2 = Math.cos(x * 0.009 - anim * speed * 1.15) * 0.28;
-      const steep = Math.pow(Math.max(0, (w1 + 1) / 2), 2.1);
-      return base - (steep * 1.3 + w2) * amp;
-    }
-
-    function drawWave(layer, body, crest) {
+    function drawSea() {
       ctx.beginPath();
       ctx.moveTo(0, height);
-      for (let x = 0; x <= width; x += 8) {
-        const y = waveY(x, layer);
-        ctx.lineTo(x, y);
-      }
+      for (let x = 0; x <= width; x += 8) ctx.lineTo(x, waveY(x));
       ctx.lineTo(width, height);
       ctx.closePath();
-      ctx.fillStyle = body;
+      ctx.fillStyle = caprice > 0.6 ? "rgba(8, 18, 32, 0.94)" : "rgba(6, 12, 20, 0.9)";
       ctx.fill();
-      ctx.strokeStyle = crest;
-      ctx.lineWidth = layer === 1 ? 2.2 : 1;
+      ctx.strokeStyle = caprice > 0.8 ? "rgba(255, 244, 230, 0.95)" : "rgba(220, 236, 248, 0.8)";
+      ctx.lineWidth = 2 + caprice * 2;
       ctx.stroke();
     }
-
     function loop() {
       requestAnimationFrame(loop);
       anim += 0.02;
-      if (swellBoost > 0) swellBoost = Math.max(0, swellBoost - 0.01);
+      if (Math.random() < 0.004) caprice = Math.max(caprice, 0.8 + Math.random() * 1.6);
+      caprice *= 0.992;
       ctx.clearRect(0, 0, width, height);
-      glyphs.forEach((g) => {
-        if (g.eroded) {
-          g.vy += 0.03;
-          g.vx *= 0.98;
-          g.vy *= 0.99;
-          g.x += g.vx;
-          g.y += g.vy;
-          g.rot += g.vr;
-          g.alpha -= 0.002;
-        } else {
-          const y = waveY(g.x, 1);
-          if (g.y > y - 4 || (finger.down && Math.hypot(g.x - finger.x, g.y - finger.y) < 42)) {
-            g.eroded = true;
-            g.vx = (Math.random() - 0.5) * 2;
-            g.vy = 1 + Math.random();
-            g.vr = (Math.random() - 0.5) * 0.08;
-          }
+      let alive = 0;
+      glyphs.forEach(g => {
+        const y = waveY(g.x);
+        const hit = g.y > y - 8 || (caprice > 0.85 && g.y > height * 0.18) || (finger.down && Math.hypot(g.x - finger.x, g.y - finger.y) < 46);
+        if (!g.dead && hit) {
+          g.dead = true;
+          g.vx = (Math.random() - 0.5) * (2 + caprice * 4);
+          g.vy = 0.6 + Math.random() * 2.4;
+          g.vr = (Math.random() - 0.5) * 0.12;
+        }
+        if (g.dead) {
+          g.vy += 0.04; g.vx *= 0.98; g.x += g.vx; g.y += g.vy; g.rot += g.vr; g.a -= 0.004 + caprice * 0.004;
+        } else alive++;
+        if (g.a > 0.03) {
+          ctx.save();
+          ctx.translate(g.x, g.y); ctx.rotate(g.rot); ctx.globalAlpha = Math.max(0, g.a);
+          ctx.fillStyle = g.gold ? "#dfb15b" : "#e7eef6";
+          ctx.font = "16px 'Shippori Mincho', serif";
+          ctx.fillText(g.ch, 0, 0);
+          ctx.restore();
         }
       });
-      drawWave(0, "rgba(12, 32, 54, 0.9)", "rgba(80, 120, 150, 0.45)");
-      glyphs.forEach((g) => {
-        if (g.alpha < 0.03) return;
-        ctx.save();
-        ctx.translate(g.x, g.y);
-        ctx.rotate(g.rot);
-        ctx.globalAlpha = Math.max(0, g.alpha);
-        ctx.fillStyle = g.gold ? "#dfb15b" : "#e7eef6";
-        ctx.font = "15px 'Shippori Mincho', serif";
-        ctx.fillText(g.ch, 0, 0);
-        ctx.restore();
-      });
-      drawWave(1, "rgba(5, 10, 18, 0.92)", "rgba(236, 244, 252, 0.92)");
-      if (finger.down) {
-        ctx.beginPath();
-        ctx.arc(finger.x, finger.y, 18, 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(255,255,255,0.35)";
-        ctx.stroke();
+      drawSea();
+      if (glyphs.length && alive === 0 && performance.now() > reformAt) {
+        document.getElementById("note").textContent = "何も残らない。また書かれる。";
+        reformAt = performance.now() + 1600;
+        setTimeout(layout, 1500);
       }
     }
-
-    function renderSpots() {
-      spotsEl.replaceChildren();
-      SPOTS.forEach((item) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "spot" + (item.id === spot.id ? " active" : "");
-        btn.dataset.id = item.id;
-        btn.textContent = `${item.name}  ${item.region}`;
-        btn.addEventListener("click", () => loadSpot(item));
-        spotsEl.appendChild(btn);
+    function spots() {
+      const box = document.getElementById("spots");
+      SPOTS.forEach(item => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "spot" + (item === spot ? " active" : "");
+        b.dataset.id = item.id;
+        b.textContent = `${item.name}  ${item.region}`;
+        b.addEventListener("click", () => load(item));
+        box.appendChild(b);
       });
     }
-
-    function initAudio() {
-      if (audio) return;
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return;
-      audio = new AC();
-      const size = audio.sampleRate * 2;
-      const buffer = audio.createBuffer(1, size, audio.sampleRate);
-      const data = buffer.getChannelData(0);
-      let b0 = 0, b1 = 0, b2 = 0;
-      for (let i = 0; i < size; i++) {
-        const white = Math.random() * 2 - 1;
-        b0 = 0.997 * b0 + white * 0.06;
-        b1 = 0.985 * b1 + white * 0.04;
-        b2 = 0.95 * b2 + white * 0.02;
-        data[i] = (b0 + b1 + b2) * 0.18;
-      }
-      const src = audio.createBufferSource();
-      src.buffer = buffer;
-      src.loop = true;
-      const filter = audio.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.value = 400;
-      gainNode = audio.createGain();
-      gainNode.gain.value = 0;
-      src.connect(filter);
-      filter.connect(gainNode);
-      gainNode.connect(audio.destination);
-      src.start();
-    }
-
-    document.getElementById("handle").addEventListener("click", () => {
-      sheet.classList.toggle("collapsed");
-      document.getElementById("handle").textContent = sheet.classList.contains("collapsed") ? "詳細を見る" : "閉じる";
-    });
-    document.getElementById("setBtn").addEventListener("click", () => { swellBoost = 2.2; });
-    document.getElementById("refreshBtn").addEventListener("click", () => loadSpot(spot));
-    document.getElementById("audio").addEventListener("click", () => {
-      initAudio();
-      if (!audio) return;
-      audioOn = !audioOn;
-      if (audio.state === "suspended") audio.resume();
-      gainNode.gain.setTargetAtTime(audioOn ? 0.12 : 0, audio.currentTime, 0.3);
-      document.getElementById("audio").textContent = audioOn ? "♪" : "波";
-    });
-    document.getElementById("locate").addEventListener("click", () => {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition((pos) => {
-        let best = SPOTS[0], bestD = Infinity;
-        SPOTS.forEach((item) => {
-          const d = Math.hypot(item.lat - pos.coords.latitude, item.lon - pos.coords.longitude);
-          if (d < bestD) { best = item; bestD = d; }
-        });
-        const chip = spotsEl.querySelector(`[data-id="${best.id}"]`);
-        chip?.scrollIntoView({ inline: "center", block: "nearest" });
-        loadSpot(best);
-      }, () => {
-        document.getElementById("spotLabel").textContent = "地点を選んでください";
-      }, { enableHighAccuracy: false, timeout: 8000 });
-    });
-
-    canvas.addEventListener("pointerdown", (e) => {
-      finger.down = true;
-      finger.x = e.clientX;
-      finger.y = e.clientY;
-    });
-    canvas.addEventListener("pointermove", (e) => {
-      if (!finger.down) return;
-      finger.x = e.clientX;
-      finger.y = e.clientY;
-    });
-    window.addEventListener("pointerup", () => { finger.down = false; finger.x = -9999; });
-    window.addEventListener("resize", resize);
-
-    renderSpots();
-    resize();
-    loadSpot(spot);
-    loop();
-    refreshTimer = setInterval(() => loadSpot(spot), 10 * 60 * 1000);
+    canvas.addEventListener("pointerdown", e => { finger.down = true; finger.x = e.clientX; finger.y = e.clientY; });
+    canvas.addEventListener("pointermove", e => { if (finger.down) { finger.x = e.clientX; finger.y = e.clientY; } });
+    addEventListener("pointerup", () => { finger.down = false; finger.x = -9999; });
+    addEventListener("resize", resize);
+    spots(); resize(); load(spot); loop();
+    setInterval(() => load(spot), 10 * 60 * 1000);
   </script>
 </body>
 </html>
