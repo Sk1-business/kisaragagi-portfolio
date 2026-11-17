@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1a120c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>呼吸とデジタル (Breath & Digital)</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -86,7 +89,7 @@
         <span class="text-[10px] md:text-xs font-mono tracking-widest text-slate-400 uppercase">Breath & Digital</span>
       </div>
       <p class="text-[11px] md:text-xs text-slate-400 tracking-wider mt-0.5 font-light opacity-80">
-        息を吹きかけると粒子が霧散し、静けさの中で再結晶化します
+        4秒吸って、6秒吐く。急がない息が、言葉をほどき、また静かに戻します
       </p>
     </div>
 
@@ -94,7 +97,7 @@
     <div class="flex items-center gap-3 pointer-events-auto bg-slate-900/60 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-slate-700/40">
       <div class="flex items-center gap-2">
         <span id="micLiveIcon" class="w-2 h-2 rounded-full bg-slate-500 transition-colors duration-300"></span>
-        <span class="text-[10px] uppercase font-mono tracking-widest text-slate-400">Energy</span>
+        <span class="text-[10px] uppercase font-mono tracking-widest text-slate-400" id="phaseLabel">吸う</span>
       </div>
       <div class="w-20 md:w-28 h-2 rounded-full bg-slate-800/80 overflow-hidden border border-slate-700/60 p-[1px]">
         <div id="energyGauge" class="h-full w-0 bg-gradient-to-r from-teal-400 via-sky-400 to-rose-400 rounded-full transition-all duration-75"></div>
@@ -106,10 +109,10 @@
   <div id="welcomeHint" class="absolute inset-0 z-15 flex items-center justify-center pointer-events-none transition-opacity duration-700">
     <div class="glass px-6 py-4 rounded-2xl max-w-sm mx-4 text-center pointer-events-auto cursor-pointer border border-sky-500/20 shadow-2xl" onclick="hideHint()">
       <p class="text-sm tracking-[0.18em] text-slate-200 font-light">
-        画面下のボタンを長押しするか、<br>マイクを有効にして息を吹きかけてください
+        リングが広がるあいだ吸って、<br>長押ししながら6秒ほど吐いてください
       </p>
       <p class="text-[11px] tracking-wider text-slate-400 mt-2 font-mono">
-        Hold the blow button or enable microphone to begin
+        吐く息に合わせると、あたたかさが残ります
       </p>
     </div>
   </div>
@@ -124,7 +127,7 @@
       <button id="btnHoldBlow" 
               class="relative px-6 py-3 rounded-full glass border border-sky-500/30 hover:border-sky-400 text-slate-100 text-xs sm:text-sm font-light tracking-[0.2em] active:scale-95 transition-all shadow-lg flex items-center gap-2.5 overflow-hidden select-none cursor-pointer">
         <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
-        <span>息を吹きかける (長押し)</span>
+        <span>吐く（長押し）</span>
         <!-- Inner progress fill bar for button -->
         <span id="btnHoldMeter" class="absolute left-0 bottom-0 top-0 bg-sky-500/25 w-0 pointer-events-none transition-all"></span>
       </button>
@@ -169,7 +172,7 @@
       <!-- Custom Inscription Input -->
       <div class="flex items-center gap-2 pt-0.5">
         <label for="textInput" class="text-slate-400 whitespace-nowrap text-[11px]">碑銘 (言葉):</label>
-        <input id="textInput" type="text" value="breath  digital" 
+        <input id="textInput" type="text" value="ゆっくり、ここに" 
                class="flex-1 bg-slate-950/80 border border-slate-800 focus:border-sky-500 rounded-lg px-3 py-2 text-slate-100 outline-none text-base font-serif tracking-widest"
                placeholder="溶かしたい言葉を入力...">
         <button id="btnApplyText" class="px-3.5 py-1.5 rounded-lg bg-sky-950/60 border border-sky-700/50 hover:bg-sky-900/60 text-sky-200 cursor-pointer transition-colors">更新</button>
@@ -211,7 +214,10 @@
 
     // --- State Variables ---
     let particles = [];
-    let currentText = 'breath  digital';
+    let currentText = 'ゆっくり、ここに';
+    let calm = 0;
+    let breathClock = 0;
+    let holdStartedAt = 0;
     let isHoldingBlow = false;
     let simulatedEnergy = 0;
     let micEnergy = 0;
@@ -509,9 +515,14 @@
     function onHoldStart(e) {
       if (e) e.preventDefault();
       isHoldingBlow = true;
+      holdStartedAt = performance.now();
       hideHint();
     }
     function onHoldEnd() {
+      if (isHoldingBlow) {
+        const held = (performance.now() - holdStartedAt) / 1000;
+        if (held >= 3.2 && held <= 9) calm = Math.min(1, calm + 0.18);
+      }
       isHoldingBlow = false;
     }
 
@@ -574,11 +585,19 @@
     function animate(now) {
       requestAnimationFrame(animate);
 
-      // Compute Hold Simulated Breath
-      if (isHoldingBlow) {
-        simulatedEnergy = Math.min(1.0, simulatedEnergy + 0.08);
+      const frameDt = 1 / 60;
+      breathClock = (breathClock + frameDt) % 10;
+      const inhaling = breathClock < 4;
+      const phaseLabel = document.getElementById('phaseLabel');
+      if (phaseLabel) phaseLabel.textContent = inhaling ? '吸う 4s' : '吐く 6s';
+      if (isHoldingBlow && !inhaling) calm = Math.min(1, calm + frameDt * 0.045);
+      else calm = Math.max(0, calm - frameDt * 0.012);
+
+      // Compute Hold Simulated Breath — only the exhale half feeds the dispersal
+      if (isHoldingBlow && !inhaling) {
+        simulatedEnergy = Math.min(1.0, simulatedEnergy + 0.045);
       } else {
-        simulatedEnergy = Math.max(0.0, simulatedEnergy - 0.05);
+        simulatedEnergy = Math.max(0.0, simulatedEnergy - 0.04);
       }
 
       // Compute Mic Breath
@@ -607,8 +626,15 @@
       }
 
       // Render Soft Trail Motion Blur
-      ctx.fillStyle = 'rgba(7, 8, 10, 0.24)';
+      ctx.fillStyle = `rgba(${Math.round(18 + calm * 40)}, ${Math.round(12 + calm * 16)}, ${Math.round(8)}, 0.22)`;
       ctx.fillRect(0, 0, width, height);
+      if (calm > 0.04) {
+        const glow = ctx.createRadialGradient(width * 0.5, height * 0.48, 10, width * 0.5, height * 0.48, Math.max(width, height) * 0.55);
+        glow.addColorStop(0, `rgba(255, 196, 120, ${0.16 * calm})`);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, width, height);
+      }
 
       // Update and Draw Particles
       for (let i = 0; i < particles.length; i++) {
