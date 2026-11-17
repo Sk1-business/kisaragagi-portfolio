@@ -18,3 +18,4 @@ export const DEMO_CUSTOMER = {
 export const DEMO_SIGNUP_TOKEN_KEY = "demo:signup-token"
 export const DEMO_ADMIN_SESSION_KEY = "demo:admin-id"
 export const DEMO_CUSTOMER_SESSION_KEY = "demo:customer-id"
+export const DEMO_SALON_SESSION_KEY = "demo:salon-slug"

@@ -1,10 +1,13 @@
 import { Scissors, ShieldCheck, UserRound } from "lucide-react"
+import { useState } from "react"
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom"
 
 import { DEMO_CUSTOMER, DEMO_OWNER, DEMO_SALON_SLUG } from "@/demo/demoAccounts"
-import { routerBasename } from "@/demo/demoMode"
+import { isDemoMode, routerBasename } from "@/demo/demoMode"
+import { isValidSalonSlug } from "@/features/auth/lib/salonSlug"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ROUTES } from "@/constants/routes"
 import {
@@ -49,6 +52,11 @@ import { OwnerOnlyRoute } from "./layouts/OwnerOnlyRoute"
 import { UserLayout } from "./layouts/UserLayout"
 
 function LandingPage() {
+  const [slug, setSlug] = useState(DEMO_SALON_SLUG)
+  const salonSlug = slug.trim().toLowerCase()
+  const slugReady = salonSlug.length >= 3 && isValidSalonSlug(salonSlug)
+  const demo = isDemoMode()
+
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col justify-center px-4 py-12 sm:px-6">
       <div className="mb-8 flex items-center gap-3">
@@ -56,7 +64,7 @@ function LandingPage() {
           <Scissors className="size-5 text-foreground" />
         </div>
         <div>
-          <p className="text-sm text-muted-foreground">キサラギ美容室</p>
+          <p className="text-sm text-muted-foreground">美容室の予約</p>
           <h1 className="text-2xl font-semibold tracking-tight">どちらで入りますか</h1>
         </div>
       </div>
@@ -68,18 +76,38 @@ function LandingPage() {
               <UserRound className="size-5" />
               予約する
             </CardTitle>
-            <CardDescription>カット・カラー・パーマを選んで、前払いまたは当日払いで予約します。</CardDescription>
+            <CardDescription>
+              サロンIDを入れると、そのお店の予約ページが開きます。前払いと当日払いを選べます。
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button asChild className="w-full rounded-md">
-              <Link to={`/s/${DEMO_SALON_SLUG}`}>予約ページへ</Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full rounded-md">
-              <Link to={`/user/reservation/lookup?shopId=${DEMO_SALON_SLUG}`}>予約の確認へ</Link>
-            </Button>
-            <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
-              お客様 {DEMO_CUSTOMER.email} / {DEMO_CUSTOMER.password}
-            </p>
+            <label className="block space-y-1 text-sm" htmlFor="landing-salon-slug">
+              <span className="text-muted-foreground">サロンID</span>
+              <Input
+                id="landing-salon-slug"
+                value={slug}
+                spellCheck={false}
+                autoCapitalize="none"
+                onChange={(event) => setSlug(event.target.value)}
+              />
+            </label>
+            {slugReady ? (
+              <>
+                <Button asChild className="w-full rounded-md">
+                  <Link to={`/s/${salonSlug}`}>このサロンを開く</Link>
+                </Button>
+                <Button asChild variant="outline" className="w-full rounded-md">
+                  <Link to={`/user/reservation/lookup?shopId=${salonSlug}`}>予約の確認</Link>
+                </Button>
+              </>
+            ) : (
+              <p className="text-xs text-destructive">サロンIDは英数字とハイフンで、3文字以上にしてください。</p>
+            )}
+            {demo ? (
+              <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
+                見本のサロンIDは {DEMO_SALON_SLUG}。お客様 {DEMO_CUSTOMER.email} / {DEMO_CUSTOMER.password}
+              </p>
+            ) : null}
           </CardContent>
         </Card>
         <Card className="rounded-lg shadow-xs">
@@ -90,7 +118,7 @@ function LandingPage() {
               お店を見る
             </CardTitle>
             <CardDescription>
-              予約台帳、顧客カルテ、おすすめ、売上と利益、ホットペッパーの予約メールを扱います。
+              ログインすると、そのアカウントのサロンが開きます。新規登録すると、そのサロンの予約ページと管理画面が始まります。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -100,9 +128,11 @@ function LandingPage() {
             <Button asChild variant="outline" className="w-full rounded-md">
               <Link to={ROUTES.backofficeSignup}>サロンを新規登録</Link>
             </Button>
-            <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
-              オーナー {DEMO_OWNER.email} / {DEMO_OWNER.password}
-            </p>
+            {demo ? (
+              <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
+                見本のオーナー {DEMO_OWNER.email} / {DEMO_OWNER.password}
+              </p>
+            ) : null}
           </CardContent>
         </Card>
       </div>

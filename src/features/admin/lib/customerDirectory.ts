@@ -1,7 +1,20 @@
 import type { Reservation } from "@/features/admin/types/reservation"
 import { NO_SHOW_BLOCK_THRESHOLD, phoneDigits } from "@/features/admin/lib/noShowBlock"
+import { DEMO_SALON_SESSION_KEY, DEMO_SALON_SLUG } from "@/demo/demoAccounts"
 
-const STORAGE_KEY = "admin-customer-profiles-v1"
+const LEGACY_STORAGE_KEY = "admin-customer-profiles-v1"
+
+function currentSalonSlug(): string {
+  try {
+    return sessionStorage.getItem(DEMO_SALON_SESSION_KEY)?.trim().toLowerCase() || DEMO_SALON_SLUG
+  } catch {
+    return DEMO_SALON_SLUG
+  }
+}
+
+function profileStorageKey(): string {
+  return `admin-customer-profiles-v1:${currentSalonSlug()}`
+}
 
 export type CustomerGender = "" | "female" | "male" | "unspecified"
 export type CustomerKind = "" | "new" | "existing"
@@ -76,10 +89,10 @@ function emptyProfile(key: string): CustomerProfile {
   }
 }
 
-const SHOWCASE_SEED_KEY = "kisaragi-chart-seed:v1"
-
 export function ensureShowcaseCharts(): void {
-  if (localStorage.getItem(SHOWCASE_SEED_KEY) === "1") return
+  if (currentSalonSlug() !== DEMO_SALON_SLUG) return
+  const seedKey = `kisaragi-chart-seed:v1:${currentSalonSlug()}`
+  if (localStorage.getItem(seedKey) === "1") return
   const samples: CustomerProfile[] = [
     {
       key: customerKey("09011112222", "guest@kisaragi.example"),
@@ -140,7 +153,7 @@ export function ensureShowcaseCharts(): void {
     },
   ]
   importCustomerProfiles(samples)
-  localStorage.setItem(SHOWCASE_SEED_KEY, "1")
+  localStorage.setItem(`kisaragi-chart-seed:v1:${currentSalonSlug()}`, "1")
 }
 
 export function parseKarteText(text: string): Partial<CustomerProfile> | null {
@@ -176,7 +189,15 @@ export function parseKarteText(text: string): Partial<CustomerProfile> | null {
 
 function readProfiles(): CustomerProfile[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const key = profileStorageKey()
+    let raw = localStorage.getItem(key)
+    if (!raw && currentSalonSlug() === DEMO_SALON_SLUG) {
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY)
+      if (legacy) {
+        localStorage.setItem(key, legacy)
+        raw = legacy
+      }
+    }
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
@@ -189,7 +210,7 @@ function readProfiles(): CustomerProfile[] {
 }
 
 function writeProfiles(profiles: CustomerProfile[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles))
+  localStorage.setItem(profileStorageKey(), JSON.stringify(profiles))
 }
 
 export function customerKey(phone: string, email: string): string {

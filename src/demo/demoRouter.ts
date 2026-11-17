@@ -1,20 +1,28 @@
 import {
   DEMO_ADMIN_SESSION_KEY,
   DEMO_CUSTOMER_SESSION_KEY,
+  DEMO_SALON_SESSION_KEY,
+  DEMO_SALON_SLUG,
   DEMO_SIGNUP_TOKEN_KEY,
   DEMO_OTP_CODE,
 } from "@/demo/demoAccounts"
 import { routerBasename } from "@/demo/demoMode"
 import {
   availabilitySlots,
+  demoEmailTaken,
   demoId,
+  findSalonAdmin,
+  findSalonByInvite,
   importHotpepperEmail,
   importReservationCsv,
   loadDemoState,
+  provisionSalon,
   publicMenus,
   recomputeEnd,
+  salonExists,
   salesSummary,
   updateDemoState,
+  useDemoSalon,
   type DemoAdmin,
   type DemoReservation,
   type DemoState,
@@ -70,6 +78,23 @@ function setAdminSession(adminId: string | null): void {
   try {
     if (adminId) sessionStorage.setItem(DEMO_ADMIN_SESSION_KEY, adminId)
     else sessionStorage.removeItem(DEMO_ADMIN_SESSION_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function salonSession(): string {
+  try {
+    return sessionStorage.getItem(DEMO_SALON_SESSION_KEY)?.trim().toLowerCase() || ""
+  } catch {
+    return ""
+  }
+}
+
+function setSalonSession(slug: string | null): void {
+  try {
+    if (slug) sessionStorage.setItem(DEMO_SALON_SESSION_KEY, slug)
+    else sessionStorage.removeItem(DEMO_SALON_SESSION_KEY)
   } catch {
     /* ignore */
   }
@@ -272,59 +297,80 @@ export async function handleDemoRequest(pathWithQuery: string, init?: RequestIni
   const pathname = decodeURIComponent(queryIndex < 0 ? pathWithQuery : pathWithQuery.slice(0, queryIndex))
   const search = new URLSearchParams(queryIndex < 0 ? "" : pathWithQuery.slice(queryIndex + 1))
   const method = (init?.method ?? "GET").toUpperCase()
-  const state = loadDemoState()
   const body = method === "GET" || method === "DELETE" ? {} : await readBody(init)
+  const pathSlug = pathname.match(/^\/api\/s\/([^/]+)/)?.[1]?.toLowerCase() ?? ""
 
   if (pathname === "/api/admin/login" && method === "POST") {
     const email = String(body.email ?? "").trim().toLowerCase()
     const password = String(body.password ?? "")
-    const admin = state.admins.find((item) => item.email.toLowerCase() === email && item.password === password)
-    if (!admin) return json(401, { detail: "メールアドレスまたはパスワードが違います。" })
-    setAdminSession(admin.admin_id)
-    return json(200, { ok: true })
+    const found = findSalonAdmin(email, password)
+    if (!found) return json(401, { detail: "メールアドレスまたはパスワードが違います。" })
+    useDemoSalon(found.slug)
+    setSalonSession(found.slug)
+    setAdminSession(found.admin.admin_id)
+    return json(200, { ok: true, salon_slug: found.slug })
   }
 
   if (pathname === "/api/admin/logout" && method === "POST") {
     setAdminSession(null)
+    setSalonSession(null)
     return empty()
   }
 
   if (pathname === "/api/admin/signup" && method === "POST") {
     const email = String(body.email ?? "").trim().toLowerCase()
     if (!email) return json(400, { detail: "email is required" })
-    if (state.admins.some((admin) => admin.email.toLowerCase() === email)) {
-      return json(409, { detail: "already registered" })
-    }
+    if (demoEmailTaken(email)) return json(409, { detail: "already registered" })
     if (!body.salon_name && !body.invite_token) {
       return json(400, { detail: "salon_name is required" })
     }
-    const admin: DemoAdmin = {
-      admin_id: demoId("admin"),
+    if (typeof body.invite_token === "string" && body.invite_token) {
+      const slug = findSalonByInvite(body.invite_token)
+      if (!slug) return json(404, { detail: "invite not found" })
+      useDemoSalon(slug)
+      const admin: DemoAdmin = {
+        admin_id: demoId("admin"),
+        email,
+        password: String(body.password ?? ""),
+        name: String(body.name ?? "スタッフ"),
+        role: "staff",
+      }
+      updateDemoState((draft) => {
+        draft.admins.push(admin)
+        delete draft.invites[String(body.invite_token)]
+      })
+      setSalonSession(slug)
+      setAdminSession(admin.admin_id)
+      return json(200, { ok: true, admin_id: admin.admin_id, salon_slug: slug })
+    }
+    const slug = String(body.salon_slug ?? "").trim().toLowerCase()
+    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug) || slug.length < 3) {
+      return json(400, { detail: "salon slug is invalid" })
+    }
+    if (slug === DEMO_SALON_SLUG || localStorage.getItem(`kisaragi-salon-demo:v3:${slug}`)) {
+      return json(409, { detail: "salon slug already exists" })
+    }
+    const created = provisionSalon({
+      salonName: String(body.salon_name ?? ""),
+      slug,
       email,
       password: String(body.password ?? ""),
-      name: String(body.name ?? "オーナー"),
-      role: body.role === "staff" || body.invite_token ? "staff" : "owner",
-    }
-    const next = updateDemoState((draft) => {
-      draft.admins.push(admin)
-      if (typeof body.salon_name === "string" && body.salon_name.trim()) {
-        draft.salon.salon_name = body.salon_name.trim()
-      }
-      if (typeof body.salon_slug === "string" && body.salon_slug.trim()) {
-        draft.salon.slug = body.salon_slug.trim().toLowerCase()
-      }
-      if (typeof body.invite_token === "string") {
-        delete draft.invites[body.invite_token]
-      }
+      ownerName: String(body.name ?? "オーナー"),
     })
-    setAdminSession(admin.admin_id)
-    void next
-    return json(200, { ok: true, admin_id: admin.admin_id })
+    useDemoSalon(created.salon.slug)
+    setSalonSession(created.salon.slug)
+    setAdminSession(created.admins[0]?.admin_id ?? null)
+    return json(200, { ok: true, admin_id: created.admins[0]?.admin_id, salon_slug: created.salon.slug })
   }
+
+  const slug = pathSlug || salonSession() || DEMO_SALON_SLUG
+  if (pathSlug && !salonExists(pathSlug)) return json(404, { detail: "店舗が見つかりません。" })
+  useDemoSalon(slug)
+  const state = loadDemoState()
 
   if (pathname === "/api/admin/signup-verifications" && method === "POST") {
     const email = String(body.email ?? "").trim().toLowerCase()
-    if (state.admins.some((admin) => admin.email.toLowerCase() === email)) {
+    if (demoEmailTaken(email)) {
       return json(409, { detail: "already registered" })
     }
     const token = demoId("verify")
@@ -647,7 +693,7 @@ export async function handleDemoRequest(pathWithQuery: string, init?: RequestIni
   if (pathname === "/api/admin/admin-users" && method === "POST") {
     if (actor?.role !== "owner") return json(403, { detail: "owner required" })
     const email = String(body.email ?? "").trim().toLowerCase()
-    if (state.admins.some((item) => item.email.toLowerCase() === email)) {
+    if (demoEmailTaken(email)) {
       return json(409, { detail: "already registered" })
     }
     const created = {
@@ -814,6 +860,7 @@ export async function handleDemoRequest(pathWithQuery: string, init?: RequestIni
     const password = String(body.password ?? "")
     const customer = state.customers.find((item) => item.email.toLowerCase() === email && item.password === password)
     if (!customer) return json(401, { detail: "メールアドレスまたはパスワードが違います。" })
+    setSalonSession(login[1].toLowerCase())
     setCustomerSession(customer.user_id)
     return json(200, { message: "ok", user_id: customer.user_id, name: customer.name })
   }
@@ -833,6 +880,7 @@ export async function handleDemoRequest(pathWithQuery: string, init?: RequestIni
     updateDemoState((draft) => {
       draft.customers.push(customer)
     })
+    setSalonSession(register[1].toLowerCase())
     setCustomerSession(customer.user_id)
     return json(200, { message: "ok", user_id: customer.user_id, name: customer.name })
   }

@@ -2,7 +2,18 @@ import { DEMO_CUSTOMER, DEMO_OWNER, DEMO_SALON_NAME, DEMO_SALON_SLUG } from "@/d
 import { parseHotpepperMail } from "@/demo/parseHotpepperMail"
 import { parseReservationChannel, type ReservationChannel } from "@/features/admin/lib/reservationChannel"
 
-const STORAGE_KEY = "kisaragi-salon-demo:v2"
+const STORAGE_INDEX = "kisaragi-salon-demo:v3:index"
+const LEGACY_STORAGE_KEY = "kisaragi-salon-demo:v2"
+
+function storageKey(slug: string): string {
+  return `kisaragi-salon-demo:v3:${slug}`
+}
+
+let activeSlug = DEMO_SALON_SLUG
+
+export function useDemoSalon(slug: string): void {
+  activeSlug = slug.trim().toLowerCase() || DEMO_SALON_SLUG
+}
 const SALON_IMAGE =
   "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=1400&q=80"
 
@@ -572,26 +583,176 @@ function createSeed(): DemoState {
   }
 }
 
-export function loadDemoState(): DemoState {
+function readIndex(): string[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as DemoState
-      if (parsed?.salon?.slug && Array.isArray(parsed.reservations)) {
-        if (!Array.isArray(parsed.inbox)) parsed.inbox = []
-        return parsed
-      }
+    const raw = localStorage.getItem(STORAGE_INDEX)
+    const parsed = raw ? (JSON.parse(raw) as unknown) : []
+    const slugs = Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []
+    if (!slugs.includes(DEMO_SALON_SLUG)) slugs.unshift(DEMO_SALON_SLUG)
+    return slugs
+  } catch {
+    return [DEMO_SALON_SLUG]
+  }
+}
+
+function rememberSlug(slug: string): void {
+  const slugs = readIndex()
+  if (slugs.includes(slug)) return
+  slugs.push(slug)
+  localStorage.setItem(STORAGE_INDEX, JSON.stringify(slugs))
+}
+
+function parseState(raw: string): DemoState | null {
+  try {
+    const parsed = JSON.parse(raw) as DemoState
+    if (parsed?.salon?.slug && Array.isArray(parsed.reservations)) {
+      if (!Array.isArray(parsed.inbox)) parsed.inbox = []
+      return parsed
     }
   } catch {
-    /* reseed */
+    return null
   }
-  const seed = createSeed()
-  saveDemoState(seed)
-  return seed
+  return null
+}
+
+export function salonExists(slug: string): boolean {
+  if (slug === DEMO_SALON_SLUG) return true
+  return localStorage.getItem(storageKey(slug)) != null
+}
+
+export function loadDemoState(): DemoState {
+  const key = storageKey(activeSlug)
+  const saved = localStorage.getItem(key)
+  if (saved) {
+    const parsed = parseState(saved)
+    if (parsed) return parsed
+  }
+  if (activeSlug === DEMO_SALON_SLUG) {
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY)
+    const migrated = legacy ? parseState(legacy) : null
+    const seed = migrated ?? createSeed()
+    saveDemoState(seed)
+    return seed
+  }
+  throw new Error(`demo salon not found: ${activeSlug}`)
 }
 
 export function saveDemoState(state: DemoState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  const slug = state.salon.slug.trim().toLowerCase()
+  localStorage.setItem(storageKey(slug), JSON.stringify(state))
+  rememberSlug(slug)
+}
+
+export function listDemoSalons(): { slug: string; salonName: string }[] {
+  const previous = activeSlug
+  const salons = readIndex().map((slug) => {
+    activeSlug = slug
+    const state = loadDemoState()
+    return { slug: state.salon.slug, salonName: state.salon.salon_name }
+  })
+  activeSlug = previous
+  return salons
+}
+
+export function demoEmailTaken(email: string): boolean {
+  const previous = activeSlug
+  const taken = readIndex().some((slug) => {
+    activeSlug = slug
+    return loadDemoState().admins.some((admin) => admin.email.toLowerCase() === email)
+  })
+  activeSlug = previous
+  return taken
+}
+
+export function findSalonByInvite(token: string): string | null {
+  const previous = activeSlug
+  for (const slug of readIndex()) {
+    activeSlug = slug
+    const state = loadDemoState()
+    if (state.invites[token]) {
+      const found = state.salon.slug
+      activeSlug = previous
+      return found
+    }
+  }
+  activeSlug = previous
+  return null
+}
+
+export function findSalonAdmin(
+  email: string,
+  password: string,
+): { slug: string; admin: DemoAdmin } | null {
+  const previous = activeSlug
+  for (const slug of readIndex()) {
+    activeSlug = slug
+    const state = loadDemoState()
+    const admin = state.admins.find((item) => item.email.toLowerCase() === email && item.password === password)
+    if (admin) return { slug: state.salon.slug, admin }
+  }
+  activeSlug = previous
+  return null
+}
+
+export function provisionSalon(input: {
+  salonName: string
+  slug: string
+  email: string
+  password: string
+  ownerName: string
+}): DemoState {
+  const slug = input.slug.trim().toLowerCase()
+  const seed = createSeed()
+  seed.salon = {
+    ...seed.salon,
+    salon_id: demoId("salon"),
+    salon_name: input.salonName.trim(),
+    slug,
+    description: `${input.salonName.trim()}の予約です。前払いと当日払いを選べます。`,
+  }
+  seed.reservations = []
+  seed.inbox = []
+  seed.customers = []
+  seed.coupons = []
+  seed.admins = [
+    {
+      admin_id: demoId("admin"),
+      email: input.email.trim().toLowerCase(),
+      password: input.password,
+      name: input.ownerName.trim() || "オーナー",
+      role: "owner",
+    },
+  ]
+  const trainerId = demoId("st")
+  seed.trainers = [
+    {
+      trainer_id: trainerId,
+      name: input.ownerName.trim() || "オーナー",
+      color: "#7c3aed",
+      description: "サロンオーナー",
+      image_url: null,
+      display_order: 1,
+      menu_ids: seed.menus.map((menu) => menu.menu_id),
+      is_active: true,
+      admin_id: seed.admins[0].admin_id,
+    },
+  ]
+  seed.shifts = seed.shifts
+    .filter((shift) => shift.trainer_id === "st_aoi")
+    .map((shift) => ({
+      ...shift,
+      shift_id: `shift_${trainerId}_${shift.date}`,
+      trainer_id: trainerId,
+    }))
+  seed.lookupTokens = {}
+  seed.otpChallenges = {}
+  seed.signupTokens = {}
+  seed.invites = {}
+  const previous = activeSlug
+  activeSlug = slug
+  saveDemoState(seed)
+  activeSlug = previous
+  return seed
 }
 
 export function updateDemoState(mutator: (state: DemoState) => void): DemoState {
