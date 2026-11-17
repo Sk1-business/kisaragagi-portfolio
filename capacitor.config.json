@@ -1,0 +1,9 @@
+{
+  "appId": "app.kisaragi.kotodama",
+  "appName": "言霊ランタン",
+  "webDir": "public",
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#140804"
+  }
+}
