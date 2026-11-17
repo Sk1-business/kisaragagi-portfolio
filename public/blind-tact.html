@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#140c08">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Blind Tact (ブラインド・タクト)</title>
   <style>
     * {
@@ -255,6 +259,7 @@
       <div style="display: flex; align-items: center; gap: 8px;">
         <span class="presence-gauge" id="presenceGauge"></span>
         <span class="title-mark">Blind Tact</span>
+        <span class="title-mark" id="warmthLabel">あたたかさ 0</span>
       </div>
       <div style="display: flex; gap: 8px;">
         <button class="btn-icon" id="soundToggleBtn" title="音声切り替え" aria-label="Toggle Sound">
@@ -270,8 +275,8 @@
     <!-- Initial subtle poetic hint -->
     <div class="instruction-wrap" id="instructionWrap">
       <p class="instruction-text">
-        文字を読まず、指先の触覚で探す。<br>
-        画面を指でゆっくりとなぞり、遠くの気配を探してください。
+        急がず、指を置いたまま。<br>
+        ゆっくり触れていると、あたたかさが満ちていきます。
       </p>
     </div>
 
@@ -283,7 +288,7 @@
           <polyline points="7 10 12 15 17 10"></polyline>
           <line x1="12" y1="15" x2="12" y2="3"></line>
         </svg>
-        接触の残照を記録 (Save Trace)
+        あたたかさの残照を残す
       </button>
     </footer>
   </div>
@@ -291,15 +296,15 @@
   <!-- Concept info modal -->
   <div class="modal-backdrop" id="modalBackdrop">
     <div class="modal-card">
-      <h3>Blind Tact (ブラインド・タクト)</h3>
+      <h3>あたたかさを満たす</h3>
       <p>
-        私たちは日々、アルゴリズムと過密な文字情報に神経を占有され、皮膚感覚や偶発的な出会いの手触りを失いつつあります。
+        急いで探すほど、気配は逃げます。指をゆっくり重ね、そこに留まると、画面の奥から琥珀色の熱が満ちてきます。
       </p>
       <p>
-        この作品には文字のタイムラインもチャットログも存在しません。タッチパネルを情報伝達ではなく「皮膚の延長」として扱い、画面の闇の中を彷徨う他者の波長を、<strong>周波数（音響）</strong>と<strong>振動（触覚）</strong>だけで手探りします。
+        この作品は、満たされる感じ——人がセロトニンと呼ぶ、急がない充足——に触覚を寄せています。医療機器ではなく、ゆっくり触れていること自体が光になります。
       </p>
       <p style="font-size: 11px; color: #777;">
-        ※ スマートフォンのバイブレーション機能に対応している場合、指が気配に接近すると微振動が発生します。イヤホンの着用を推奨します。
+        イヤホンをつけると、留まった瞬間だけ低い和音が鳴ります。
       </p>
       <button class="modal-close-btn" id="modalCloseBtn">画面に戻る</button>
     </div>
@@ -513,6 +518,7 @@
     let hasInteracted = false;
     let particles = [];
     let bloomFlash = 0;
+    let warmth = 0;
 
     // Simple pseudo perlin / organic wander logic
     function updatePresence(dt) {
@@ -525,14 +531,14 @@
         const padY = height * 0.15;
         presence.targetX = padX + Math.random() * (width - padX * 2);
         presence.targetY = padY + Math.random() * (height - padY * 2);
-        presence.wanderTimer = 3.5 + Math.random() * 4.0;
+        presence.wanderTimer = 9 + Math.random() * 8;
       }
 
       // Smooth elastic pursuit toward target
       const dx = presence.targetX - presence.x;
       const dy = presence.targetY - presence.y;
-      presence.vx += dx * 0.008;
-      presence.vy += dy * 0.008;
+      presence.vx += dx * 0.0035;
+      presence.vy += dy * 0.0035;
       presence.vx *= 0.94;
       presence.vy *= 0.94;
 
@@ -548,12 +554,7 @@
 
       if (isContact && now - lastVibrateTime > 250) {
         // Harmonic resonance vibration pulse
-        navigator.vibrate([40, 60, 100]);
-        lastVibrateTime = now;
-      } else if (proximityVal > 0.4 && now - lastVibrateTime > Math.max(70, (1 - proximityVal) * 450)) {
-        // Frequency of vibrations increases as fingers near
-        const duration = Math.min(35, Math.floor(proximityVal * 30) + 10);
-        navigator.vibrate(duration);
+        navigator.vibrate(18);
         lastVibrateTime = now;
       }
     }
@@ -626,8 +627,9 @@
       const syncDistance = 42;
       const now = performance.now();
 
-      if (dist < syncDistance) {
-        if (!isSynchronized && (now - lastSyncTime > 1200)) {
+      const lingering = userTouch.speed < 16;
+      if (dist < syncDistance && lingering) {
+        if (!isSynchronized && (now - lastSyncTime > 2200)) {
           isSynchronized = true;
           lastSyncTime = now;
           syncCount++;
@@ -653,14 +655,29 @@
     function render(currentTime) {
       const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
       lastTime = currentTime;
+      userTouch.speed *= 0.9;
 
       updatePresence(dt);
       computeProximity();
       audioEngine.updateProximity(proximity, userTouch.active);
 
+      const lingering = userTouch.active && userTouch.speed < 16 && proximity > 0.28;
+      if (lingering) warmth = Math.min(1, warmth + dt * 0.07);
+      else warmth = Math.max(0, warmth - dt * 0.018);
+      const warmthLabel = document.getElementById('warmthLabel');
+      if (warmthLabel) warmthLabel.textContent = `あたたかさ ${Math.round(warmth * 100)}`;
+
       // 1. Dark Screen Background with subtle clearing
-      ctx.fillStyle = '#060606';
+      const bg = Math.round(6 + warmth * 28);
+      ctx.fillStyle = `rgb(${bg}, ${Math.round(6 + warmth * 14)}, ${Math.round(6 + warmth * 4)})`;
       ctx.fillRect(0, 0, width, height);
+      if (warmth > 0.02) {
+        const g = ctx.createRadialGradient(width * 0.5, height * 0.62, 20, width * 0.5, height * 0.5, Math.max(width, height) * 0.7);
+        g.addColorStop(0, `rgba(255, 168, 72, ${0.22 * warmth})`);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, width, height);
+      }
 
       // 2. Render accumulated tactile trace residue
       ctx.drawImage(traceCanvas, 0, 0, width, height);
