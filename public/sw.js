@@ -1,4 +1,4 @@
-const CACHE = "kotodama-v2";
+const CACHE = "kotodama-v3";
 const FILES = ["/kotodama.html", "/index.html", "/manifest.webmanifest", "/icon-180.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
