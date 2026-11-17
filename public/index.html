@@ -46,7 +46,7 @@
       background: linear-gradient(to bottom, rgba(5, 9, 20, 0.9), rgba(7, 13, 28, 0.85), rgba(5, 9, 20, 0.95));
       text-align: center;
     }
-    .eyebrow { margin: 24px 0 8px; font-family: Inter, "Hiragino Sans", sans-serif; font-size: 11px; letter-spacing: 0.35em; text-transform: uppercase; color: rgba(165, 243, 252, 0.6); }
+    .eyebrow { margin: 24px 0 8px; font-family: Inter, "Hiragino Sans", sans-serif; font-size: 11px; letter-spacing: 0.28em; color: rgba(165, 243, 252, 0.6); }
     h1 { margin: 0; font-weight: 400; font-size: clamp(24px, 7vw, 30px); letter-spacing: 0.2em; }
     .en { margin: 4px 0 0; font-family: Inter, "Hiragino Sans", sans-serif; font-size: 12px; letter-spacing: 0.25em; color: #a8a29e; }
     .mid { max-width: 20rem; margin: auto; }
@@ -55,7 +55,7 @@
     .poem span { display: block; margin-top: 8px; font-size: 12px; color: #a8a29e; }
     #start-btn { margin-top: 18px; min-height: 52px; padding: 0 32px; border-radius: 999px; letter-spacing: 0.25em; font-size: 14px; color: #fde68a; }
     .sensor-note { margin: 16px 0 0; font-size: 11px; letter-spacing: 0.06em; color: #78716c; line-height: 1.7; }
-    .bottle-note { font-size: 11px; letter-spacing: 0.22em; color: rgba(120, 113, 108, 0.8); }
+    .hand-note { font-size: 11px; letter-spacing: 0.18em; color: rgba(120, 113, 108, 0.8); }
     #guide-overlay {
       position: fixed; z-index: 10; left: 0; right: 0; top: 50%; transform: translateY(-50%);
       display: flex; justify-content: center; padding: 0 24px; text-align: center;
@@ -119,7 +119,7 @@
 
   <div id="start-screen" class="fade-transition">
     <div>
-      <p class="eyebrow">Interactive Glass Installation</p>
+      <p class="eyebrow">言葉を灯に変える</p>
       <h1>言霊ランタン</h1>
       <p class="en">KOTODAMA LANTERN</p>
     </div>
@@ -134,18 +134,18 @@
       </svg>
       <p class="poem">
         溢れかえる言葉と通知を、<br>
-        ガラスの器に閉じ込めて。<br>
+        この画面で灯して。<br>
         <span>息を吹きかけるか、優しく揺らすと<br>文字は燃え尽き、静かな灯りに変わります。</span>
       </p>
       <button id="start-btn" class="glass-btn glow-pulse" type="button">灯りをともす</button>
       <p class="sensor-note">※ マイク・モーションセンサーを使用します<br>（未許可でも画面タッチで体験できます）</p>
     </div>
-    <div class="bottle-note">画面の明るさを最大にして空き瓶へ</div>
+    <div class="hand-note">息でも、指先でも、揺れでも</div>
   </div>
 
   <div id="guide-overlay" class="fade-transition">
     <div class="guide-card">
-      <p>瓶に入れ、息を吹きかけるか<br>優しく揺らしてください</p>
+      <p>息を吹きかけるか<br>優しく揺らしてください</p>
       <p class="sub">（画面のタップ・長押しでも灯ります）</p>
     </div>
   </div>
