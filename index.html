@@ -41,106 +41,131 @@
 <body>
   <canvas id="tide"></canvas>
   <div class="spots" id="spots"></div>
-  <p class="note" id="note">波は予報を信じない</p>
+  <p class="note" id="note">山梨の数字を、水が読む前に</p>
   <script>
-    const SPOTS = [
-      { id: "ichinomiya", name: "一宮", region: "千葉", lat: 35.38, lon: 140.39 },
-      { id: "kugenuma", name: "鵠沼", region: "湘南", lat: 35.316, lon: 139.472 },
-      { id: "kizaki", name: "木崎浜", region: "宮崎", lat: 31.802, lon: 131.47 },
-      { id: "uradome", name: "浦富", region: "鳥取", lat: 35.545, lon: 134.318 },
-      { id: "shirahama", name: "白浜", region: "和歌山", lat: 33.678, lon: 135.337 },
-      { id: "pipeline", name: "Pipeline", region: "Oahu", lat: 21.665, lon: -158.053 },
-      { id: "malibu", name: "Malibu", region: "California", lat: 34.025, lon: -118.78 },
-      { id: "steamer", name: "Steamer Lane", region: "Santa Cruz", lat: 36.951, lon: -122.026 },
-      { id: "hossegor", name: "Hossegor", region: "France", lat: 43.666, lon: -1.441 },
-      { id: "snapper", name: "Snapper", region: "Gold Coast", lat: -28.164, lon: 153.551 },
-      { id: "uluwatu", name: "Uluwatu", region: "Bali", lat: -8.829, lon: 115.087 },
-      { id: "jbay", name: "J-Bay", region: "South Africa", lat: -34.021, lon: 24.931 }
+    const PLACES = [
+      { id: "kawaguchi", name: "河口湖", area: "富士五湖", kind: "湖", lat: 35.517, lon: 138.755 },
+      { id: "yamanaka", name: "山中湖", area: "富士五湖", kind: "湖", lat: 35.416, lon: 138.877 },
+      { id: "sai", name: "西湖", area: "富士五湖", kind: "湖", lat: 35.498, lon: 138.685 },
+      { id: "shoji", name: "精進湖", area: "富士五湖", kind: "湖", lat: 35.493, lon: 138.608 },
+      { id: "motosu", name: "本栖湖", area: "富士五湖", kind: "湖", lat: 35.463, lon: 138.585 },
+      { id: "kofu", name: "甲府", area: "釜無川", kind: "川", lat: 35.664, lon: 138.568 },
+      { id: "isawa", name: "石和", area: "笛吹川", kind: "川", lat: 35.640, lon: 138.640 },
+      { id: "otsuki", name: "大月", area: "桂川", kind: "川", lat: 35.610, lon: 138.940 },
+      { id: "shosen", name: "昇仙峡", area: "荒川", kind: "川", lat: 35.753, lon: 138.560 },
+      { id: "minobu", name: "身延", area: "富士川", kind: "川", lat: 35.364, lon: 138.452 },
+      { id: "fujiyoshida", name: "富士吉田", area: "富士山麓", kind: "麓", lat: 35.488, lon: 138.808 },
+      { id: "hokuto", name: "北杜", area: "八ヶ岳", kind: "麓", lat: 35.776, lon: 138.423 }
     ];
-    const LINES_POEM = ["この数字は確かだ", "周期は約束する", "風は味方だ", "明日も同じ海だ"];
+    const CLAIMS = ["この数字は確かだ", "明日の川は読める", "湖は管理されている", "警報の外は安全だ"];
     const canvas = document.getElementById("tide");
     const ctx = canvas.getContext("2d");
-    let width = 1, height = 1, anim = 0, spot = SPOTS[0];
-    let waveH = 1.2, waveP = 8, caprice = 0, glyphs = [], finger = { x: -9999, y: -9999, down: false };
-    let report = "読み込み中", reformAt = 0;
+    let width = 1, height = 1, anim = 0, place = PLACES[0];
+    let waveH = 0.8, caprice = 0, glyphs = [], finger = { x: -9999, y: -9999, down: false };
+    let lines = [], reformAt = 0, shown = false;
 
     function resize() {
-      width = canvas.width = innerWidth;
-      height = canvas.height = innerHeight;
+      width = innerWidth;
+      height = innerHeight;
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       layout();
     }
-    function card(deg) {
-      if (deg == null || Number.isNaN(Number(deg))) return "—";
-      return ["N","NE","E","SE","S","SW","W","NW"][Math.round(deg / 45) % 8];
+    function sky(code) {
+      if (code === 0) return "快晴";
+      if (code <= 3) return "曇り";
+      if (code === 45 || code === 48) return "霧";
+      if (code >= 51 && code <= 67) return "雨";
+      if (code >= 71 && code <= 77) return "雪";
+      if (code >= 80 && code <= 82) return "驟雨";
+      if (code >= 95) return "雷";
+      return "空";
     }
     function layout() {
-      const lines = [
-        `${spot.name}  ${spot.region}`,
-        report,
-        LINES_POEM[Math.floor(anim) % LINES_POEM.length] || LINES_POEM[0],
-        "波はきまぐれに、すべてを壊す"
-      ];
       glyphs = [];
-      const left = width < 720 ? 18 : width * 0.42;
-      const top = Math.max(120, height * 0.22);
+      const left = width < 720 ? 18 : Math.max(18, width * 0.34);
+      const top = Math.max(108, height * 0.2);
+      ctx.font = "17px 'Shippori Mincho', serif";
       lines.forEach((line, li) => {
-        for (let i = 0; i < line.length; i++) {
-          if (line[i] === " ") continue;
-          glyphs.push({ ch: line[i], x: left + i * (width < 720 ? 13 : 14), y: top + li * 34, vx: 0, vy: 0, rot: 0, vr: 0, dead: false, a: 1, gold: li === 0 || li === 3 });
+        let x = left;
+        for (const ch of line) {
+          if (ch === " ") { x += 12; continue; }
+          glyphs.push({
+            ch, x, y: top + li * 36,
+            vx: 0, vy: 0, rot: 0, vr: 0, dead: false, a: 1,
+            gold: li === 0 || li === lines.length - 1
+          });
+          x += ctx.measureText(ch).width + 1.2;
         }
       });
     }
     function waveY(x) {
-      const base = height * 0.58 - caprice * height * 0.22;
-      const amp = waveH * 16 + caprice * height * 0.12;
-      const speed = 2.2 / Math.max(waveP, 4);
-      const w1 = Math.sin(x * 0.0042 + anim * speed);
+      const base = height * 0.62 - caprice * height * 0.24;
+      const amp = 18 + waveH * 28 + caprice * height * 0.1;
+      const w1 = Math.sin(x * 0.0042 + anim * 0.35);
       const steep = Math.pow(Math.max(0, (w1 + 1) / 2), 1.8);
-      return base - steep * amp - Math.cos(x * 0.009 - anim * speed) * amp * 0.25;
+      return base - steep * amp - Math.cos(x * 0.009 - anim * 0.28) * amp * 0.25;
     }
     async function load(next) {
-      spot = next;
-      document.querySelectorAll(".spot").forEach(el => el.classList.toggle("active", el.dataset.id === spot.id));
-      document.getElementById("note").textContent = `${spot.name}の数字を、波が読む前に`;
-      const marine = `https://marine-api.open-meteo.com/v1/marine?latitude=${spot.lat}&longitude=${spot.lon}&current=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period&timezone=auto`;
-      const weather = `https://api.open-meteo.com/v1/forecast?latitude=${spot.lat}&longitude=${spot.lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&timezone=auto`;
+      place = next;
+      document.querySelectorAll(".spot").forEach((el) => el.classList.toggle("active", el.dataset.id === place.id));
+      document.getElementById("note").textContent = `${place.name}の数字を、水が読む前に`;
+      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${place.lat}&longitude=${place.lon}&current=temperature_2m,precipitation,rain,weather_code,wind_speed_10m&timezone=Asia%2FTokyo`;
+      const floodUrl = `https://flood-api.open-meteo.com/v1/flood?latitude=${place.lat}&longitude=${place.lon}&daily=river_discharge&forecast_days=1&timezone=Asia%2FTokyo`;
       try {
-        const [mRes, wRes] = await Promise.all([fetch(marine), fetch(weather)]);
-        const m = (await mRes.json()).current;
-        const w = (await wRes.json()).current;
-        if (!m || !w) throw new Error("empty");
-        waveH = m.wave_height || 1.2;
-        waveP = m.wave_period || 8;
-        const kt = (w.wind_speed_10m / 1.852).toFixed(0);
-        report = `波高 ${Number(m.wave_height).toFixed(2)}m ${card(m.wave_direction)}  周期 ${Number(m.wave_period).toFixed(1)}s  風 ${kt}kt`;
+        const jobs = [fetch(weatherUrl).then((res) => res.json())];
+        if (place.kind === "川") jobs.push(fetch(floodUrl).then((res) => res.json()));
+        const [weather, flood] = await Promise.all(jobs);
+        const current = weather.current;
+        if (!current) throw new Error("empty");
+        const discharge = flood && flood.daily && flood.daily.river_discharge ? flood.daily.river_discharge[0] : null;
+        const rain = Number(current.precipitation) || 0;
+        const wind = Number(current.wind_speed_10m) || 0;
+        waveH = place.kind === "川" && discharge != null
+          ? Math.min(2.8, 0.35 + Number(discharge) / 28)
+          : Math.min(2.2, 0.4 + rain * 1.1 + wind / 36);
+        lines = [
+          `${place.name}  ${place.area}`,
+          `${sky(current.weather_code)}  気温 ${Number(current.temperature_2m).toFixed(1)}°C`,
+          `降水 ${rain.toFixed(1)}mm  風 ${Math.round(wind)}km/h`,
+          place.kind === "川" && discharge != null ? `流量 ${Number(discharge).toFixed(2)} m³/s` : `標高 ${Math.round(weather.elevation)}m`,
+          CLAIMS[Math.floor(anim) % CLAIMS.length],
+          "水は、翻訳を残さない"
+        ];
         layout();
-      } catch {
-        report = "数字は届かない。波だけが来る";
+      } catch (err) {
+        lines = [`${place.name}  ${place.area}`, "数字は届かない。水だけが来る", "水は、翻訳を残さない"];
+        waveH = 0.9;
         layout();
       }
     }
-    function drawSea() {
+    function drawWater() {
       ctx.beginPath();
       ctx.moveTo(0, height);
       for (let x = 0; x <= width; x += 8) ctx.lineTo(x, waveY(x));
       ctx.lineTo(width, height);
       ctx.closePath();
-      ctx.fillStyle = caprice > 0.6 ? "rgba(8, 18, 32, 0.94)" : "rgba(6, 12, 20, 0.9)";
+      ctx.fillStyle = caprice > 0.6 ? "rgba(10, 22, 34, 0.94)" : "rgba(6, 14, 24, 0.9)";
       ctx.fill();
-      ctx.strokeStyle = caprice > 0.8 ? "rgba(255, 244, 230, 0.95)" : "rgba(220, 236, 248, 0.8)";
+      ctx.strokeStyle = caprice > 0.8 ? "rgba(255, 236, 204, 0.95)" : "rgba(214, 228, 238, 0.82)";
       ctx.lineWidth = 2 + caprice * 2;
       ctx.stroke();
     }
     function loop() {
       requestAnimationFrame(loop);
       anim += 0.02;
-      if (Math.random() < 0.004) caprice = Math.max(caprice, 0.8 + Math.random() * 1.6);
+      if (!shown && anim > 2.4) {
+        shown = true;
+        caprice = Math.max(caprice, 1.15);
+      }
+      if (Math.random() < 0.004) caprice = Math.max(caprice, 0.85 + Math.random() * 1.5);
       caprice *= 0.992;
       ctx.clearRect(0, 0, width, height);
       let alive = 0;
-      glyphs.forEach(g => {
-        const y = waveY(g.x);
-        const hit = g.y > y - 8 || (caprice > 0.85 && g.y > height * 0.18) || (finger.down && Math.hypot(g.x - finger.x, g.y - finger.y) < 46);
+      glyphs.forEach((g) => {
+        const hit = g.y > waveY(g.x) - 8 || (caprice > 0.85 && g.y > height * 0.16) || (finger.down && Math.hypot(g.x - finger.x, g.y - finger.y) < 46);
         if (!g.dead && hit) {
           g.dead = true;
           g.vx = (Math.random() - 0.5) * (2 + caprice * 4);
@@ -148,41 +173,56 @@
           g.vr = (Math.random() - 0.5) * 0.12;
         }
         if (g.dead) {
-          g.vy += 0.04; g.vx *= 0.98; g.x += g.vx; g.y += g.vy; g.rot += g.vr; g.a -= 0.004 + caprice * 0.004;
+          g.vy += 0.04;
+          g.vx *= 0.98;
+          g.x += g.vx;
+          g.y += g.vy;
+          g.rot += g.vr;
+          g.a -= 0.004 + caprice * 0.004;
         } else alive++;
         if (g.a > 0.03) {
           ctx.save();
-          ctx.translate(g.x, g.y); ctx.rotate(g.rot); ctx.globalAlpha = Math.max(0, g.a);
+          ctx.translate(g.x, g.y);
+          ctx.rotate(g.rot);
+          ctx.globalAlpha = Math.max(0, g.a);
           ctx.fillStyle = g.gold ? "#dfb15b" : "#e7eef6";
-          ctx.font = "16px 'Shippori Mincho', serif";
+          ctx.font = "17px 'Shippori Mincho', serif";
           ctx.fillText(g.ch, 0, 0);
           ctx.restore();
         }
       });
-      drawSea();
+      drawWater();
       if (glyphs.length && alive === 0 && performance.now() > reformAt) {
-        document.getElementById("note").textContent = "何も残らない。また書かれる。";
-        reformAt = performance.now() + 1600;
-        setTimeout(layout, 1500);
+        document.getElementById("note").textContent = "何も残らない。県は、また数字を書く。";
+        reformAt = performance.now() + 1700;
+        setTimeout(() => {
+          document.getElementById("note").textContent = `${place.name}の数字を、水がまた書く`;
+          layout();
+        }, 1500);
       }
     }
     function spots() {
       const box = document.getElementById("spots");
-      SPOTS.forEach(item => {
-        const b = document.createElement("button");
-        b.type = "button"; b.className = "spot" + (item === spot ? " active" : "");
-        b.dataset.id = item.id;
-        b.textContent = `${item.name}  ${item.region}`;
-        b.addEventListener("click", () => load(item));
-        box.appendChild(b);
+      PLACES.forEach((item) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "spot" + (item === place ? " active" : "");
+        button.dataset.id = item.id;
+        button.textContent = `${item.name} ${item.area}`;
+        button.addEventListener("click", () => load(item));
+        box.appendChild(button);
       });
     }
-    canvas.addEventListener("pointerdown", e => { finger.down = true; finger.x = e.clientX; finger.y = e.clientY; });
-    canvas.addEventListener("pointermove", e => { if (finger.down) { finger.x = e.clientX; finger.y = e.clientY; } });
+    canvas.addEventListener("pointerdown", (e) => { finger.down = true; finger.x = e.clientX; finger.y = e.clientY; });
+    canvas.addEventListener("pointermove", (e) => { if (finger.down) { finger.x = e.clientX; finger.y = e.clientY; } });
     addEventListener("pointerup", () => { finger.down = false; finger.x = -9999; });
     addEventListener("resize", resize);
-    spots(); resize(); load(spot); loop();
-    setInterval(() => load(spot), 10 * 60 * 1000);
+    lines = ["河口湖  富士五湖", "数字を読んでいます", "この数字は確かだ", "水は、翻訳を残さない"];
+    spots();
+    resize();
+    load(place);
+    loop();
+    setInterval(() => load(place), 10 * 60 * 1000);
   </script>
 </body>
 </html>
