@@ -45,6 +45,8 @@ export const ROUTES = {
   adminCustomers: "/admin/customers",
   /** 売上・原価・利益率 */
   adminSales: "/admin/sales",
+  /** 予約の検索と来店完了・キャンセル */
+  adminReservationLedger: "/admin/reservations",
   /** 管理者による代理予約（入力） */
   adminNewReservation: "/admin/reservations/new",
   /** 代理予約の確認・確定 */
