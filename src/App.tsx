@@ -25,6 +25,7 @@ import {
 } from "@/features/auth/pages"
 import { AdminCalendarPage } from "@/features/admin/pages/AdminCalendarPage"
 import { AdminCancelledListPage } from "@/features/admin/pages/AdminCancelledListPage"
+import { AdminReservationLedgerPage } from "@/features/admin/pages/AdminReservationLedgerPage"
 import { AdminDashboardPage } from "@/features/admin/pages/AdminDashboardPage"
 import { AdminNewReservationConfirmPage } from "@/features/admin/pages/AdminNewReservationConfirmPage"
 import { AdminNewReservationPage } from "@/features/admin/pages/AdminNewReservationPage"
@@ -216,6 +217,7 @@ function App() {
             element={<BackofficeSetupBookingRulesPage />}
           />
           <Route path={ROUTES.adminCancelled} element={<AdminCancelledListPage />} />
+          <Route path={ROUTES.adminReservationLedger} element={<AdminReservationLedgerPage />} />
           <Route
             path={ROUTES.adminStaff}
             element={

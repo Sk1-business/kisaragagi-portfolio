@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { CalendarRange, CalendarX2, ChartColumn, ContactRound, CreditCard, Scissors, Store, Users } from "lucide-react"
+import { CalendarRange, CalendarX2, ChartColumn, ClipboardList, ContactRound, CreditCard, Scissors, Store, Users } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,6 +37,14 @@ const hubItems = [
     description: "全スタッフのシフト確認・編集",
     to: ROUTES.adminShiftCalendar,
     icon: CalendarRange,
+    disabled: false,
+  },
+  {
+    key: "ledger",
+    title: "予約台帳",
+    description: "予約を検索し、来店完了・無断・キャンセルにする",
+    to: ROUTES.adminReservationLedger,
+    icon: ClipboardList,
     disabled: false,
   },
   {

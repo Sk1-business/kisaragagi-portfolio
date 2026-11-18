@@ -565,6 +565,9 @@ export async function handleDemoRequest(pathWithQuery: string, init?: RequestIni
       if (typeof body.name === "string") menu.name = body.name
       if (typeof body.duration_minutes === "number") menu.duration_minutes = body.duration_minutes
       if (typeof body.price === "number") menu.price = body.price
+      if (typeof body.cost_yen === "number" && Number.isFinite(body.cost_yen)) {
+        menu.cost_yen = Math.max(0, Math.round(body.cost_yen))
+      }
       if (typeof body.is_public === "boolean") menu.is_public = body.is_public
       if (typeof body.is_archived === "boolean") menu.is_archived = body.is_archived
     })
@@ -755,6 +758,7 @@ export async function handleDemoRequest(pathWithQuery: string, init?: RequestIni
       if (!reservation) return
       reservation.status = status
       reservation.can_cancel = status === "BOOKED"
+      if (status === "DONE" && reservation.payment_status !== "paid") reservation.payment_status = "paid"
     })
     return empty()
   }

@@ -906,8 +906,13 @@ export type SalesSummary = {
   profit_yen: number
   margin_rate: number
   prepaid_yen: number
+  canceled_yen: number
+  canceled_count: number
+  noshow_count: number
   by_menu: SalesLine[]
   by_payment: { method: string; label: string; revenue_yen: number }[]
+  by_day: { date: string; count: number; revenue_yen: number }[]
+  by_trainer: { name: string; count: number; revenue_yen: number; profit_yen: number }[]
 }
 
 function menuCost(menu: DemoMenu | undefined, price: number): number {
@@ -927,6 +932,8 @@ export function salesSummary(state: DemoState, month: string): SalesSummary {
   )
   const byMenu = new Map<string, SalesLine>()
   const byPayment = new Map<string, { method: string; label: string; revenue_yen: number }>()
+  const byDay = new Map<string, { date: string; count: number; revenue_yen: number }>()
+  const byTrainer = new Map<string, { name: string; count: number; revenue_yen: number; profit_yen: number }>()
   let revenue = 0
   let cost = 0
   for (const item of done) {
@@ -953,7 +960,26 @@ export function salesSummary(state: DemoState, month: string): SalesSummary {
     const pay = byPayment.get(method) ?? { method, label: paymentLabel(method), revenue_yen: 0 }
     pay.revenue_yen += price
     byPayment.set(method, pay)
+    const dayKey = item.start_at.slice(0, 10)
+    const day = byDay.get(dayKey) ?? { date: dayKey, count: 0, revenue_yen: 0 }
+    day.count += 1
+    day.revenue_yen += price
+    byDay.set(dayKey, day)
+    const trainerName = item.trainer_name || "指名なし"
+    const trainer = byTrainer.get(trainerName) ?? {
+      name: trainerName,
+      count: 0,
+      revenue_yen: 0,
+      profit_yen: 0,
+    }
+    trainer.count += 1
+    trainer.revenue_yen += price
+    trainer.profit_yen += price - itemCost
+    byTrainer.set(trainerName, trainer)
   }
+  const canceled = state.reservations.filter(
+    (item) => item.status === "CANCELED" && item.start_at.startsWith(month),
+  )
   const prepaid = state.reservations
     .filter(
       (item) =>
@@ -970,8 +996,15 @@ export function salesSummary(state: DemoState, month: string): SalesSummary {
     profit_yen: profit,
     margin_rate: revenue > 0 ? profit / revenue : 0,
     prepaid_yen: prepaid,
+    canceled_yen: canceled.reduce((sum, item) => sum + (item.payment_amount_yen ?? 0), 0),
+    canceled_count: canceled.length,
+    noshow_count: state.reservations.filter(
+      (item) => item.status === "NOSHOW" && item.start_at.startsWith(month),
+    ).length,
     by_menu: [...byMenu.values()],
     by_payment: [...byPayment.values()],
+    by_day: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    by_trainer: [...byTrainer.values()].sort((a, b) => b.revenue_yen - a.revenue_yen),
   }
 }
 

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom"
-import { CalendarDays, CalendarRange, ContactRound, UserPlus } from "lucide-react"
+import { CalendarDays, CalendarRange, ClipboardList, ContactRound, UserPlus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,6 +21,14 @@ const hubItems = [
     to: ROUTES.adminNewReservation,
     icon: UserPlus,
     action: "new-reservation" as const,
+  },
+  {
+    key: "ledger",
+    title: "予約台帳",
+    description: "来店予定を来店完了、無断、キャンセルに更新します",
+    to: ROUTES.adminReservationLedger,
+    icon: ClipboardList,
+    action: "link" as const,
   },
   {
     key: "customers",

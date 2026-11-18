@@ -253,6 +253,23 @@ export function AdminCustomersPage() {
         </p>
       </div>
 
+      <div className="grid gap-2 sm:grid-cols-4">
+        {[
+          { label: "顧客", value: `${records.length}人` },
+          { label: "カルテ未入力", value: `${records.filter((record) => !record.chart.updatedAt).length}人` },
+          { label: "予約不可", value: `${records.filter((record) => record.blocked).length}人` },
+          {
+            label: "次の来店予定",
+            value: `${records.filter((record) => record.reservations.some((reservation) => reservation.status === "CONFIRMED" && reservation.startAt >= new Date().toISOString())).length}人`,
+          },
+        ].map((item) => (
+          <section key={item.label} className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className="text-xs text-muted-foreground">{item.label}</p>
+            <p className="text-lg font-semibold">{item.value}</p>
+          </section>
+        ))}
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <section className="space-y-3 rounded-lg border border-border bg-card p-4">
           <Input
@@ -341,6 +358,18 @@ export function AdminCustomersPage() {
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs">来店 {draft.visitCount}回</span>
               )}
             </div>
+            {(() => {
+              const nextVisit = [...draft.reservations]
+                .filter((reservation) => reservation.status === "CONFIRMED")
+                .sort((a, b) => a.startAt.localeCompare(b.startAt))
+                .find((reservation) => reservation.startAt >= new Date().toISOString())
+              if (!nextVisit) return null
+              return (
+                <p className="text-sm text-muted-foreground">
+                  次の来店は {nextVisit.startAt.slice(0, 10).replaceAll("-", "/")} {nextVisit.startAt.slice(11, 16)} {nextVisit.menuName}
+                </p>
+              )
+            })()}
             {draft.recommendedMenu ? (
               <p className="rounded-md bg-muted px-3 py-2 text-sm">
                 次回候補: {draft.recommendedMenu}（これまでの予約で多いメニュー）
