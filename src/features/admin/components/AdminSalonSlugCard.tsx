@@ -5,6 +5,7 @@ import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { fetchAdminSalonProfile } from "@/features/admin/api/adminSalonProfileApi"
+import { customerPublicUrl } from "@/demo/appSurface"
 
 export function AdminSalonSlugCard() {
   const [savedSlug, setSavedSlug] = useState("")
@@ -32,8 +33,8 @@ export function AdminSalonSlugCard() {
   }, [])
 
   const publicPath = savedSlug ? `/s/${savedSlug}` : ""
-  const publicUrl =
-    typeof window !== "undefined" && publicPath ? `${window.location.origin}${publicPath}` : publicPath
+  const publicUrl = publicPath ? customerPublicUrl(publicPath) : ""
+  const external = publicUrl.startsWith("http") && typeof window !== "undefined" && !publicUrl.startsWith(window.location.origin)
 
   return (
     <Card className="rounded-lg border-border shadow-xs">
@@ -48,10 +49,17 @@ export function AdminSalonSlugCard() {
           <div className="flex flex-col gap-2 rounded-md border bg-muted/40 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <span className="break-all text-muted-foreground">{publicUrl}</span>
             <Button asChild variant="outline" size="sm" className="shrink-0">
-              <Link to={publicPath} target="_blank" rel="noreferrer">
-                <ExternalLink className="size-4" />
-                開く
-              </Link>
+              {external ? (
+                <a href={publicUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-4" />
+                  開く
+                </a>
+              ) : (
+                <Link to={publicPath} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-4" />
+                  開く
+                </Link>
+              )}
             </Button>
           </div>
         ) : null}

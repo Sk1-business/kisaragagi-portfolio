@@ -107,7 +107,7 @@ export function BackofficeSignupVerifySentPage() {
                   sessionStorage.getItem(DEMO_SIGNUP_TOKEN_KEY) ?? "",
                 )}`}
               >
-                デモではこちらで認証を完了
+                この端末で認証を完了
               </Link>
             </Button>
           </div>

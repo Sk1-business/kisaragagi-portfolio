@@ -280,9 +280,9 @@ export function BackofficeInitialSetupPage() {
       // 認証メールリンクの記録は役目を終えたので破棄
       clearSignupVerification()
 
-      navigate(ROUTES.backofficeSetupBusinessHours, {
+      navigate(ROUTES.adminHome, {
         replace: true,
-        state: { fromInitialSetup: true, email: draft.email },
+        state: { salonReady: true, email: draft.email },
       })
     } finally {
       setSaving(false)
@@ -324,7 +324,7 @@ export function BackofficeInitialSetupPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">初期設定</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          サロン情報とログイン用パスワードを入力してください。
+          サロン情報とログイン用パスワードを入力してください。保存すると、予約ページと管理画面がすぐ開きます。
         </p>
         <p className="mt-1 text-sm font-medium text-foreground">
           <span className="text-destructive">※</span>

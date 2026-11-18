@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
@@ -18,6 +18,8 @@ import { useAdminProfile } from "@/features/auth/context/AdminProfileContext"
 
 export function AdminDashboardPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const salonReady = Boolean((location.state as { salonReady?: boolean } | null)?.salonReady)
   const profile = useAdminProfile()
   const { staffList, loading: staffLoading } = useStaff()
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -98,6 +100,11 @@ export function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
+      {salonReady ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+          登録が完了し、予約ページはいまから開けます。営業時間は月-土 10:00-19:00、日曜定休で入っています。下の予約URLをお客様に共有できます。
+        </div>
+      ) : null}
       {isOwner ? <AdminOwnerFeatureHub /> : <AdminStaffFeatureHub />}
       <TodayReservationsCard
         reservations={todayReservations}

@@ -22,6 +22,7 @@ import {
   type CustomerKind,
   type CustomerRecord,
 } from "@/features/admin/lib/customerDirectory"
+import { prepareKarteImage, recognizeKarteImage } from "@/features/admin/lib/karteOcr"
 import { recommendStyle } from "@/features/admin/lib/styleRecommendation"
 import { useStaff } from "@/features/admin/hooks/useStaff"
 
@@ -61,6 +62,7 @@ export function AdminCustomersPage() {
   const [saveMessage, setSaveMessage] = useState("")
   const [importMessage, setImportMessage] = useState("")
   const [karteText, setKarteText] = useState("")
+  const [readingPhoto, setReadingPhoto] = useState(false)
 
   async function reload() {
     setLoading(true)
@@ -134,7 +136,7 @@ export function AdminCustomersPage() {
     void reload()
   }
 
-  function applyParsedKarte(text: string, photo?: { name: string; data: string }) {
+  function applyParsedKarte(text: string, photo?: { name: string; data: string }, message?: string) {
     const parsed = parseKarteText(text)
     if (!parsed?.key || !parsed.chart) {
       setImportMessage("氏名か電話番号のあるカルテとして読み取れませんでした。")
@@ -157,43 +159,58 @@ export function AdminCustomersPage() {
       chart,
     })
     setSelectedKey(parsed.key)
-    setImportMessage(photo ? "写真付きカルテを項目に反映しました。" : "カルテの項目を反映しました。")
+    setImportMessage(message ?? (photo ? "写真付きカルテを項目に反映しました。" : "カルテの項目を反映しました。"))
     void reload()
   }
 
-  function handlePhoto(file: File) {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const data = file.size <= 120_000 ? String(reader.result ?? "") : ""
-      if (!draft) {
-        setImportMessage("先に顧客を選んでから写真を添付してください。")
+  async function handlePhoto(file: File) {
+    setReadingPhoto(true)
+    setImportMessage("カルテ写真の文字を読み取っています。")
+    try {
+      const prepared = await prepareKarteImage(file)
+      const text = await recognizeKarteImage(prepared.ocrBlob)
+      setKarteText(text)
+      const parsed = parseKarteText(text)
+      if (parsed?.key && parsed.chart) {
+        applyParsedKarte(text, { name: file.name, data: prepared.previewUrl }, "写真から文字を読み取り、項目に反映しました。内容を確認して保存してください。")
         return
       }
-      const chart = normalizeChart({
-        ...draft.chart,
-        photoName: file.name,
-        photoData: data,
-        updatedAt: new Date().toISOString(),
-      })
-      saveCustomerProfile({
-        key: draft.key,
-        name: draft.name,
-        furigana: draft.furigana,
-        email: draft.email,
-        phone: draft.phone,
-        birthday: draft.birthday,
-        gender: draft.gender,
-        kind: draft.kind,
-        chart,
-      })
+      if (draft) {
+        saveCustomerProfile({
+          key: draft.key,
+          name: draft.name,
+          furigana: draft.furigana,
+          email: draft.email,
+          phone: draft.phone,
+          birthday: draft.birthday,
+          gender: draft.gender,
+          kind: draft.kind,
+          chart: normalizeChart({
+            ...draft.chart,
+            photoName: file.name,
+            photoData: prepared.previewUrl,
+            notes: [draft.chart.notes, text].filter(Boolean).join("\n"),
+            updatedAt: new Date().toISOString(),
+          }),
+        })
+        setImportMessage(
+          text
+            ? "氏名か電話番号を読み取れなかったので、文字をメモに残しました。確認して保存してください。"
+            : "文字を読み取れませんでした。写真は添付してあります。",
+        )
+        void reload()
+        return
+      }
       setImportMessage(
-        data
-          ? "カルテ写真を添付しました。書き写した内容は下のテキストから項目にできます。"
-          : "写真が大きいためファイル名だけ残しました。項目はテキストから反映できます。",
+        text
+          ? "文字は読み取りました。氏名と電話を確認してから項目に反映してください。"
+          : "文字を読み取れませんでした。",
       )
-      void reload()
+    } catch {
+      setImportMessage("写真の読み取りに失敗しました。テキストから項目を入れられます。")
+    } finally {
+      setReadingPhoto(false)
     }
-    reader.readAsDataURL(file)
   }
 
   function handleImport(file: File) {
@@ -232,7 +249,7 @@ export function AdminCustomersPage() {
       <div>
         <h1 className="text-lg font-semibold tracking-tight">顧客マスタ</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          来店履歴とカルテから、好みとおすすめの切り方を確認します。デジタルのテキストも、写真付きの手書きカルテも取り込めます。
+          来店履歴とカルテから、好みとおすすめの切り方を確認します。テキストも、写真の文字読み取りも取り込めます。
         </p>
       </div>
 
@@ -408,7 +425,7 @@ export function AdminCustomersPage() {
             <div className="space-y-3 rounded-md border border-border p-3">
               <h3 className="text-sm font-semibold">カルテの取り込み</h3>
               <p className="text-xs text-muted-foreground">
-                デジタルは項目つきのテキストを自動で分けます。アナログは写真を添付し、書き写した内容を同じ形式で反映します。
+                デジタルは項目つきのテキストを分けます。写真は文字を読み取り、項目に入れたうえで確認して保存します。
               </p>
               <textarea
                 value={karteText}
@@ -432,14 +449,16 @@ export function AdminCustomersPage() {
                   手書きカルテのサンプルを反映
                 </Button>
                 <label className="inline-flex cursor-pointer items-center rounded-md border border-input px-3 py-1.5 text-sm">
-                  カルテ写真を添付
+                  {readingPhoto ? "読み取り中..." : "写真から文字を読み取る"}
                   <input
                     type="file"
                     accept="image/*"
+                    capture="environment"
                     className="sr-only"
+                    disabled={readingPhoto}
                     onChange={(event) => {
                       const file = event.target.files?.[0]
-                      if (file) handlePhoto(file)
+                      if (file) void handlePhoto(file)
                       event.target.value = ""
                     }}
                   />

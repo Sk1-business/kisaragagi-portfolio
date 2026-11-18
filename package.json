@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:customer": "vite --mode customer",
+    "dev:admin": "vite --mode admin",
     "build": "tsc -b && vite build",
+    "build:customer": "tsc -b && vite build --mode customer",
+    "build:admin": "tsc -b && vite build --mode admin",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -21,7 +25,8 @@
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.17.0",
     "tailwind-merge": "^3.5.0",
-    "tailwindcss": "^4.3.1"
+    "tailwindcss": "^4.3.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,9 +1,10 @@
 import { Scissors, ShieldCheck, UserRound } from "lucide-react"
-import { useState } from "react"
-import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom"
+import { useState, type ReactNode } from "react"
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from "react-router-dom"
 
 import { DEMO_CUSTOMER, DEMO_OWNER, DEMO_SALON_SLUG } from "@/demo/demoAccounts"
-import { isDemoMode, routerBasename } from "@/demo/demoMode"
+import { appSurface, showDemoHints } from "@/demo/appSurface"
+import { routerBasename } from "@/demo/demoMode"
 import { isValidSalonSlug } from "@/features/auth/lib/salonSlug"
 
 import { Button } from "@/components/ui/button"
@@ -55,7 +56,8 @@ function LandingPage() {
   const [slug, setSlug] = useState(DEMO_SALON_SLUG)
   const salonSlug = slug.trim().toLowerCase()
   const slugReady = salonSlug.length >= 3 && isValidSalonSlug(salonSlug)
-  const demo = isDemoMode()
+  const demo = showDemoHints()
+  const surface = appSurface()
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col justify-center px-4 py-12 sm:px-6">
@@ -65,10 +67,12 @@ function LandingPage() {
         </div>
         <div>
           <p className="text-sm text-muted-foreground">美容室の予約</p>
-          <h1 className="text-2xl font-semibold tracking-tight">どちらで入りますか</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {surface === "customer" ? "予約する" : "どちらで入りますか"}
+          </h1>
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={surface === "customer" ? "grid gap-4" : "grid gap-4 md:grid-cols-2"}>
         <Card className="rounded-lg shadow-xs">
           <CardHeader>
             <p className="text-xs font-medium tracking-wide text-muted-foreground">お客様</p>
@@ -110,6 +114,7 @@ function LandingPage() {
             ) : null}
           </CardContent>
         </Card>
+        {surface === "customer" ? null : (
         <Card className="rounded-lg shadow-xs">
           <CardHeader>
             <p className="text-xs font-medium tracking-wide text-muted-foreground">スタッフ・経営者</p>
@@ -135,14 +140,32 @@ function LandingPage() {
             ) : null}
           </CardContent>
         </Card>
+        )}
       </div>
     </main>
   )
 }
 
+function SurfaceGate({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const surface = appSurface()
+  const path = location.pathname
+  if (surface === "admin" && path === "/") {
+    return <Navigate to={ROUTES.backofficeLogin} replace />
+  }
+  if (
+    surface === "customer" &&
+    (path.startsWith("/admin") || path.startsWith("/backoffice"))
+  ) {
+    return <Navigate to={ROUTES.landing} replace />
+  }
+  return children
+}
+
 function App() {
   return (
     <BrowserRouter basename={routerBasename()}>
+      <SurfaceGate>
       <Routes>
         <Route path={ROUTES.landing} element={<LandingPage />} />
 
@@ -256,6 +279,7 @@ function App() {
 
         <Route path="*" element={<Navigate to={ROUTES.landing} replace />} />
       </Routes>
+      </SurfaceGate>
     </BrowserRouter>
   )
 }

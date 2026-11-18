@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { ROUTES } from "@/constants/routes"
+import { DEMO_SALON_SESSION_KEY } from "@/demo/demoAccounts"
+import { customerPublicUrl } from "@/demo/appSurface"
 import {
   isAdminSalonSettingsFlow,
   resolveAdminSalonReturnTo,
@@ -58,9 +60,7 @@ export function BackofficeSetupDonePage() {
           初期設定が完了しました
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          サロン情報・営業日/時間・予約ルールの登録が完了しました。
-          <br />
-          ログインして管理画面をご利用ください。
+          サロン情報・営業日/時間・予約ルールの登録が完了しました。予約ページは開けます。
         </p>
         {email ? (
           <p className="mt-4 text-xs text-emerald-700">
@@ -68,9 +68,18 @@ export function BackofficeSetupDonePage() {
           </p>
         ) : null}
 
-        <div className="mt-6">
-          <Button asChild type="button" className="w-full sm:w-auto">
-            <Link to={ROUTES.backofficeLogin}>ログイン画面へ</Link>
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Button asChild type="button">
+            <Link to={ROUTES.adminHome}>管理画面を開く</Link>
+          </Button>
+          <Button asChild type="button" variant="outline">
+            <a
+              href={customerPublicUrl(
+                `/s/${sessionStorage.getItem(DEMO_SALON_SESSION_KEY) || "sample-salon-2026"}`,
+              )}
+            >
+              予約ページを開く
+            </a>
           </Button>
         </div>
       </div>

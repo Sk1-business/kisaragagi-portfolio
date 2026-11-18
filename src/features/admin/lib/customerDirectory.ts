@@ -158,14 +158,14 @@ export function ensureShowcaseCharts(): void {
 
 export function parseKarteText(text: string): Partial<CustomerProfile> | null {
   const value = (labels: string[]) => {
-    const match = text.match(new RegExp(`(?:${labels.join("|")})\\s*[:：]\\s*(.+)`))
+    const match = text.match(new RegExp(`(?:${labels.join("|")})\\s*[:：]?\\s*([^\\n]+)`))
     return match?.[1]?.trim() ?? ""
   }
-  const name = value(["氏名", "名前", "お名前"])
-  const phone = value(["電話", "電話番号"]).replace(/[^\d]/g, "")
-  const email = value(["メール", "メールアドレス"])
+  const name = value(["氏名", "お名前", "名前"])
+  const phone = value(["電話番号", "電話"]).replace(/[^\d]/g, "")
+  const email = value(["メールアドレス", "メール"])
   if (!name && !phone && !email) return null
-  const key = customerKey(phone, email)
+  const key = customerKey(phone, email) || (name ? `n:${name}` : "")
   return {
     key,
     name,

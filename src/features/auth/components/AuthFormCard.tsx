@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ROUTES } from "@/constants/routes"
 import { DEMO_CUSTOMER, DEMO_OWNER } from "@/demo/demoAccounts"
+import { showDemoHints } from "@/demo/appSurface"
 import { isDemoMode } from "@/demo/demoMode"
 import { postAdminLogout } from "@/features/auth/api/adminLoginApi"
 import {
@@ -717,7 +718,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
               </Link>
             </div>
 
-            {isDemoMode() ? (
+            {showDemoHints() ? (
               <div className="mt-6 rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-3">
                 <p className="text-sm font-semibold text-neutral-800">デモアカウント</p>
                 <div className="mt-2 space-y-2 text-xs text-neutral-600">
@@ -726,7 +727,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                   <p>予約照会の確認コードは 000000 です。</p>
                 </div>
               </div>
-            ) : isDev ? (
+            ) : isDev && !isDemoMode() ? (
               <div className="mt-6 rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-3">
                 <p className="text-sm font-semibold text-neutral-800">開発用テストアカウント</p>
                 <div className="mt-2 space-y-2">
