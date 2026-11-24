@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#04070d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -153,8 +153,8 @@
   <form id="word-dock">
     <div class="chips" id="chips"></div>
     <div class="composer">
-      <input id="word" maxlength="24" enterkeyhint="send" autocomplete="off" placeholder="うれしい言葉を置く">
-      <button class="glass-btn" type="submit">灯す</button>
+      <input id="word" maxlength="24" enterkeyhint="send" autocomplete="off" placeholder="やさしい言葉を、そっと">
+      <button class="glass-btn" type="submit">置く</button>
     </div>
   </form>
 
@@ -187,7 +187,6 @@
       "LOADING", "UPDATE", "99+ MESSAGES", "FEED", "NOISE",
       "SYSTEM", "DATA", "ALERT", "VIRAL", "STREAM"
     ];
-    const JOY = ["嬉しい", "ありがとう", "大好き", "きらきら", "笑顔", "あったかい", "光", "幸せ", "輝く", "♡"];
     const STORE = "kotodama-words-v1";
 
     const state = {
@@ -304,23 +303,22 @@
       osc.stop(now + 0.045);
     }
 
-    function playJoy() {
+    function playSoft() {
       if (!audioCtx || !state.soundEnabled) return;
       if (audioCtx.state === "suspended") audioCtx.resume();
-      [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
-        const t = audioCtx.currentTime + i * 0.05;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.0001, t);
-        gain.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(t);
-        osc.stop(t + 0.4);
-      });
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(392, t);
+      osc.frequency.exponentialRampToValueAtTime(494, t + 1.4);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.018, t + 0.45);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 1.85);
     }
 
     async function setupMicrophone() {
@@ -502,7 +500,7 @@
         button.textContent = text;
         button.addEventListener("click", (event) => {
           event.stopPropagation();
-          burstJoy(text);
+          openWord(text);
         });
         box.appendChild(button);
       });
@@ -517,28 +515,20 @@
       });
       if (keptWords.length > 12) keptWords.shift();
     }
-    function burstJoy(text) {
-      state.warmth = Math.min(1, state.warmth + 0.45);
-      state.breathIntensity = Math.max(state.breathIntensity, 1.2);
+    function openWord(text) {
+      state.warmth = Math.min(1, state.warmth + 0.14);
+      state.breathIntensity = Math.max(state.breathIntensity, 0.28);
       state.lastInteractionTime = performance.now();
-      const count = state.width < 760 ? 24 : 36;
-      for (let i = 0; i < count; i++) {
-        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.2;
-        const speed = 3.2 + Math.random() * 6.5;
-        const spread = 36 + Math.random() * 70;
-        joyBursts.push({
-          text: i % 3 === 0 ? text : JOY[i % JOY.length],
-          x: state.width * 0.5 + Math.cos(angle) * spread,
-          y: state.height * 0.52 + Math.sin(angle) * spread * 0.72,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 2.4,
-          life: 1,
-          size: i % 3 === 0 ? 22 : 15
-        });
-      }
-      spawnEmbersFromText(state.width * 0.5, state.height * 0.58, 18);
-      while (joyBursts.length > 180) joyBursts.shift();
-      playJoy();
+      joyBursts.push({
+        text,
+        x: state.width * 0.5 + (Math.random() - 0.5) * 28,
+        y: state.height * 0.64,
+        vy: -0.28,
+        life: 1
+      });
+      if (joyBursts.length > 6) joyBursts.shift();
+      spawnEmbersFromText(state.width * 0.5, state.height * 0.66, 6);
+      playSoft();
     }
     function offerWord(raw) {
       const text = String(raw || "").trim().slice(0, 24);
@@ -549,7 +539,7 @@
       rememberWord(text);
       wordInput.value = "";
       wordInput.blur();
-      burstJoy(text);
+      openWord(text);
     }
 
     let timeTick = 0;
@@ -609,23 +599,30 @@
 
     function drawJoyBursts() {
       ctx.save();
-      ctx.globalCompositeOperation = "lighter";
       ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
       for (let i = joyBursts.length - 1; i >= 0; i--) {
-        const shard = joyBursts[i];
-        shard.x += shard.vx;
-        shard.y += shard.vy;
-        shard.vx *= 0.985;
-        shard.vy = shard.vy * 0.985 - 0.03;
-        shard.life -= 0.012;
-        if (shard.life <= 0) {
+        const bloom = joyBursts[i];
+        bloom.y += bloom.vy;
+        bloom.life -= 0.0035;
+        if (bloom.life <= 0) {
           joyBursts.splice(i, 1);
           continue;
         }
-        ctx.globalAlpha = Math.max(0, shard.life);
-        ctx.fillStyle = shard.text.length > 4 ? "#ffe1a8" : "#ffd0a2";
-        ctx.font = `${shard.size}px 'Shippori Mincho', serif`;
-        ctx.fillText(shard.text, shard.x, shard.y);
+        const risen = 1 - bloom.life;
+        const alpha = Math.sin(Math.min(risen, 1) * Math.PI) * 0.72;
+        const glow = ctx.createRadialGradient(bloom.x, bloom.y, 0, bloom.x, bloom.y, 54);
+        glow.addColorStop(0, `rgba(255, 220, 176, ${alpha * 0.42})`);
+        glow.addColorStop(1, "rgba(255, 170, 80, 0)");
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(bloom.x, bloom.y, 54, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "#fff4e4";
+        ctx.font = `${16 + risen * 5}px 'Shippori Mincho', serif`;
+        ctx.fillText(bloom.text, bloom.x, bloom.y);
       }
       ctx.restore();
     }
