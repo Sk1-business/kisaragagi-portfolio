@@ -38,6 +38,7 @@ import { AdminSalonProfilePage } from "@/features/admin/pages/AdminSalonProfileP
 import { AdminSecurityPage } from "@/features/admin/pages/AdminSecurityPage"
 import { AdminCustomersPage } from "@/features/admin/pages/AdminCustomersPage"
 import { AdminSalesPage } from "@/features/admin/pages/AdminSalesPage"
+import { CommerceDraftPage, PrivacyDraftPage } from "@/features/legal/LegalDraftPage"
 import { AdminStaffPage } from "@/features/admin/pages/AdminStaffPage"
 import { UserDashboardPage } from "@/features/user/pages/UserDashboardPage"
 import { UserNominationPage } from "@/features/user/pages/UserNominationPage"
@@ -62,30 +63,35 @@ function LandingPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col justify-center px-4 py-12 sm:px-6">
-      <div className="mb-8 flex items-center gap-3">
-        <div className="rounded-lg border border-border bg-card p-2">
-          <Scissors className="size-5 text-foreground" />
+      <div className="mb-8 flex items-center gap-5">
+        <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Scissors className="size-7" />
         </div>
         <div>
-          <p className="text-sm text-muted-foreground">美容室の予約</p>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <p className="text-xs font-medium tracking-[0.28em] text-primary">SALON BOOKING</p>
+          <h1 className="mt-2 text-4xl font-semibold tracking-tight text-balance">
             {surface === "customer" ? "予約する" : "どちらで入りますか"}
           </h1>
+          <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+            {surface === "customer"
+              ? "サロンIDを入れると、そのお店の予約ページが開きます。"
+              : "お客様はサロンを開いて予約します。お店の人は、自分のサロンの台帳から入ります。"}
+          </p>
         </div>
       </div>
-      <div className={surface === "customer" ? "grid gap-4" : "grid gap-4 md:grid-cols-2"}>
-        <Card className="rounded-lg shadow-xs">
+      <div className={surface === "customer" ? "grid gap-5" : "grid gap-5 md:grid-cols-2"}>
+        <Card className="border-0 shadow-md">
           <CardHeader>
-            <p className="text-xs font-medium tracking-wide text-muted-foreground">お客様</p>
-            <CardTitle className="flex items-center gap-2 text-xl">
+            <div className="mb-2 flex size-12 items-center justify-center rounded-full bg-accent text-accent-foreground">
               <UserRound className="size-5" />
-              予約する
-            </CardTitle>
+            </div>
+            <p className="text-xs font-medium tracking-wide text-primary">お客様</p>
+            <CardTitle className="text-2xl">予約する</CardTitle>
             <CardDescription>
               サロンIDを入れると、そのお店の予約ページが開きます。前払いと当日払いを選べます。
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-3">
             <label className="block space-y-1 text-sm" htmlFor="landing-salon-slug">
               <span className="text-muted-foreground">サロンID</span>
               <Input
@@ -98,10 +104,10 @@ function LandingPage() {
             </label>
             {slugReady ? (
               <>
-                <Button asChild className="w-full rounded-md">
+                <Button asChild className="w-full">
                   <Link to={`/s/${salonSlug}`}>このサロンを開く</Link>
                 </Button>
-                <Button asChild variant="outline" className="w-full rounded-md">
+                <Button asChild variant="outline" className="w-full">
                   <Link to={`/user/reservation/lookup?shopId=${salonSlug}`}>予約の確認</Link>
                 </Button>
               </>
@@ -116,26 +122,26 @@ function LandingPage() {
           </CardContent>
         </Card>
         {surface === "customer" ? null : (
-        <Card className="rounded-lg shadow-xs">
+        <Card className="border-0 bg-primary text-primary-foreground shadow-md">
           <CardHeader>
-            <p className="text-xs font-medium tracking-wide text-muted-foreground">スタッフ・経営者</p>
-            <CardTitle className="flex items-center gap-2 text-xl">
+            <div className="mb-2 flex size-12 items-center justify-center rounded-full bg-primary-foreground/15">
               <ShieldCheck className="size-5" />
-              お店を見る
-            </CardTitle>
-            <CardDescription>
+            </div>
+            <p className="text-xs font-medium tracking-wide text-primary-foreground/70">スタッフ・経営者</p>
+            <CardTitle className="text-2xl text-primary-foreground">お店を見る</CardTitle>
+            <CardDescription className="text-primary-foreground/75">
               ログインすると、そのアカウントのサロンが開きます。新規登録すると、そのサロンの予約ページと管理画面が始まります。
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <Button asChild className="w-full rounded-md">
+          <CardContent className="space-y-3">
+            <Button asChild className="w-full bg-primary-foreground text-primary hover:bg-primary-foreground/90">
               <Link to={ROUTES.backofficeLogin}>管理画面ログインへ</Link>
             </Button>
-            <Button asChild variant="outline" className="w-full rounded-md">
+            <Button asChild variant="outline" className="w-full border-primary-foreground/40 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground">
               <Link to={ROUTES.backofficeSignup}>サロンを新規登録</Link>
             </Button>
             {demo ? (
-              <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
+              <p className="pt-2 text-xs leading-relaxed text-primary-foreground/70">
                 見本のオーナー {DEMO_OWNER.email} / {DEMO_OWNER.password}
               </p>
             ) : null}
@@ -143,6 +149,10 @@ function LandingPage() {
         </Card>
         )}
       </div>
+      <p className="mt-8 flex flex-wrap gap-4 text-xs text-muted-foreground">
+        <Link className="underline" to={ROUTES.privacy}>プライバシーポリシー</Link>
+        <Link className="underline" to={ROUTES.commerce}>特定商取引法に基づく表記</Link>
+      </p>
     </main>
   )
 }
@@ -169,6 +179,8 @@ function App() {
       <SurfaceGate>
       <Routes>
         <Route path={ROUTES.landing} element={<LandingPage />} />
+        <Route path={ROUTES.privacy} element={<PrivacyDraftPage />} />
+        <Route path={ROUTES.commerce} element={<CommerceDraftPage />} />
 
         <Route path={ROUTES.customerLogin} element={<CustomerLoginPage />} />
         <Route path={ROUTES.customerSignup} element={<CustomerSignupPage />} />

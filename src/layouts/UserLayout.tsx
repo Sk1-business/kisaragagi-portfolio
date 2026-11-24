@@ -38,9 +38,9 @@ export function UserLayout() {
   }
 
   return (
-    <main className="min-h-dvh bg-white">
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/80 backdrop-blur-lg">
-        <div className="relative mx-auto grid h-14 max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 sm:px-6">
+    <main className="min-h-dvh">
+      <header className="sticky top-0 z-30 px-3 pt-3">
+        <div className="relative mx-auto grid h-14 max-w-5xl grid-cols-[1fr_auto_1fr] items-center rounded-full border border-border bg-card/90 px-3 shadow-sm backdrop-blur-lg sm:px-5">
           <div className="flex items-center gap-3">
             {!isTopLevel ? (
               <Button
@@ -54,13 +54,13 @@ export function UserLayout() {
                 <ArrowLeft className="size-4" />
               </Button>
             ) : null}
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-slate-900">
-              <Scissors className="size-4 text-white" />
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary">
+              <Scissors className="size-4 text-primary-foreground" />
             </div>
           </div>
           <Link
             to={buildPathWithShopId(ROUTES.userHome, shopId)}
-            className="min-w-0 justify-self-center rounded-md px-2 py-1 text-center transition-colors hover:bg-slate-100"
+            className="min-w-0 justify-self-center rounded-full px-3 py-1 text-center transition-colors hover:bg-accent"
           >
             <span className="block max-w-[52vw] truncate text-sm font-semibold text-foreground sm:max-w-sm">
               {salonName}
@@ -73,6 +73,10 @@ export function UserLayout() {
       </header>
       <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
         <Outlet />
+        <p className="mt-10 flex flex-wrap gap-4 text-xs text-muted-foreground">
+          <Link className="underline" to={ROUTES.privacy}>プライバシーポリシー</Link>
+          <Link className="underline" to={ROUTES.commerce}>特定商取引法に基づく表記</Link>
+        </p>
       </div>
     </main>
   )
