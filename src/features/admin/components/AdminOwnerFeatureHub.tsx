@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { CalendarRange, CalendarX2, ChartColumn, ClipboardList, ContactRound, CreditCard, Scissors, Store, Users } from "lucide-react"
+import { CalendarRange, CalendarX2, ChartColumn, ClipboardList, CreditCard, Scissors, Store, Users } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,14 +56,6 @@ const hubItems = [
     disabled: false,
   },
   {
-    key: "customers",
-    title: "顧客マスタ",
-    description: "カルテ、好み、おすすめの切り方。写真とテキストの取り込み",
-    to: ROUTES.adminCustomers,
-    icon: ContactRound,
-    disabled: false,
-  },
-  {
     key: "sales",
     title: "売上と利益",
     description: "来店完了の売上、原価、利益率",
@@ -85,9 +77,9 @@ export function AdminOwnerFeatureHub() {
   return (
     <section aria-label="管理者向け機能" className="space-y-3">
       <div>
-        <h2 className="text-base font-semibold tracking-tight">店舗運営メニュー</h2>
+        <h2 className="text-base font-semibold tracking-tight">サブの店舗機能</h2>
         <p className="text-sm text-muted-foreground">
-          各機能を選ぶと該当画面に移動します。
+          予約、売上、設定はカルテの補助です。
         </p>
       </div>
       <ul className="grid gap-3 sm:grid-cols-2">
@@ -105,7 +97,7 @@ export function AdminOwnerFeatureHub() {
                   <div className="flex items-start gap-3">
                     <div
                       className={cn(
-                        "flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-background",
+                        "flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground",
                         item.disabled && "opacity-60",
                       )}
                     >

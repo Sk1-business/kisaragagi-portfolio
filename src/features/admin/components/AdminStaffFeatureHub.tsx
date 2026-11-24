@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom"
-import { CalendarDays, CalendarRange, ClipboardList, ContactRound, UserPlus } from "lucide-react"
+import { CalendarDays, CalendarRange, ClipboardList, UserPlus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,14 +31,6 @@ const hubItems = [
     action: "link" as const,
   },
   {
-    key: "customers",
-    title: "顧客マスタ",
-    description: "カルテと来店履歴から、好みとおすすめを確認します",
-    to: ROUTES.adminCustomers,
-    icon: ContactRound,
-    action: "link" as const,
-  },
-  {
     key: "shifts",
     title: "シフトカレンダー",
     description: "店舗に所属するスタッフ全員のシフトを確認します",
@@ -54,8 +46,8 @@ export function AdminStaffFeatureHub() {
   return (
     <section aria-label="スタッフ向け機能" className="space-y-3">
       <div>
-        <h2 className="text-base font-semibold tracking-tight">業務メニュー</h2>
-        <p className="text-sm text-muted-foreground">各機能を選ぶと該当画面に移動します。</p>
+        <h2 className="text-base font-semibold tracking-tight">サブの業務</h2>
+        <p className="text-sm text-muted-foreground">予約とシフトは、カルテの補助です。</p>
       </div>
       <ul className="grid gap-3 sm:grid-cols-2">
         {hubItems.map((item) => {
@@ -65,7 +57,7 @@ export function AdminStaffFeatureHub() {
               <Card className="h-full border-border shadow-xs transition-colors">
                 <CardHeader className="pb-2">
                   <div className="flex items-start gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
                       <Icon className="size-5 text-foreground" aria-hidden />
                     </div>
                     <div className="min-w-0 space-y-1">

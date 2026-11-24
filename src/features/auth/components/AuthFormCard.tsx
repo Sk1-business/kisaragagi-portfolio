@@ -304,11 +304,11 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
 
   return (
     <main
-      className="flex min-h-dvh bg-white"
+      className="flex min-h-dvh bg-background"
       style={{ fontFamily: "'SF Pro Text', 'SF Pro Display', 'Noto Sans JP', sans-serif" }}
     >
       {/* --- Left branding panel --- */}
-      <div className="relative hidden w-[45%] overflow-hidden bg-black lg:flex lg:flex-col lg:justify-between">
+      <div className="relative hidden w-[45%] overflow-hidden bg-primary lg:flex lg:flex-col lg:justify-between">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.03]"
           style={{
@@ -351,8 +351,8 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
       <div className="flex flex-1 flex-col">
         {/* Mobile header */}
         <div className="flex items-center gap-3 border-b border-neutral-100 px-6 py-4 lg:hidden">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-black">
-            <Scissors className="size-4 text-white" />
+          <div className="flex size-8 items-center justify-center rounded-full bg-primary">
+            <Scissors className="size-4 text-primary-foreground" />
           </div>
           <span className="text-xs font-medium tracking-widest text-neutral-400">予約ポータル</span>
         </div>
@@ -385,7 +385,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                     <span className="w-full border-t border-neutral-200" />
                   </div>
                   <div className="relative flex justify-center">
-                    <span className="bg-white px-3 text-[11px] font-medium uppercase tracking-widest text-neutral-400">
+                    <span className="bg-background px-3 text-[11px] font-medium uppercase tracking-widest text-neutral-400">
                       または
                     </span>
                   </div>
@@ -430,7 +430,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                   autoComplete="email"
                   placeholder="you@example.com"
                   required
-                  className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                  className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                 />
               </FieldGroup>
 
@@ -443,7 +443,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                     autoComplete={mode === "signup" ? "new-password" : "current-password"}
                     placeholder="••••••••"
                     required
-                    className="h-11 rounded-lg border-neutral-200 bg-neutral-50 pr-10 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                    className="h-11 rounded-lg border-neutral-200 bg-neutral-50 pr-10 text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                   />
                   <button
                     type="button"
@@ -466,7 +466,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                     autoComplete="new-password"
                     placeholder="••••••••"
                     required
-                    className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                    className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                   />
                 </FieldGroup>
               ) : null}
@@ -480,7 +480,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         name="lastName"
                         placeholder="山田"
                         required
-                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                       />
                     </FieldGroup>
                     <FieldGroup label="名">
@@ -489,7 +489,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         name="firstName"
                         placeholder="太郎"
                         required
-                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                       />
                     </FieldGroup>
                   </div>
@@ -508,7 +508,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         }}
                         placeholder="090"
                         required
-                        className="h-11 min-w-0 flex-1 rounded-lg border-neutral-200 bg-neutral-50 text-center text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                        className="h-11 min-w-0 flex-1 rounded-lg border-neutral-200 bg-neutral-50 text-center text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                       />
                       <span className="text-neutral-400">-</span>
                       <Input
@@ -524,7 +524,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         }}
                         placeholder="1234"
                         required
-                        className="h-11 min-w-0 flex-1 rounded-lg border-neutral-200 bg-neutral-50 text-center text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                        className="h-11 min-w-0 flex-1 rounded-lg border-neutral-200 bg-neutral-50 text-center text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                       />
                       <span className="text-neutral-400">-</span>
                       <Input
@@ -540,7 +540,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         }}
                         placeholder="5678"
                         required
-                        className="h-11 min-w-0 flex-1 rounded-lg border-neutral-200 bg-neutral-50 text-center text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                        className="h-11 min-w-0 flex-1 rounded-lg border-neutral-200 bg-neutral-50 text-center text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                       />
                     </div>
                   </FieldGroup>
@@ -556,7 +556,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                           setLoginError("")
                         }}
                         required
-                        className="h-11 w-full appearance-none rounded-lg border border-neutral-200 bg-neutral-50 px-3 pr-9 text-sm outline-none transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                        className="h-11 w-full appearance-none rounded-lg border border-neutral-200 bg-neutral-50 px-3 pr-9 text-sm outline-none transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                       >
                         <option value="" disabled>
                           選択してください
@@ -608,7 +608,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                       name="adminName"
                       placeholder="山田 太郎"
                       required
-                      className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                      className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                     />
                   </FieldGroup>
                   {backofficeSignupRole === "ADMIN" ? (
@@ -618,7 +618,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         name="salonName"
                         placeholder="Sample Salon"
                         required
-                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                       />
                     </FieldGroup>
                   ) : null}
@@ -629,7 +629,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         name="salonSlug"
                         placeholder="sample-salon-2026"
                         required
-                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                       />
                     </FieldGroup>
                   ) : isBackofficeInviteSignup ? (
@@ -650,7 +650,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                         defaultValue={initialInviteToken}
                         placeholder="招待URLに含まれるトークン"
                         required
-                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                        className="h-11 rounded-lg border-neutral-200 bg-neutral-50 text-sm transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                       />
                     </FieldGroup>
                   )}
@@ -662,7 +662,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
                   <select
                     id="role"
                     name="role"
-                    className="h-11 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm outline-none transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black"
+                    className="h-11 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm outline-none transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                     value={backofficeSignupRole}
                     onChange={(event) =>
                       setBackofficeSignupRole(event.target.value as Exclude<UserRole, "CUSTOMER">)
@@ -679,7 +679,7 @@ export function AuthFormCard({ audience, mode }: AuthFormCardProps) {
 
               <Button
                 type="submit"
-                className="group h-11 w-full rounded-lg bg-black text-sm font-semibold text-white transition-all hover:bg-neutral-800"
+                className="group h-11 w-full rounded-full bg-primary text-sm font-semibold text-primary-foreground transition-all hover:opacity-90"
               >
                 {text.submitLabel}
                 <ArrowRight className="ml-1.5 size-4 transition-transform group-hover:translate-x-0.5" />
@@ -853,7 +853,7 @@ function TermsOfServiceModal({ onClose }: { onClose: () => void }) {
           <Button
             type="button"
             onClick={onClose}
-            className="h-10 w-full rounded-lg bg-black text-sm font-semibold text-white transition-all hover:bg-neutral-800"
+            className="h-10 w-full rounded-full bg-primary text-sm font-semibold text-primary-foreground transition-all hover:opacity-90"
           >
             閉じる
           </Button>
@@ -925,7 +925,7 @@ function BirthDateInput({ value, onChange }: { value: string; onChange: (v: stri
         onKeyDown={handleKeyDown}
         maxLength={10}
         required
-        className={`h-11 rounded-lg border-neutral-200 bg-neutral-50 font-mono text-sm tracking-wider transition-colors focus:border-black focus:bg-white focus:ring-1 focus:ring-black ${
+        className={`h-11 rounded-lg border-neutral-200 bg-neutral-50 font-mono text-sm tracking-wider transition-colors focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary ${
           filled ? "pr-9" : ""
         }`}
       />

@@ -55,14 +55,14 @@ function SalesColumns({
   const width = Math.max(rows.length * 48, 160)
   const height = 120
   return (
-    <section className="rounded-lg border border-border p-4">
+    <section className="rounded-[1.25rem] border border-border p-4">
       <h2 className="text-sm font-semibold">{title}</h2>
       {rows.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">この月の来店完了はまだありません。</p>
       ) : (
         <svg
           viewBox={`0 0 ${width} ${height + 36}`}
-          className="mt-3 w-full text-foreground"
+          className="mt-3 w-full text-primary"
           role="img"
           aria-label={title}
         >
@@ -170,7 +170,7 @@ export function AdminSalesPage() {
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         {cards.map((card) => (
-          <section key={card.label} className="rounded-lg border border-border bg-card p-4">
+          <section key={card.label} className="rounded-[1.25rem] border border-border bg-card p-4">
             <p className="text-xs text-muted-foreground">{card.label}</p>
             <p className="mt-1 text-2xl font-semibold tracking-tight">{card.value}</p>
             <p className="mt-1 text-xs text-muted-foreground">{card.note}</p>
@@ -197,7 +197,7 @@ export function AdminSalesPage() {
         />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="overflow-x-auto rounded-[1.25rem] border border-border">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted text-xs text-muted-foreground">
               <tr>
@@ -225,7 +225,7 @@ export function AdminSalesPage() {
             </tbody>
           </table>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="overflow-x-auto rounded-[1.25rem] border border-border">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted text-xs text-muted-foreground">
               <tr>
@@ -256,7 +256,7 @@ export function AdminSalesPage() {
           </table>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-x-auto rounded-[1.25rem] border border-border">
         <table className="w-full min-w-[36rem] text-left text-sm">
           <thead className="bg-muted text-xs text-muted-foreground">
             <tr>
@@ -290,7 +290,7 @@ export function AdminSalesPage() {
           </tbody>
         </table>
       </div>
-      <section className="space-y-3 rounded-lg border border-border p-4">
+      <section className="space-y-3 rounded-[1.25rem] border border-border p-4">
         <h2 className="text-sm font-semibold">メニュー原価</h2>
         <p className="text-xs text-muted-foreground">原価を直すと、この月の利益率に反映されます。</p>
         <ul className="space-y-2">

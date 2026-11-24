@@ -14,14 +14,25 @@ function countMenu(record: CustomerRecord, needle: string): number {
 
 export function recommendStyle(record: CustomerRecord): StyleRecommendation {
   const chart = record.chart
-  const text = `${chart.hairRequest} ${chart.preference} ${chart.texture} ${chart.notes}`
-  const allergy = chart.allergy
+  const talk = chart.conversationLogs
+    .filter((entry) => entry.speaker === "customer")
+    .map((entry) => entry.text)
+    .join(" ")
+  const text = `${chart.hairRequest} ${chart.preference} ${chart.texture} ${chart.notes} ${chart.length} ${chart.colorHistory} ${chart.homeCare} ${talk}`
+  const allergy = `${chart.allergy} ${chart.colorHistory}`
 
   if (/ジアミン|カラー剤|ブリーチ/.test(allergy)) {
     return {
       cut: "色を足さない、顔まわりの軽いカット",
       menu: "カット",
       reason: "カルテにカラー剤の禁忌があるので、染毛は提案しません。長さと輪郭だけ整えます。",
+    }
+  }
+  if (/残して|長め/.test(`${talk} ${chart.length}`)) {
+    return {
+      cut: "長さを残す顔まわりカット",
+      menu: "カット",
+      reason: "会話かカルテで長さを残す希望があるので、全体は切らず顔まわりだけ整えます。",
     }
   }
   if (/レイヤー|軽く|重くしない|顔まわり/.test(text)) {

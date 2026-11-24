@@ -18,6 +18,16 @@ function profileStorageKey(): string {
 
 export type CustomerGender = "" | "female" | "male" | "unspecified"
 export type CustomerKind = "" | "new" | "existing"
+export type ConversationSpeaker = "customer" | "stylist" | "note"
+export type ConversationSource = "chair" | "line" | "phone" | "import"
+
+export type ConversationEntry = {
+  id: string
+  at: string
+  speaker: ConversationSpeaker
+  text: string
+  source: ConversationSource
+}
 
 export type CustomerChart = {
   hairRequest: string
@@ -25,8 +35,13 @@ export type CustomerChart = {
   notes: string
   texture: string
   preference: string
+  length: string
+  scalp: string
+  colorHistory: string
+  homeCare: string
   photoName: string
   photoData: string
+  conversationLogs: ConversationEntry[]
   updatedAt: string
 }
 
@@ -57,9 +72,38 @@ const EMPTY_CHART: CustomerChart = {
   notes: "",
   texture: "",
   preference: "",
+  length: "",
+  scalp: "",
+  colorHistory: "",
+  homeCare: "",
   photoName: "",
   photoData: "",
+  conversationLogs: [],
   updatedAt: "",
+}
+
+function normalizeLogs(value: unknown): ConversationEntry[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item, index) => {
+    if (!item || typeof item !== "object") return []
+    const row = item as Partial<ConversationEntry>
+    if (typeof row.text !== "string" || !row.text.trim()) return []
+    const speaker: ConversationSpeaker =
+      row.speaker === "customer" || row.speaker === "stylist" || row.speaker === "note" ? row.speaker : "note"
+    const source: ConversationSource =
+      row.source === "chair" || row.source === "line" || row.source === "phone" || row.source === "import"
+        ? row.source
+        : "import"
+    return [
+      {
+        id: typeof row.id === "string" && row.id ? row.id : `talk-${index}`,
+        at: typeof row.at === "string" && row.at ? row.at : "",
+        speaker,
+        text: row.text.trim(),
+        source,
+      },
+    ]
+  })
 }
 
 export function normalizeChart(chart: Partial<CustomerChart> | undefined): CustomerChart {
@@ -69,8 +113,13 @@ export function normalizeChart(chart: Partial<CustomerChart> | undefined): Custo
     notes: chart?.notes ?? "",
     texture: chart?.texture ?? "",
     preference: chart?.preference ?? "",
+    length: chart?.length ?? "",
+    scalp: chart?.scalp ?? "",
+    colorHistory: chart?.colorHistory ?? "",
+    homeCare: chart?.homeCare ?? "",
     photoName: chart?.photoName ?? "",
     photoData: chart?.photoData ?? "",
+    conversationLogs: normalizeLogs(chart?.conversationLogs),
     updatedAt: chart?.updatedAt ?? "",
   }
 }
@@ -92,7 +141,10 @@ function emptyProfile(key: string): CustomerProfile {
 export function ensureShowcaseCharts(): void {
   if (currentSalonSlug() !== DEMO_SALON_SLUG) return
   const seedKey = `kisaragi-chart-seed:v1:${currentSalonSlug()}`
-  if (localStorage.getItem(seedKey) === "1") return
+  if (localStorage.getItem(seedKey) === "1") {
+    ensureShowcaseTalks()
+    return
+  }
   const samples: CustomerProfile[] = [
     {
       key: customerKey("09011112222", "guest@kisaragi.example"),
@@ -109,7 +161,34 @@ export function ensureShowcaseCharts(): void {
         hairRequest: "鎖骨の少し下。顔まわりは軽く",
         preference: "ナチュラル。真っ黒にはしない",
         allergy: "なし",
+        length: "鎖骨の少し下",
+        scalp: "普通。かゆみなし",
+        colorHistory: "染めていない",
+        homeCare: "ドライヤーのみ",
         notes: "前回は耳の下で切っている。次は2cm残す。",
+        conversationLogs: [
+          {
+            id: "hana-1",
+            at: "2026-11-02T02:10:00.000Z",
+            speaker: "customer",
+            text: "前回より2cm残して、顔まわりだけ軽くしてほしいです。",
+            source: "chair",
+          },
+          {
+            id: "hana-2",
+            at: "2026-11-02T02:12:00.000Z",
+            speaker: "stylist",
+            text: "長さは鎖骨の下で止めて、耳横だけ段を入れます。",
+            source: "chair",
+          },
+          {
+            id: "hana-3",
+            at: "2026-11-02T02:14:00.000Z",
+            speaker: "customer",
+            text: "真っ黒にはしたくないです。家ではドライヤーだけです。",
+            source: "chair",
+          },
+        ],
         updatedAt: new Date().toISOString(),
       },
     },
@@ -128,7 +207,27 @@ export function ensureShowcaseCharts(): void {
         hairRequest: "透明感のあるベージュ",
         preference: "明るさは今のトーンを維持",
         allergy: "ジアミンでかぶれたことがある",
+        length: "肩につく",
+        scalp: "敏感。カラー後に赤くなりやすい",
+        colorHistory: "ベージュ。根元4週間",
+        homeCare: "カラー用シャンプー",
         notes: "カラーはノンジアミンで。頭皮が敏感。",
+        conversationLogs: [
+          {
+            id: "sato-1",
+            at: "2026-10-20T04:00:00.000Z",
+            speaker: "customer",
+            text: "前回と同じ明るさで、根元だけ足してください。",
+            source: "line",
+          },
+          {
+            id: "sato-2",
+            at: "2026-10-20T04:02:00.000Z",
+            speaker: "stylist",
+            text: "ジアミンは使わず、頭皮から1cm空けて塗布します。",
+            source: "line",
+          },
+        ],
         updatedAt: new Date().toISOString(),
       },
     },
@@ -147,13 +246,136 @@ export function ensureShowcaseCharts(): void {
         hairRequest: "ビジネスでも使える短め",
         preference: "ワックス少なめでもまとまる形",
         allergy: "なし",
+        length: "サイド短め、トップは残す",
+        scalp: "普通",
+        colorHistory: "白髪ぼかしを月1",
+        homeCare: "ワックスはつけない",
         notes: "サイドは短く、トップは立ち上がりを残す。",
+        conversationLogs: [
+          {
+            id: "taka-1",
+            at: "2026-09-14T01:30:00.000Z",
+            speaker: "customer",
+            text: "朝はワックスをつけずに出社したいです。",
+            source: "chair",
+          },
+          {
+            id: "taka-2",
+            at: "2026-09-14T01:32:00.000Z",
+            speaker: "stylist",
+            text: "くせを潰さず、乾かした時点でサイドが収まる長さにします。",
+            source: "chair",
+          },
+        ],
         updatedAt: new Date().toISOString(),
       },
     },
   ]
   importCustomerProfiles(samples)
   localStorage.setItem(`kisaragi-chart-seed:v1:${currentSalonSlug()}`, "1")
+  ensureShowcaseTalks()
+}
+
+const SHOWCASE_TALKS: Record<string, ConversationEntry[]> = {
+  "p:09011112222": [
+    {
+      id: "hana-1",
+      at: "2026-11-02T02:10:00.000Z",
+      speaker: "customer",
+      text: "前回より2cm残して、顔まわりだけ軽くしてほしいです。",
+      source: "chair",
+    },
+    {
+      id: "hana-2",
+      at: "2026-11-02T02:12:00.000Z",
+      speaker: "stylist",
+      text: "長さは鎖骨の下で止めて、耳横だけ段を入れます。",
+      source: "chair",
+    },
+    {
+      id: "hana-3",
+      at: "2026-11-02T02:14:00.000Z",
+      speaker: "customer",
+      text: "真っ黒にはしたくないです。家ではドライヤーだけです。",
+      source: "chair",
+    },
+  ],
+  "p:09022223333": [
+    {
+      id: "sato-1",
+      at: "2026-10-20T04:00:00.000Z",
+      speaker: "customer",
+      text: "前回と同じ明るさで、根元だけ足してください。",
+      source: "line",
+    },
+    {
+      id: "sato-2",
+      at: "2026-10-20T04:02:00.000Z",
+      speaker: "stylist",
+      text: "ジアミンは使わず、頭皮から1cm空けて塗布します。",
+      source: "line",
+    },
+  ],
+  "p:09033334444": [
+    {
+      id: "taka-1",
+      at: "2026-09-14T01:30:00.000Z",
+      speaker: "customer",
+      text: "朝はワックスをつけずに出社したいです。",
+      source: "chair",
+    },
+    {
+      id: "taka-2",
+      at: "2026-09-14T01:32:00.000Z",
+      speaker: "stylist",
+      text: "くせを潰さず、乾かした時点でサイドが収まる長さにします。",
+      source: "chair",
+    },
+  ],
+}
+
+const SHOWCASE_FIELDS: Record<string, Partial<CustomerChart>> = {
+  "p:09011112222": {
+    length: "鎖骨の少し下",
+    scalp: "普通。かゆみなし",
+    colorHistory: "染めていない",
+    homeCare: "ドライヤーのみ",
+  },
+  "p:09022223333": {
+    length: "肩につく",
+    scalp: "敏感。カラー後に赤くなりやすい",
+    colorHistory: "ベージュ。根元4週間",
+    homeCare: "カラー用シャンプー",
+  },
+  "p:09033334444": {
+    length: "サイド短め、トップは残す",
+    scalp: "普通",
+    colorHistory: "白髪ぼかしを月1",
+    homeCare: "ワックスはつけない",
+  },
+}
+
+function ensureShowcaseTalks(): void {
+  if (currentSalonSlug() !== DEMO_SALON_SLUG) return
+  const seedKey = `kisaragi-chart-talk:v2:${currentSalonSlug()}`
+  if (localStorage.getItem(seedKey) === "1") return
+  const profiles = readProfiles().map((profile) => {
+    const chart = normalizeChart(profile.chart)
+    const talks = chart.conversationLogs.length > 0 ? chart.conversationLogs : SHOWCASE_TALKS[profile.key]
+    const extra = SHOWCASE_FIELDS[profile.key]
+    if (!talks && !extra) return { ...profile, chart }
+    const filled = { ...chart, conversationLogs: talks ?? chart.conversationLogs }
+    if (extra) {
+      for (const [field, value] of Object.entries(extra) as [keyof CustomerChart, string][]) {
+        if (typeof filled[field] === "string" && !String(filled[field]).trim() && value) {
+          Object.assign(filled, { [field]: value })
+        }
+      }
+    }
+    return { ...profile, chart: filled }
+  })
+  writeProfiles(profiles)
+  localStorage.setItem(seedKey, "1")
 }
 
 export function parseKarteText(text: string): Partial<CustomerProfile> | null {
@@ -181,6 +403,10 @@ export function parseKarteText(text: string): Partial<CustomerProfile> | null {
       hairRequest: value(["希望", "髪型", "仕上がり"]),
       preference: value(["好み"]),
       allergy: value(["アレルギー", "禁忌"]),
+      length: value(["長さ", "レングス"]),
+      scalp: value(["頭皮"]),
+      colorHistory: value(["カラー履歴", "カラー", "染毛"]),
+      homeCare: value(["ホームケア", "自宅ケア"]),
       notes: value(["メモ", "施術メモ"]),
       updatedAt: new Date().toISOString(),
     },

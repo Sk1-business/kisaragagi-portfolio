@@ -16,7 +16,7 @@ export function AuthBrandingPanel({
   audienceDescription,
 }: AuthBrandingPanelProps) {
   return (
-    <div className="relative hidden w-[45%] overflow-hidden bg-black lg:flex lg:flex-col lg:justify-between">
+    <div className="relative hidden w-[45%] overflow-hidden bg-primary lg:flex lg:flex-col lg:justify-between">
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.03]"
         style={{
@@ -57,8 +57,8 @@ export function AuthBrandingPanel({
 export function AuthMobileBrandingHeader() {
   return (
     <div className="flex items-center gap-3 border-b border-neutral-100 px-6 py-4 lg:hidden">
-      <div className="flex size-8 items-center justify-center rounded-lg bg-black">
-        <Scissors className="size-4 text-white" />
+      <div className="flex size-8 items-center justify-center rounded-full bg-primary">
+        <Scissors className="size-4 text-primary-foreground" />
       </div>
       <span className="text-xs font-medium tracking-widest text-neutral-400">予約ポータル</span>
     </div>
