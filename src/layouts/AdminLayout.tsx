@@ -87,7 +87,7 @@ function AdminLayoutContent() {
   return (
     <>
     <main className="mx-auto min-h-dvh w-full max-w-6xl px-4 py-6 sm:px-6">
-      <header className="mb-6 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
+      <header className="mb-6 flex flex-col gap-4 rounded-[1.75rem] border border-border bg-card px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <AdminHeaderAvatar name={profile.name} avatarUrl={profile.avatarUrl} />
           <div className="min-w-0">

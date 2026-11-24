@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom"
 
 import { ROUTES } from "@/constants/routes"
 import { fetchAdminReservations } from "@/features/admin/api/reservationsApi"
+import { AdminKarteSpotlight } from "@/features/admin/components/AdminKarteSpotlight"
 import { AdminOwnerFeatureHub } from "@/features/admin/components/AdminOwnerFeatureHub"
 import { AdminSalonSlugCard } from "@/features/admin/components/AdminSalonSlugCard"
 import { AdminStaffFeatureHub } from "@/features/admin/components/AdminStaffFeatureHub"
@@ -105,6 +106,7 @@ export function AdminDashboardPage() {
           登録が完了し、予約ページはいまから開けます。営業時間は月-土 10:00-19:00、日曜定休で入っています。下の予約URLをお客様に共有できます。
         </div>
       ) : null}
+      <AdminKarteSpotlight />
       {isOwner ? <AdminOwnerFeatureHub /> : <AdminStaffFeatureHub />}
       <TodayReservationsCard
         reservations={todayReservations}

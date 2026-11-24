@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,8 +20,17 @@ import {
   saveCustomerProfile,
   type CustomerGender,
   type CustomerKind,
+  type ConversationEntry,
+  type CustomerChart,
   type CustomerRecord,
 } from "@/features/admin/lib/customerDirectory"
+import {
+  KARTE_TEMPLATES,
+  SAMPLE_CONVERSATION,
+  applyKarteTemplate,
+  conversationDigest,
+  parseConversationText,
+} from "@/features/admin/lib/karteIntake"
 import { prepareKarteImage, recognizeKarteImage } from "@/features/admin/lib/karteOcr"
 import { recommendStyle } from "@/features/admin/lib/styleRecommendation"
 import { useStaff } from "@/features/admin/hooks/useStaff"
@@ -30,6 +39,31 @@ function formatReservationWhen(iso: string): string {
   const date = iso.slice(0, 10).replaceAll("-", "/")
   const time = iso.slice(11, 16)
   return time ? `${date} ${time}` : date
+}
+
+const CHART_FIELDS: { key: "texture" | "length" | "hairRequest" | "preference" | "allergy" | "scalp" | "colorHistory" | "homeCare" | "notes"; label: string; rows: number }[] = [
+  { key: "texture", label: "髪質", rows: 2 },
+  { key: "length", label: "長さ・形", rows: 2 },
+  { key: "hairRequest", label: "仕上がりの希望", rows: 3 },
+  { key: "preference", label: "好み", rows: 2 },
+  { key: "allergy", label: "アレルギー・禁忌", rows: 2 },
+  { key: "scalp", label: "頭皮", rows: 2 },
+  { key: "colorHistory", label: "カラー履歴", rows: 2 },
+  { key: "homeCare", label: "ホームケア", rows: 2 },
+  { key: "notes", label: "施術メモ", rows: 3 },
+]
+
+function speakerLabel(speaker: ConversationEntry["speaker"]): string {
+  if (speaker === "customer") return "お客様"
+  if (speaker === "stylist") return "スタイリスト"
+  return "メモ"
+}
+
+function sourceLabel(source: ConversationEntry["source"]): string {
+  if (source === "chair") return "椅子の横"
+  if (source === "line") return "LINE"
+  if (source === "phone") return "電話"
+  return "取り込み"
 }
 
 const SAMPLE_KARTE = `氏名: 森 あかり
@@ -49,6 +83,7 @@ function statusLabel(status: CustomerRecord["reservations"][number]["status"]): 
 
 export function AdminCustomersPage() {
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
   const { staffList, loading: staffLoading } = useStaff()
   const [records, setRecords] = useState<CustomerRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -63,6 +98,9 @@ export function AdminCustomersPage() {
   const [importMessage, setImportMessage] = useState("")
   const [karteText, setKarteText] = useState("")
   const [readingPhoto, setReadingPhoto] = useState(false)
+  const [talkDraft, setTalkDraft] = useState("")
+  const [talkPaste, setTalkPaste] = useState("")
+  const [templateNote, setTemplateNote] = useState("")
 
   async function reload() {
     setLoading(true)
@@ -72,7 +110,12 @@ export function AdminCustomersPage() {
       const reservations = await fetchAllReservationsForAdmin(staffList)
       const next = buildCustomerDirectory(reservations)
       setRecords(next)
-      setSelectedKey((current) => current || next[0]?.key || "")
+      const requested = params.get("customer") ?? ""
+      setSelectedKey((current) => {
+        if (requested && next.some((record) => record.key === requested)) return requested
+        if (current && next.some((record) => record.key === current)) return current
+        return next[0]?.key || ""
+      })
     } catch (cause) {
       if (cause instanceof Error && cause.message === "UNAUTHORIZED") {
         navigate(ROUTES.backofficeLogin, { replace: true })
@@ -113,6 +156,55 @@ export function AdminCustomersPage() {
   function updateDraft(patch: Partial<CustomerRecord>) {
     setDraft((current) => (current ? { ...current, ...patch } : current))
     setSaveMessage("")
+  }
+
+  function updateChart(patch: Partial<CustomerChart>) {
+    setDraft((current) => (current ? { ...current, chart: { ...current.chart, ...patch } } : current))
+    setSaveMessage("")
+  }
+
+  function selectCustomer(key: string) {
+    setSelectedKey(key)
+    setParams({ customer: key }, { replace: true })
+  }
+
+  function handleTemplate(templateId: string, mode: "fill" | "replace") {
+    const template = KARTE_TEMPLATES.find((item) => item.id === templateId)
+    if (!draft || !template) return
+    updateChart(applyKarteTemplate(draft.chart, template, mode))
+    setTemplateNote(
+      mode === "replace"
+        ? `「${template.name}」でカルテの項目を書き直しました。会話と写真はそのままです。`
+        : `「${template.name}」の空欄だけ埋めました。`,
+    )
+  }
+
+  function appendTalks(entries: ConversationEntry[]) {
+    if (!draft || entries.length === 0) return
+    const stamped = entries.map((entry, index) => ({ ...entry, id: `talk-${Date.now()}-${index}` }))
+    updateChart({ conversationLogs: [...draft.chart.conversationLogs, ...stamped] })
+  }
+
+  function handleTalkPaste() {
+    const entries = parseConversationText(talkPaste)
+    appendTalks(entries)
+    setTalkPaste("")
+    setTemplateNote(entries.length ? `${entries.length}件の会話をカルテに足しました。` : "会話として読める行がありません。")
+  }
+
+  function handleDigest() {
+    if (!draft) return
+    const digest = conversationDigest(draft.chart.conversationLogs)
+    if (!digest) {
+      setTemplateNote("会話がまだないので、メモには足せません。")
+      return
+    }
+    const marker = "会話の要点"
+    const notes = draft.chart.notes.includes(marker)
+      ? draft.chart.notes.replace(new RegExp(`${marker}[\\s\\S]*$`), `${marker}\n${digest}`)
+      : [draft.chart.notes, marker, digest].filter(Boolean).join("\n")
+    updateChart({ notes })
+    setTemplateNote("直近の会話を施術メモへ写しました。保存すると残ります。")
   }
 
   function handleSaveProfile() {
@@ -247,10 +339,23 @@ export function AdminCustomersPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">顧客マスタ</h1>
+        <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground">KARTE</p>
+        <h1 className="text-lg font-semibold tracking-tight">顧客カルテ</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          来店履歴とカルテから、好みとおすすめの切り方を確認します。テキストも、写真の文字読み取りも取り込めます。
+          この店の本体です。テンプレで枠を入れ、写真の文字と会話をカルテへ残します。予約と売上は補助です。
         </p>
+        <nav className="mt-3 flex flex-wrap gap-2 text-sm" aria-label="サブ機能">
+          {[
+            [ROUTES.adminReservationLedger, "予約台帳"],
+            [ROUTES.adminSales, "売上"],
+            [ROUTES.adminCalendar, "カレンダー"],
+            [ROUTES.adminShiftCalendar, "シフト"],
+          ].map(([to, label]) => (
+            <Link key={to} to={to} className="rounded-full bg-secondary px-3 py-1 text-secondary-foreground">
+              {label}
+            </Link>
+          ))}
+        </nav>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-4">
@@ -327,14 +432,15 @@ export function AdminCustomersPage() {
               <li key={record.key}>
                 <button
                   type="button"
-                  onClick={() => setSelectedKey(record.key)}
-                  className={`w-full rounded-md px-3 py-2 text-left text-sm ${
-                    selected?.key === record.key ? "bg-foreground text-background" : "hover:bg-muted"
+                  onClick={() => selectCustomer(record.key)}
+                  className={`w-full rounded-[1.25rem] px-3 py-2 text-left text-sm ${
+                    selected?.key === record.key ? "bg-primary text-primary-foreground" : "hover:bg-accent"
                   }`}
                 >
                   <span className="block font-medium">{record.name || "名前未登録"}</span>
                   <span className="block text-xs opacity-80">
-                    {record.phone || record.email || "連絡先未登録"}
+                    {record.chart.texture || record.phone || "カルテ未記入"}
+                    {record.chart.conversationLogs.length ? ` / 会話${record.chart.conversationLogs.length}` : ""}
                     {record.blocked ? " / 予約不可" : ""}
                   </span>
                 </button>
@@ -370,12 +476,9 @@ export function AdminCustomersPage() {
                 </p>
               )
             })()}
-            {draft.recommendedMenu ? (
-              <p className="rounded-md bg-muted px-3 py-2 text-sm">
-                次回候補: {draft.recommendedMenu}（これまでの予約で多いメニュー）
-              </p>
-            ) : null}
-            <div className="grid gap-3 sm:grid-cols-2">
+            <details className="rounded-[1.25rem] border border-border px-4 py-3">
+              <summary className="cursor-pointer text-sm font-medium">連絡先と来店区分</summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="customer-name">名前</Label>
                 <Input id="customer-name" value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} />
@@ -434,32 +537,165 @@ export function AdminCustomersPage() {
                 </select>
               </div>
             </div>
+            </details>
 
-            {draft ? (
-              <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
-                <h3 className="text-sm font-semibold">この人へのおすすめ</h3>
-                {(() => {
-                  const suggestion = recommendStyle(draft)
-                  return (
-                    <>
-                      <p className="text-sm font-medium">{suggestion.cut}</p>
-                      <p className="text-xs text-muted-foreground">提案メニュー: {suggestion.menu}</p>
-                      <p className="text-sm leading-relaxed">{suggestion.reason}</p>
-                    </>
-                  )
-                })()}
+            {(() => {
+              const suggestion = recommendStyle(draft)
+              const allergyHot = draft.chart.allergy.trim() && !/^なし/.test(draft.chart.allergy.trim())
+              return (
+                <div className="space-y-2 rounded-[1.25rem] bg-primary px-4 py-3 text-primary-foreground">
+                  <h3 className="text-sm font-semibold">次のカット</h3>
+                  <p className="text-base font-medium">{suggestion.cut}</p>
+                  <p className="text-sm leading-relaxed text-primary-foreground/80">{suggestion.reason}</p>
+                  <p className="text-xs text-primary-foreground/80">提案メニュー: {suggestion.menu}</p>
+                  {allergyHot ? <p className="text-sm font-medium">禁忌: {draft.chart.allergy}</p> : null}
+                </div>
+              )
+            })()}
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">テンプレカルテ</h3>
+              <div className="flex flex-wrap gap-2">
+                {KARTE_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    title={template.summary}
+                    className="rounded-full bg-accent px-3 py-1 text-sm text-accent-foreground"
+                    onClick={() => handleTemplate(template.id, "fill")}
+                  >
+                    {template.name}
+                  </button>
+                ))}
               </div>
-            ) : null}
+              <div className="flex flex-wrap gap-2">
+                {KARTE_TEMPLATES.map((template) => (
+                  <button
+                    key={`${template.id}-replace`}
+                    type="button"
+                    className="rounded-full border border-border px-3 py-1 text-xs"
+                    onClick={() => handleTemplate(template.id, "replace")}
+                  >
+                    {template.name}で書き直す
+                  </button>
+                ))}
+              </div>
+              {templateNote ? <p className="text-xs text-muted-foreground">{templateNote}</p> : null}
+            </div>
 
-            <div className="space-y-3 rounded-md border border-border p-3">
-              <h3 className="text-sm font-semibold">カルテの取り込み</h3>
+            <div className="space-y-3 rounded-[1.25rem] border border-border p-4">
+              <h3 className="text-sm font-semibold">カルテ</h3>
+              {draft.chart.photoData ? (
+                <img src={draft.chart.photoData} alt="カルテ写真" className="max-h-40 rounded-[1.25rem] border border-border" />
+              ) : null}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {CHART_FIELDS.map((field) => (
+                  <label key={field.key} className="block text-xs text-muted-foreground" htmlFor={`chart-${field.key}`}>
+                    {field.label}
+                    <textarea
+                      id={`chart-${field.key}`}
+                      rows={field.rows}
+                      className="mt-1 w-full rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm text-foreground"
+                      value={String(draft.chart[field.key] ?? "")}
+                      onChange={(event) => updateChart({ [field.key]: event.target.value })}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-[1.25rem] border border-border p-4">
+              <h3 className="text-sm font-semibold">会話ログ</h3>
+              <ul className="space-y-2">
+                {draft.chart.conversationLogs.length === 0 ? (
+                  <li className="text-sm text-muted-foreground">まだ会話はありません。椅子の横の一言か、LINEの貼り付けを残します。</li>
+                ) : (
+                  draft.chart.conversationLogs.map((entry) => (
+                    <li
+                      key={entry.id}
+                      className={`rounded-[1.25rem] px-3 py-2 text-sm ${
+                        entry.speaker === "customer"
+                          ? "bg-accent"
+                          : entry.speaker === "stylist"
+                            ? "bg-secondary"
+                            : "bg-muted"
+                      }`}
+                    >
+                      <p className="text-xs text-muted-foreground">
+                        {speakerLabel(entry.speaker)} / {sourceLabel(entry.source)}
+                      </p>
+                      <p>{entry.text}</p>
+                      <button
+                        type="button"
+                        className="mt-1 text-xs underline"
+                        onClick={() =>
+                          updateChart({
+                            conversationLogs: draft.chart.conversationLogs.filter((item) => item.id !== entry.id),
+                          })
+                        }
+                      >
+                        外す
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+              <label className="block text-xs text-muted-foreground" htmlFor="talk-draft">
+                椅子の横で足す
+                <textarea
+                  id="talk-draft"
+                  value={talkDraft}
+                  placeholder="お客様: 前髪はもう少し残して"
+                  className="mt-1 min-h-16 w-full rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm text-foreground"
+                  onChange={(event) => setTalkDraft(event.target.value)}
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!talkDraft.trim()}
+                  onClick={() => {
+                    appendTalks(parseConversationText(talkDraft.includes(":") || talkDraft.includes("：") ? talkDraft : `スタイリスト: ${talkDraft}`))
+                    setTalkDraft("")
+                  }}
+                >
+                  会話に足す
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={handleDigest}>
+                  要点を施術メモへ
+                </Button>
+              </div>
+              <label className="block text-xs text-muted-foreground" htmlFor="talk-paste">
+                会話の貼り付け（お客様 / スタイリスト / メモ）
+                <textarea
+                  id="talk-paste"
+                  value={talkPaste}
+                  placeholder={SAMPLE_CONVERSATION}
+                  className="mt-1 min-h-24 w-full rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm text-foreground"
+                  onChange={(event) => setTalkPaste(event.target.value)}
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" disabled={!talkPaste.trim()} onClick={handleTalkPaste}>
+                  貼り付けを取り込む
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setTalkPaste(SAMPLE_CONVERSATION)}>
+                  会話の例を入れる
+                </Button>
+              </div>
+            </div>
+
+            <details className="rounded-[1.25rem] border border-border px-4 py-3">
+              <summary className="cursor-pointer text-sm font-medium">テキストと写真から取り込む</summary>
+              <div className="mt-3 space-y-3">
               <p className="text-xs text-muted-foreground">
-                デジタルは項目つきのテキストを分けます。写真は文字を読み取り、項目に入れたうえで確認して保存します。
+                項目つきの文章を分けます。写真は文字を読み、確認してから保存します。
               </p>
               <textarea
                 value={karteText}
                 placeholder={SAMPLE_KARTE}
-                className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="min-h-24 w-full rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm"
                 onChange={(event) => setKarteText(event.target.value)}
               />
               <div className="flex flex-wrap gap-2">
@@ -475,9 +711,9 @@ export function AdminCustomersPage() {
                   テキストを項目に反映
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => applyParsedKarte(SAMPLE_KARTE)}>
-                  手書きカルテのサンプルを反映
+                  手書きカルテの例を反映
                 </Button>
-                <label className="inline-flex cursor-pointer items-center rounded-md border border-input px-3 py-1.5 text-sm">
+                <label className="inline-flex cursor-pointer items-center rounded-full border border-input px-3 py-1.5 text-sm">
                   {readingPhoto ? "読み取り中..." : "写真から文字を読み取る"}
                   <input
                     type="file"
@@ -493,70 +729,8 @@ export function AdminCustomersPage() {
                   />
                 </label>
               </div>
-            </div>
-
-            <div className="space-y-3 rounded-md border border-border p-3">
-              <h3 className="text-sm font-semibold">カルテ</h3>
-              <p className="text-xs text-muted-foreground">
-                来店前にデジタルで残す問診です。髪型の希望、アレルギー、施術メモを保存します。
-              </p>
-              {draft.chart.photoData ? (
-                <img src={draft.chart.photoData} alt="カルテ写真" className="max-h-40 rounded-md border border-border" />
-              ) : draft.chart.photoName ? (
-                <p className="text-xs text-muted-foreground">添付: {draft.chart.photoName}</p>
-              ) : null}
-              <label className="block text-xs text-muted-foreground" htmlFor="chart-texture">
-                髪質
-                <textarea
-                  id="chart-texture"
-                  className="mt-1 min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={draft.chart.texture}
-                  onChange={(event) =>
-                    updateDraft({ chart: { ...draft.chart, texture: event.target.value } })
-                  }
-                />
-              </label>
-              <label className="block text-xs text-muted-foreground" htmlFor="chart-preference">
-                好み
-                <textarea
-                  id="chart-preference"
-                  className="mt-1 min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={draft.chart.preference}
-                  onChange={(event) =>
-                    updateDraft({ chart: { ...draft.chart, preference: event.target.value } })
-                  }
-                />
-              </label>
-              <label className="block text-xs text-muted-foreground" htmlFor="chart-hair">
-                髪型・仕上がりの希望
-                <textarea
-                  id="chart-hair"
-                  className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={draft.chart.hairRequest}
-                  onChange={(event) =>
-                    updateDraft({ chart: { ...draft.chart, hairRequest: event.target.value } })
-                  }
-                />
-              </label>
-              <label className="block text-xs text-muted-foreground" htmlFor="chart-allergy">
-                アレルギー・禁忌
-                <textarea
-                  id="chart-allergy"
-                  className="mt-1 min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={draft.chart.allergy}
-                  onChange={(event) => updateDraft({ chart: { ...draft.chart, allergy: event.target.value } })}
-                />
-              </label>
-              <label className="block text-xs text-muted-foreground" htmlFor="chart-notes">
-                施術メモ
-                <textarea
-                  id="chart-notes"
-                  className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={draft.chart.notes}
-                  onChange={(event) => updateDraft({ chart: { ...draft.chart, notes: event.target.value } })}
-                />
-              </label>
-            </div>
+              </div>
+            </details>
 
             <div className="flex items-center gap-3">
               <Button type="button" onClick={handleSaveProfile}>
@@ -565,8 +739,9 @@ export function AdminCustomersPage() {
               {saveMessage ? <p className="text-sm text-muted-foreground">{saveMessage}</p> : null}
             </div>
 
-            <div>
-              <h3 className="text-sm font-semibold">来店履歴</h3>
+            <details className="rounded-[1.25rem] border border-border px-4 py-3">
+              <summary className="cursor-pointer text-sm font-medium">来店履歴</summary>
+              <h3 className="sr-only">来店履歴</h3>
               <ul className="mt-2 divide-y divide-border text-sm">
                 {draft.reservations.length === 0 ? (
                   <li className="py-2 text-muted-foreground">予約履歴はまだありません。</li>
@@ -582,7 +757,7 @@ export function AdminCustomersPage() {
                   ))
                 )}
               </ul>
-            </div>
+            </details>
             <p className="text-xs text-muted-foreground">
               性別: {genderLabel(draft.gender)} / {kindLabel(draft.kind)}
             </p>
